@@ -20,3 +20,13 @@ data/cache.json
 node_modules/
 *.log
 .DS_Store
+
+# 关注列表遍历脚本：读登录态 cookie 枚举自己的社交关系，是本机工具，
+# 不是产品功能。和 lib/adapters.private.js 同级处理。
+tools/zhihu-followees.js
+
+# 遍历结果与筛选过程数据：里面是被关注者的昵称与简介，属于个人社交关系数据。
+# 不进主仓也不进公开仓。
+data/experiments/
+tools/zhihu-probe.js
+tools/zhihu-shortlist.js
