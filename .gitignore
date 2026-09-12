@@ -1,0 +1,22 @@
+# 登录态 cookie（知乎等）绝不进仓库；说明文件除外
+secrets/*
+!secrets/README.md
+
+# 登录态适配器本体（知乎、小红书）也不进仓库：把某个平台的反爬绕过写成公开
+# 代码等于发布一个绕过工具集。lib/adapters.js 在文件存在时自动挂载它。
+lib/adapters.private.js
+
+# 本机运维笔记（RSSHub 启动命令、cookie 取法这类只对我这台机器成立的东西）
+docs/LOCAL.md
+
+# 抓取缓存：可再生、体积会涨、且是你自己的阅读内容
+data/cache.json
+
+# data/subscriptions.json 故意**不**忽略：它就是配置本体，小、可手改、可 diff。
+# 但如果你要把自己的 fork 推到公开仓库，取消下面这行的注释——
+# 那是你的个人阅读清单，不该跟着代码一起公开。
+# data/subscriptions.json
+
+node_modules/
+*.log
+.DS_Store

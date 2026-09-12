@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>quiet-river</title>
+<script>
+  document.documentElement.dataset.theme =
+    localStorage.getItem('quiet-river:theme') ||
+    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+</script>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>·</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark"></span>
+    <h1>quiet river</h1>
+    <span class="brand-sub" id="counts">加载中…</span>
+  </div>
+  <div class="actions">
+    <nav class="viewnav" aria-label="视图">
+      <button class="seg" type="button" data-view="river" aria-pressed="true">文章</button>
+      <button class="seg" type="button" data-view="sources" aria-pressed="false">博主</button>
+    </nav>
+    <input id="search" class="search" type="search" placeholder="搜题目或作者…" autocomplete="off" spellcheck="false">
+    <div class="sortseg" role="group" aria-label="排序方式">
+      <button class="seg" type="button" data-sort="time" aria-pressed="true">时间</button>
+      <button class="seg" type="button" data-sort="title">标题</button>
+      <button class="seg" type="button" data-sort="author">作者</button>
+    </div>
+    <div class="sortseg themeseg" role="group" aria-label="页面主题">
+      <button class="seg" type="button" data-theme-set="light">浅</button>
+      <button class="seg" type="button" data-theme-set="dark">深</button>
+    </div>
+    <button class="btn" id="btn-refresh" title="重新抓取全部 feed">刷新</button>
+    <button class="btn btn-primary" id="btn-add">添加博主</button>
+    <button class="btn btn-ghost" id="btn-settings" title="设置">设置</button>
+  </div>
+</header>
+
+<nav class="tagbar" id="tagbar" aria-label="按 tag 筛选"></nav>
+
+<section class="problems" id="problems" hidden>
+  <button class="problems-toggle" id="problems-toggle" aria-expanded="false">
+    <span id="problems-summary"></span>
+    <span class="chevron">▾</span>
+  </button>
+  <ul class="problems-list" id="problems-list" hidden></ul>
+</section>
+
+<main>
+  <div class="authorhead" id="authorhead" hidden>
+    <a class="back" href="#/">← 返回全部</a>
+    <div class="authorhead-row">
+      <h2 id="author-name"></h2>
+      <span class="author-meta" id="author-meta"></span>
+      <span class="spacer"></span>
+      <button class="btn" id="btn-toggle-author" type="button">关闭展示</button>
+      <button class="btn" id="btn-edit-author" type="button">编辑</button>
+    </div>
+  </div>
+  <ul id="river"></ul>
+  <p class="empty" id="empty" hidden></p>
+</main>
+
+<footer class="footbar">
+  <span id="last-refresh"></span>
+  <a href="#" id="foot-github" class="footlink" target="_blank" rel="noopener noreferrer" hidden></a>
+  <a href="/api/export" class="footlink">导出 OPML</a>
+</footer>
+
+<!-- 添加博主（独立页） -->
+<section class="addpage" id="addpage" hidden>
+  <div class="addpage-inner">
+    <a class="back" href="#/">← 返回</a>
+    <h2>添加博主</h2>
+    <p class="addhint">先选来源，再填这个来源真正需要的信息。不同来源要的字段不一样；填完点「验证并添加」，服务端会当场抓一次确认能不能用。</p>
+    <div class="platgrid" id="platform-grid"></div>
+    <div class="addform" id="platform-form"></div>
+    <div class="field">
+      <label for="add-name">显示名（可留空，自动取）</label>
+      <input id="add-name" type="text" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="add-tags">tag（可留空，逗号或空格分隔；只填领域名）</label>
+      <input id="add-tags" type="text" placeholder="生成式推荐, 工业实践" autocomplete="off" spellcheck="false">
+    </div>
+    <p class="addmsg" id="add-msg"></p>
+    <div class="modal-foot">
+      <button class="btn btn-primary" id="btn-add-submit" type="button" disabled>验证并添加</button>
+    </div>
+  </div>
+</section>
+
+<!-- 设置 -->
+<div class="modal" id="modal-settings" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>设置</h2>
+      <button class="modal-close" data-close="modal-settings" aria-label="关闭">×</button>
+    </div>
+
+    <div class="field">
+      <label for="set-rsshub">RSSHub 实例地址</label>
+      <input id="set-rsshub" type="url" placeholder="留空则不启用；自建后填 http://127.0.0.1:1200" autocomplete="off" spellcheck="false">
+      <p class="hint">B站、掘金、CSDN 这类没有公开 RSS 的平台要走 RSSHub。公共实例 rsshub.app 限流严重，建议自建。知乎、小红书、公众号即使在 RSSHub 里也要额外配登录 cookie。</p>
+    </div>
+
+    <div class="field">
+      <label for="set-interval">自动刷新间隔（分钟，0 表示关闭）</label>
+      <input id="set-interval" type="number" min="0" step="5" value="60">
+    </div>
+
+    <div class="field">
+      <label for="set-github">你的 GitHub 链接（显示在页脚，可留空）</label>
+      <input id="set-github" type="url" placeholder="https://github.com/yourname" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn" data-close="modal-settings">取消</button>
+      <button class="btn btn-primary" id="btn-save-settings">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑订阅 -->
+<div class="modal" id="modal-edit" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="edit-title">编辑</h2>
+      <button class="modal-close" data-close="modal-edit" aria-label="关闭">×</button>
+    </div>
+    <div class="field">
+      <label for="edit-name">显示名</label>
+      <input id="edit-name" type="text" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="edit-tags">tag</label>
+      <input id="edit-tags" type="text" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="edit-feed">feed 地址（手动登记的公众号在这里补 RSS 地址，补上后开始抓取；清空则回到手动登记）</label>
+      <input id="edit-feed" type="url" placeholder="https://…/feed.xml" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>当前 feed</label>
+      <ul class="feedlist" id="edit-feeds"></ul>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-danger" id="btn-delete-sub">删除订阅</button>
+      <span class="spacer"></span>
+      <button class="btn" data-close="modal-edit">取消</button>
+      <button class="btn btn-primary" id="btn-save-edit">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 给文章打 tag -->
+<div class="modal" id="modal-tag" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>给这篇打 tag</h2>
+      <button class="modal-close" data-close="modal-tag" aria-label="关闭">×</button>
+    </div>
+    <p class="tag-target" id="tag-target"></p>
+    <div class="field">
+      <label>已有 tag（点一下选中或取消，选中即归入该类）</label>
+      <div class="tagpick" id="tag-pick"></div>
+    </div>
+    <div class="field">
+      <label for="tag-new">新建 tag</label>
+      <div class="row-inputs">
+        <input id="tag-new" type="text" placeholder="输入新 tag，回车添加" autocomplete="off" spellcheck="false">
+        <button class="btn" id="btn-tag-add" type="button">添加</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-close="modal-tag">取消</button>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" id="btn-tag-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "quiet-river",
+  "version": "0.1.0",
+  "private": false,
+  "description": "把你在各平台关注的博主汇成一条按 tag 分组、按时间倒序的干净内容河。零依赖，零推荐算法。",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "rss",
+    "atom",
+    "json-feed",
+    "feed-reader",
+    "aggregator",
+    "self-hosted",
+    "zero-dependency"
+  ]
+}
