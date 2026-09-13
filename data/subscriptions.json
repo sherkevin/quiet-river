@@ -271,8 +271,7 @@
       "feeds": [
         "https://developer.nvidia.com/blog/feed"
       ],
-      "addedAt": "2026-09-11T07:04:52.522Z",
-      "disabled": true
+      "addedAt": "2026-09-11T07:04:52.522Z"
     },
     {
       "id": "b4bba02c3e53",
@@ -2925,6 +2924,195 @@
         "id": "5c1b52a500000000060387db",
         "itemCount": 20,
         "latest": 1789118720000
+      }
+    },
+    {
+      "id": "3df6299714da",
+      "name": "腾讯技术工程",
+      "url": "https://www.zhihu.com/org/teng-xun-ji-zhu-gong-cheng",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T14:44:24.281Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "teng-xun-ji-zhu-gong-cheng",
+        "itemCount": 58,
+        "latest": 1788777487000
+      }
+    },
+    {
+      "id": "d72c46e5eac5",
+      "name": "小红书技术REDtech",
+      "url": "https://www.zhihu.com/org/xiao-hong-shu-ji-zhu-tuan-dui",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T14:44:38.451Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "xiao-hong-shu-ji-zhu-tuan-dui",
+        "itemCount": 46,
+        "latest": 1719912478000
+      }
+    },
+    {
+      "id": "7a5f4fdae4ba",
+      "name": "GitHub Blog",
+      "url": "https://github.blog/feed/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "Agent",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://github.blog/feed/"
+      ],
+      "addedAt": "2026-09-13T14:44:48.897Z"
+    },
+    {
+      "id": "6fb69e90a039",
+      "name": "Cloudflare Blog",
+      "url": "https://blog.cloudflare.com/rss/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://blog.cloudflare.com/rss/"
+      ],
+      "addedAt": "2026-09-13T14:44:59.460Z"
+    },
+    {
+      "id": "e9ad701f4151",
+      "name": "Stripe Engineering",
+      "url": "https://stripe.com/blog/feed.rss",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://stripe.com/blog/feed.rss"
+      ],
+      "addedAt": "2026-09-13T14:45:04.157Z"
+    },
+    {
+      "id": "01a04aa16d61",
+      "name": "Netflix TechBlog",
+      "url": "https://netflixtechblog.com/feed",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://netflixtechblog.com/feed"
+      ],
+      "addedAt": "2026-09-13T14:45:11.484Z"
+    },
+    {
+      "id": "27ded6a55683",
+      "name": "Google DeepMind Blog",
+      "url": "https://deepmind.google/blog/rss.xml",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "多模态",
+        "强化学习"
+      ],
+      "feeds": [
+        "https://deepmind.google/blog/rss.xml"
+      ],
+      "addedAt": "2026-09-13T14:45:17.143Z"
+    },
+    {
+      "id": "87d349d97777",
+      "name": "OpenAI News",
+      "url": "https://openai.com/news/rss.xml",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://openai.com/news/rss.xml"
+      ],
+      "addedAt": "2026-09-13T14:45:19.617Z"
+    },
+    {
+      "id": "cedd39066e9b",
+      "name": "Grab Tech",
+      "url": "https://engineering.grab.com/feed",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统",
+        "搜广推"
+      ],
+      "feeds": [
+        "https://engineering.grab.com/feed"
+      ],
+      "addedAt": "2026-09-13T14:45:29.501Z"
+    },
+    {
+      "id": "ce758168f9f9",
+      "name": "百度Geek说",
+      "url": "https://www.zhihu.com/org/bai-du-jia-gou-shi",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T14:46:35.087Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "bai-du-jia-gou-shi",
+        "itemCount": 40,
+        "latest": 1789113273000
+      }
+    },
+    {
+      "id": "0e51b50593ed",
+      "name": "字节跳动Seed",
+      "url": "https://www.zhihu.com/org/dou-bao-da-mo-xing-tuan-dui",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "多模态",
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T14:46:44.827Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "dou-bao-da-mo-xing-tuan-dui",
+        "itemCount": 27,
+        "latest": 1785919531000
       }
     }
   ],
