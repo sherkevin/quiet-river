@@ -290,10 +290,7 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === '/api/refresh' && method === 'POST') {
     const body = await readBody(req);
-    const config = await store.loadConfig();
-    const cache = await store.loadCache();
-    const summary = await refreshAll(config, cache, { force: body.force === true });
-    await store.saveCache(store.pruneCache(cache, config));
+    const summary = await guardedRefresh(body.force === true);
     return sendJson(res, 200, { ...summary, at: Date.now() });
   }
 
@@ -325,6 +322,8 @@ async function handleApi(req, res, pathname) {
       }
     }
     await store.saveConfig(config);
+    // 间隔改了要重排服务端定时器，否则设置页保存了但定时器还是旧间隔。
+    await scheduleServerAuto();
     return sendJson(res, 200, { settings: config.settings });
   }
 
@@ -382,8 +381,44 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+/* ---------- 服务端自动刷新 ----------
+ * 自动刷新定时器原先住在网页里（app.js 的 setInterval）：关掉页面河就停流，
+ * 「每天自动拉最新」只在页面开着时成立。挪到服务端后，进程活着就按设置里的
+ * 间隔抓，与页面开不开无关；页面开着时它自己的定时器照旧负责「边看边新」。
+ * 两路可能撞在同一分钟，所以共用一把在飞锁：后到的直接复用前一次的结果。 */
+let refreshing = null;
+function guardedRefresh(force) {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    const config = await store.loadConfig();
+    const cache = await store.loadCache();
+    const summary = await refreshAll(config, cache, { force });
+    await store.saveCache(store.pruneCache(cache, config));
+    return summary;
+  })();
+  return refreshing.finally(() => {
+    refreshing = null;
+  });
+}
+
+let autoTimer = null;
+async function scheduleServerAuto() {
+  if (autoTimer) clearInterval(autoTimer);
+  const config = await store.loadConfig();
+  const minutes = Number(config.settings?.refreshMinutes || 0);
+  if (!minutes || minutes < 1) return;
+  autoTimer = setInterval(() => {
+    guardedRefresh(false).catch((err) => {
+      process.stderr.write(`自动刷新失败：${err.message}\n`);
+    });
+  }, minutes * 60000);
+}
+
 (async function main() {
   const seeded = await store.ensureSeed();
+  await scheduleServerAuto();
+  const bootConfig = await store.loadConfig();
+  const bootMinutes = Number(bootConfig.settings?.refreshMinutes || 0);
   server.listen(PORT, HOST, () => {
     const lines = [
       '',
@@ -392,6 +427,11 @@ const server = http.createServer(async (req, res) => {
       `  抓取缓存  ${store.CACHE_PATH}`,
     ];
     if (seeded) lines.push('  首次运行，已生成空的 subscriptions.json');
+    lines.push(
+      bootMinutes
+        ? `  自动刷新  每 ${bootMinutes} 分钟（服务端，页面关着也抓）`
+        : '  自动刷新  已关闭（设置里填分钟数开启）',
+    );
     lines.push('');
     process.stdout.write(`${lines.join('\n')}\n`);
   });
