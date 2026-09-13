@@ -19,6 +19,10 @@
   --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
           "Microsoft YaHei", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Anthropic pairs a serif for display text with a sans for everything else.
+     Georgia carries the Latin; CJK falls through to Songti SC on macOS. */
+  --serif: "Tiempos Text", Georgia, "Times New Roman", "Songti SC",
+           "Noto Serif CJK SC", "Source Han Serif SC", SimSun, serif;
 }
 
 :root[data-theme="dark"] {
@@ -47,7 +51,10 @@ html, body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
-  font-size: 15px;
+  /* Root size drives every rem in this file, so this one number is the
+     reading-size dial. 15px made card summaries land at 11px, too small to
+     scan; 18px puts the title at 16.6px and the summary at 14px. */
+  font-size: 18px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -82,10 +89,16 @@ button { font-family: inherit; }
 
 /* ---------- top bar ---------- */
 
-.topbar {
+/* topbar + tagbar stick as one unit. Their combined height moves with the
+   root font size and with viewport width (the action row wraps), so a
+   hardcoded sticky offset for the tagbar always drifts; one wrapper can't. */
+.stickyhead {
   position: sticky;
   top: 0;
   z-index: 20;
+}
+
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -111,13 +124,22 @@ button { font-family: inherit; }
 }
 
 .brand h1 {
-  font-size: 0.95rem;
-  font-weight: 650;
-  letter-spacing: 0.03em;
   margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.2rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-.brand-sub { font-size: 0.75rem; color: var(--ink-3); white-space: nowrap; }
+.brand-sub {
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .actions { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
 
@@ -164,7 +186,7 @@ button { font-family: inherit; }
   border: none;
   background: transparent;
   color: var(--ink-3);
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   padding: 0.3rem 0.6rem;
   cursor: pointer;
   transition: color 0.12s, background 0.12s;
@@ -191,12 +213,93 @@ button { font-family: inherit; }
   text-overflow: ellipsis;
 }
 
+/* ---------- pager ---------- */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 2.2rem 0 0.5rem;
+  padding-top: 1.3rem;
+  border-top: 1px solid var(--line-2);
+}
+.pager[hidden] { display: none; }
+
+.pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.3rem;
+  height: 2.3rem;
+  padding: 0 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.pager-btn:hover:not(:disabled):not([aria-current="page"]) {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.pager-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pager-btn[aria-current="page"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  font-weight: 600;
+  cursor: default;
+}
+.pager-btn.nav { min-width: 0; padding: 0 0.95rem; }
+.pager-gap {
+  min-width: 1.2rem;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+.pager-meta {
+  flex-basis: 100%;
+  margin-top: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ink-3);
+}
+.pager-size select {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+.pager-size select:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); }
+.pager-size select:focus { border-color: var(--accent); }
+
 /* ---------- tag bar ---------- */
 
 .tagbar {
-  position: sticky;
-  top: 3.1rem;
-  z-index: 19;
   display: flex;
   gap: 0.3rem;
   max-width: var(--maxw);
@@ -215,7 +318,7 @@ button { font-family: inherit; }
   color: var(--ink-2);
   border-radius: 999px;
   padding: 0.2rem 0.65rem;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -273,7 +376,9 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0.6rem 1.25rem 3rem; }
 #river {
   list-style: none; margin: 0; padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  /* 18px 字号下卡片里的标题与摘要都变宽了，15.5rem 会挤成两行标题加一行摘要。
+     18.5rem 在 62rem 容器里给三列，宽屏给四列，卡片不至于瘦长。 */
+  grid-template-columns: repeat(auto-fill, minmax(18.5rem, 1fr));
   gap: 0.8rem;
 }
 
@@ -369,8 +474,9 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0.6rem 1.25rem 3rem; }
 }
 .authorhead-row h2 {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 650;
+  font-size: 1.25rem;
+  font-family: var(--serif);
+  font-weight: 500;
   letter-spacing: 0.01em;
 }
 .author-meta {
@@ -383,7 +489,12 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0.6rem 1.25rem 3rem; }
 /* ---------- add page ---------- */
 
 .addpage { max-width: 46rem; margin: 0 auto; padding: 0.8rem 1.25rem 3rem; }
-.addpage h2 { margin: 0.3rem 0 0.2rem; font-size: 1.15rem; font-weight: 650; }
+.addpage h2 {
+  margin: 0.3rem 0 0.2rem;
+  font-size: 1.25rem;
+  font-family: var(--serif);
+  font-weight: 500;
+}
 .addhint { font-size: 0.78rem; color: var(--ink-3); line-height: 1.6; margin: 0.2rem 0 0.9rem; }
 
 .addgroup {
@@ -441,7 +552,7 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0.6rem 1.25rem 3rem; }
 .addmsg.bad { color: var(--danger); }
 
 .card-plat {
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   color: var(--ink-3);
   letter-spacing: 0.03em;
   text-decoration: none;
@@ -451,7 +562,7 @@ a.card-plat:hover { color: var(--accent); }
 .card-when {
   flex: none;
   margin-left: auto;
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -465,25 +576,27 @@ a.card-plat:hover { color: var(--accent); }
 
 .card-title {
   color: var(--ink);
-  font-size: 0.88rem;
+  font-size: 1.02rem;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.4;
   letter-spacing: 0.005em;
   text-decoration: none;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  font-family: var(--serif);
+  font-weight: 500;
 }
 a.card-title:hover { color: var(--accent); }
 
 .card-sum {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   color: var(--ink-2);
-  line-height: 1.6;
+  line-height: 1.62;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
   flex: 1 1 auto;
@@ -499,7 +612,7 @@ a.card-title:hover { color: var(--accent); }
 }
 .card-tags { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; min-width: 0; }
 .chip {
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   color: var(--ink-3);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -542,7 +655,7 @@ a.card-title:hover { color: var(--accent); }
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   line-height: 1.5;
   padding: 0 0.45rem;
   border: 1px solid var(--line);
@@ -578,7 +691,7 @@ a.card-title:hover { color: var(--accent); }
 .card-more {
   flex: none;
   margin-left: auto;
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
@@ -589,7 +702,7 @@ a.card-title:hover { color: var(--accent); }
 .footbar {
   max-width: var(--maxw); margin: 0 auto; padding: 0.9rem 1.25rem 2.5rem;
   display: flex; justify-content: space-between; gap: 1rem;
-  font-size: 0.72rem; color: var(--ink-3);
+  font-size: 0.76rem; color: var(--ink-3);
   border-top: 1px solid var(--line-2);
 }
 .footlink { color: var(--ink-3); text-decoration: none; }
@@ -689,9 +802,20 @@ a.card-title:hover { color: var(--accent); }
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: 0.9rem 1rem 0.5rem; }
-  .tagbar { top: 5.4rem; padding: 0.3rem 1rem 0.6rem; }
+  /* 吸顶区在手机上要尽量矮：brand 一行、控件一行（横向滚动）、tag 一行。
+     控件换行成三行的话吸顶会吃掉三分之一屏幕。 */
+  .topbar { padding: 0.7rem 1rem 0.5rem; row-gap: 0.45rem; }
+  .actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  /* 横滚行里的子项不能收缩，否则 viewnav / sortseg 会被压成 2px 宽。 */
+  .actions > * { flex: none; }
+  .actions::-webkit-scrollbar { display: none; }
+  .search { width: 9rem; flex: none; }
+  .tagbar { padding: 0.3rem 1rem 0.6rem; }
   main { padding: 0.3rem 1rem 3rem; }
-  .search { width: 100%; order: 5; flex-basis: 100%; }
   .row-body { padding-left: calc(6px + 0.45rem); }
 }

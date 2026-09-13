@@ -12,10 +12,13 @@ docs/LOCAL.md
 # 抓取缓存：可再生、体积会涨、且是你自己的阅读内容
 data/cache.json
 
-# data/subscriptions.json 故意**不**忽略：它就是配置本体，小、可手改、可 diff。
-# 但如果你要把自己的 fork 推到公开仓库，取消下面这行的注释——
-# 那是你的个人阅读清单，不该跟着代码一起公开。
+# data/subscriptions.json 故意**不**忽略：它就是配置本体，小、可手改、可 diff，
+# 而且本项目的发布形态就是「连清单一起发布」（clone 即作者的河）。
+# 如果你 fork 出去不想带自己的清单，取消下面这行的注释。
 # data/subscriptions.json
+
+# 缓存快照是发布物（clone 后第一次启动的垫底内容），不忽略。
+# 全量 cache.json 仍忽略：它可再生，且是你自己的阅读内容。
 
 node_modules/
 *.log

@@ -1,0 +1,2937 @@
+{
+  "version": 1,
+  "settings": {
+    "rsshubBase": "http://127.0.0.1:1200",
+    "refreshMinutes": 60,
+    "githubUrl": "https://github.com/sherkevin"
+  },
+  "subscriptions": [
+    {
+      "id": "edc2411f6cbe",
+      "name": "Recsys Frontier（九老师）",
+      "url": "https://blog.recsys-frontier.com/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://blog.recsys-frontier.com/feed"
+      ],
+      "addedAt": "2026-09-10T14:30:54.843Z"
+    },
+    {
+      "id": "db964a406046",
+      "name": "Eugene Yan",
+      "url": "https://eugeneyan.com/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://eugeneyan.com/rss"
+      ],
+      "addedAt": "2026-09-10T14:31:19.570Z"
+    },
+    {
+      "id": "61bfd9551639",
+      "name": "科学空间（苏剑林）",
+      "url": "https://kexue.fm/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "深度学习"
+      ],
+      "feeds": [
+        "https://kexue.fm/feed"
+      ],
+      "addedAt": "2026-09-10T14:34:02.970Z"
+    },
+    {
+      "id": "a29d3955217e",
+      "name": "arXiv · cs.IR",
+      "url": "https://arxiv.org/list/cs.IR/recent",
+      "platform": "arxiv",
+      "platformLabel": "arXiv",
+      "tier": 1,
+      "tags": [
+        "信息检索"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-10T16:02:21.046Z",
+      "adapter": {
+        "platform": "arxiv",
+        "id": "cs.IR",
+        "itemCount": 20,
+        "latest": 1788972206000
+      },
+      "disabled": true
+    },
+    {
+      "id": "468d1308a19d",
+      "name": "sherkevin",
+      "url": "https://github.com/sherkevin",
+      "platform": "github",
+      "platformLabel": "GitHub",
+      "tier": 1,
+      "tags": [],
+      "feeds": [
+        "https://github.com/sherkevin.atom"
+      ],
+      "addedAt": "2026-09-10T16:20:21.823Z",
+      "disabled": true
+    },
+    {
+      "id": "5afaff0c4d50",
+      "name": "京东零售技术（掘金）",
+      "url": "https://juejin.cn/user/4233576972293643",
+      "platform": "juejin",
+      "platformLabel": "掘金",
+      "tier": 1,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T03:01:29.335Z",
+      "adapter": {
+        "platform": "juejin",
+        "id": "4233576972293643",
+        "itemCount": 10,
+        "latest": 1774235249000
+      }
+    },
+    {
+      "id": "bbe259c4f084",
+      "name": "机器之心",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T04:41:13.640Z",
+      "manual": true
+    },
+    {
+      "id": "8dfc18670b69",
+      "name": "美团技术团队",
+      "url": "https://tech.meituan.com/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "生成式推荐",
+        "搜广推"
+      ],
+      "feeds": [
+        "https://tech.meituan.com/atom.xml"
+      ],
+      "addedAt": "2026-09-11T07:00:37.346Z"
+    },
+    {
+      "id": "bc772ed99749",
+      "name": "快手技术（CSDN 镜像）",
+      "url": "https://blog.csdn.net/kuaishoutech",
+      "platform": "csdn",
+      "platformLabel": "CSDN",
+      "tier": 1,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://blog.csdn.net/kuaishoutech/rss/list"
+      ],
+      "addedAt": "2026-09-11T07:00:39.069Z"
+    },
+    {
+      "id": "81341a7295d6",
+      "name": "tullie.ai",
+      "url": "https://tullie.ai/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://tullie.ai/rss.xml"
+      ],
+      "addedAt": "2026-09-11T07:00:44.932Z"
+    },
+    {
+      "id": "077170ac000a",
+      "name": "Spotify Research",
+      "url": "https://research.atspotify.com/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://research.atspotify.com/feed"
+      ],
+      "addedAt": "2026-09-11T07:00:48.172Z"
+    },
+    {
+      "id": "5137e2ae2083",
+      "name": "Meta Engineering",
+      "url": "https://engineering.fb.com/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://engineering.fb.com/feed/"
+      ],
+      "addedAt": "2026-09-11T07:00:52.833Z"
+    },
+    {
+      "id": "befe68d63b19",
+      "name": "airbnb.tech",
+      "url": "https://airbnb.tech/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [
+        "https://airbnb.tech/feed/"
+      ],
+      "addedAt": "2026-09-11T07:01:23.309Z"
+    },
+    {
+      "id": "ed4d7c00cbb7",
+      "name": "ACM RecSys（YouTube）",
+      "url": "https://www.youtube.com/@acmrecsys",
+      "platform": "youtube",
+      "platformLabel": "YouTube",
+      "tier": 1,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://www.youtube.com/feeds/videos.xml?channel_id=UC2nEn-yNA1BtdDNWziphPGA"
+      ],
+      "addedAt": "2026-09-11T07:01:27.139Z"
+    },
+    {
+      "id": "239f75d1493f",
+      "name": "Recsperts（播客）",
+      "url": "https://podcasts.apple.com/us/podcast/id1587222271",
+      "platform": "podcast",
+      "platformLabel": "播客",
+      "tier": 1,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:01:34.148Z",
+      "adapter": {
+        "platform": "podcast",
+        "id": "1587222271",
+        "itemCount": 34,
+        "latest": 1788258601000
+      }
+    },
+    {
+      "id": "d6ed3095e4d4",
+      "name": "袁耀（论文阅读笔记）",
+      "url": "https://github.com/yaoyuanzhou/yaoyuanzhou.github.io/commits.atom",
+      "platform": "github",
+      "platformLabel": "GitHub",
+      "tier": 1,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://github.com/yaoyuanzhou/yaoyuanzhou.github.io/commits.atom"
+      ],
+      "addedAt": "2026-09-11T07:04:47.482Z"
+    },
+    {
+      "id": "ebf978e9d405",
+      "name": "NVIDIA Technical Blog",
+      "url": "https://developer.nvidia.com/blog",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://developer.nvidia.com/blog/feed"
+      ],
+      "addedAt": "2026-09-11T07:04:52.522Z",
+      "disabled": true
+    },
+    {
+      "id": "b4bba02c3e53",
+      "name": "深度学习炼丹",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.365Z",
+      "manual": true
+    },
+    {
+      "id": "c48786ab14f6",
+      "name": "灵心通衢",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.372Z",
+      "manual": true
+    },
+    {
+      "id": "81c3b465ba27",
+      "name": "智荐阁",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.376Z",
+      "manual": true
+    },
+    {
+      "id": "a43085ae78aa",
+      "name": "淘天集团智能算法产品",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐",
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.379Z",
+      "manual": true
+    },
+    {
+      "id": "57e68778302c",
+      "name": "高德技术",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.382Z",
+      "manual": true
+    },
+    {
+      "id": "62ab05e31717",
+      "name": "机器学习与推荐算法",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.385Z",
+      "manual": true
+    },
+    {
+      "id": "5fb5918faf99",
+      "name": "摘星星的孩子",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.389Z",
+      "manual": true
+    },
+    {
+      "id": "0aefaaea9a0d",
+      "name": "algo邻家米铺",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.392Z",
+      "manual": true
+    },
+    {
+      "id": "b1cede844cdf",
+      "name": "丁丁丁写字的地方",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.396Z",
+      "manual": true
+    },
+    {
+      "id": "b048946ac3c1",
+      "name": "诗品算法",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.401Z",
+      "manual": true
+    },
+    {
+      "id": "472dcfa59dee",
+      "name": "搜广推学习笔记",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.406Z",
+      "manual": true
+    },
+    {
+      "id": "b235289243a2",
+      "name": "阿尘学习笔记",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.409Z",
+      "manual": true
+    },
+    {
+      "id": "a25adb6d53d0",
+      "name": "秋枫学习笔记",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.412Z",
+      "manual": true
+    },
+    {
+      "id": "de6210f2a866",
+      "name": "RecRead",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.415Z",
+      "manual": true
+    },
+    {
+      "id": "8c8a9abb342f",
+      "name": "州懂学习笔记",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.417Z",
+      "manual": true
+    },
+    {
+      "id": "895223cd018a",
+      "name": "王喆的AI笔记",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T07:04:58.420Z",
+      "manual": true
+    },
+    {
+      "id": "4de45ade211e",
+      "name": "州懂",
+      "url": "https://www.zhihu.com/people/14jzzhan",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:01:01.142Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "14jzzhan",
+        "itemCount": 20,
+        "latest": 1788043995000
+      }
+    },
+    {
+      "id": "ba4cab51582c",
+      "name": "王喆",
+      "url": "https://www.zhihu.com/people/wang-zhe-58",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:01:04.277Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wang-zhe-58",
+        "itemCount": 20,
+        "latest": 1761088598000
+      }
+    },
+    {
+      "id": "ebebb902b2a8",
+      "name": "朱小强",
+      "url": "https://www.zhihu.com/people/zhu-xiao-qiang-65",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:01:06.468Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zhu-xiao-qiang-65",
+        "itemCount": 8,
+        "latest": 1743419832000
+      }
+    },
+    {
+      "id": "6cda649fbe03",
+      "name": "缄默笔记",
+      "url": "https://www.zhihu.com/people/hong-7-32",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:01:09.298Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "hong-7-32",
+        "itemCount": 20,
+        "latest": 1733562078000
+      }
+    },
+    {
+      "id": "ff7889924396",
+      "name": "楚风（小红书）",
+      "url": "https://www.xiaohongshu.com/user/profile/5fb7f3850000000001004838",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:08:15.820Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "5fb7f3850000000001004838",
+        "itemCount": 20,
+        "latest": 1788799453000
+      }
+    },
+    {
+      "id": "3488ef682d37",
+      "name": "fifi的算法日记（小红书）",
+      "url": "https://www.xiaohongshu.com/user/profile/617016f30000000002026ce2",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:08:21.169Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "617016f30000000002026ce2",
+        "itemCount": 20,
+        "latest": 1787312164000
+      }
+    },
+    {
+      "id": "72d4154833ba",
+      "name": "左眼（小红书）",
+      "url": "https://www.xiaohongshu.com/user/profile/5a3f313fb1da1403bacaf048",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:08:27.327Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "5a3f313fb1da1403bacaf048",
+        "itemCount": 20,
+        "latest": 1789109416000
+      }
+    },
+    {
+      "id": "3314f3491853",
+      "name": "Cici学算法",
+      "url": "https://www.zhihu.com/people/jack-c-77",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:23:24.787Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jack-c-77",
+        "itemCount": 20,
+        "latest": 1786200027000
+      }
+    },
+    {
+      "id": "26e048766cef",
+      "name": "几野",
+      "url": "https://www.zhihu.com/people/zhou-yong-chao-71",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:23:36.914Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zhou-yong-chao-71",
+        "itemCount": 15,
+        "latest": 1781514617000
+      }
+    },
+    {
+      "id": "e61100b8851b",
+      "name": "木阿木阿木啊",
+      "url": "https://www.zhihu.com/people/tangyanlin",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:23:48.785Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "tangyanlin",
+        "itemCount": 20,
+        "latest": 1764212671000
+      }
+    },
+    {
+      "id": "e8941b3c4310",
+      "name": "格子衫老头",
+      "url": "https://www.zhihu.com/people/camelot-35",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:55:34.043Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "camelot-35",
+        "itemCount": 7,
+        "latest": 1786606278000
+      }
+    },
+    {
+      "id": "e4c6a0357022",
+      "name": "阿里妈妈技术",
+      "url": "https://www.zhihu.com/people/a-li-ma-ma-ji-zhu",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T08:55:52.254Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "a-li-ma-ma-ji-zhu",
+        "itemCount": 35,
+        "latest": 1787815902000
+      }
+    },
+    {
+      "id": "59ed42c8e84e",
+      "name": "思达-刘明星",
+      "url": "https://www.zhihu.com/people/wang-wang-20-73",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T09:22:14.387Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wang-wang-20-73",
+        "itemCount": 26,
+        "latest": 1789101017000
+      }
+    },
+    {
+      "id": "0e6a472230b1",
+      "name": "贝子涵",
+      "url": "https://www.zhihu.com/people/huan-you-4-9",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T09:22:33.452Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "huan-you-4-9",
+        "itemCount": 20,
+        "latest": 1775312560000
+      }
+    },
+    {
+      "id": "8c8b4075b335",
+      "name": "傅聪Cong",
+      "url": "https://www.zhihu.com/people/FU-CONG-BEN",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T09:22:52.972Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "FU-CONG-BEN",
+        "itemCount": 40,
+        "latest": 1784537281000
+      }
+    },
+    {
+      "id": "aa4b2b531678",
+      "name": "Lukan",
+      "url": "https://www.zhihu.com/people/lukan217",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T09:23:11.143Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "lukan217",
+        "itemCount": 24,
+        "latest": 1770640887000
+      }
+    },
+    {
+      "id": "bad480268715",
+      "name": "DOTA",
+      "url": "https://www.zhihu.com/people/yuconan",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T09:23:31.047Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yuconan",
+        "itemCount": 40,
+        "latest": 1769079879000
+      }
+    },
+    {
+      "id": "b0c6386e655c",
+      "name": "Amazon Science",
+      "url": "https://www.amazon.science/index.rss",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://www.amazon.science/index.rss"
+      ],
+      "addedAt": "2026-09-11T11:26:08.783Z"
+    },
+    {
+      "id": "d144bd39f0bf",
+      "name": "石塔西",
+      "url": "https://www.zhihu.com/people/si-ta-xi",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T12:07:08.391Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "si-ta-xi",
+        "itemCount": 40,
+        "latest": 1708307863000
+      }
+    },
+    {
+      "id": "0fd3403f67bc",
+      "name": "感觉来了",
+      "url": "https://www.zhihu.com/people/gan-jue-lai-liao",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T12:07:40.605Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "gan-jue-lai-liao",
+        "itemCount": 25,
+        "latest": 1715581321000
+      }
+    },
+    {
+      "id": "92e0d53e77a7",
+      "name": "潜心",
+      "url": "https://www.zhihu.com/people/gzy-33-55",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T12:07:59.857Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "gzy-33-55",
+        "itemCount": 30,
+        "latest": 1701520170000
+      }
+    },
+    {
+      "id": "58d433663016",
+      "name": "俊俊",
+      "url": "https://www.zhihu.com/people/shangpairen",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T12:08:18.010Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "shangpairen",
+        "itemCount": 20,
+        "latest": 1600184225000
+      }
+    },
+    {
+      "id": "d39dd69b141d",
+      "name": "得物技术",
+      "url": "",
+      "platform": "blog",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T12:08:32.755Z",
+      "manual": true
+    },
+    {
+      "id": "d40f6cc79d60",
+      "name": "DataFunTalk",
+      "url": "",
+      "platform": "blog",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T12:08:34.268Z",
+      "manual": true
+    },
+    {
+      "id": "9bde0d629203",
+      "name": "Pluto",
+      "url": "https://www.zhihu.com/people/jue-chen-67-88",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-11T12:09:40.547Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jue-chen-67-88",
+        "itemCount": 47,
+        "latest": 1755018644000
+      }
+    },
+    {
+      "id": "92756b11cb13",
+      "name": "小鱼儿at青岛（B站）",
+      "url": "http://127.0.0.1:1200/bilibili/user/video/288748846",
+      "platform": "bilibili",
+      "platformLabel": "B站",
+      "tier": 2,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [
+        "http://127.0.0.1:1200/bilibili/user/video/288748846"
+      ],
+      "addedAt": "2026-09-11T12:47:21.236Z"
+    },
+    {
+      "id": "21a9edf9afca",
+      "name": "酸果酿（B站）",
+      "url": "http://127.0.0.1:1200/bilibili/user/video/3546856594344374",
+      "platform": "bilibili",
+      "platformLabel": "B站",
+      "tier": 2,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [
+        "http://127.0.0.1:1200/bilibili/user/video/3546856594344374"
+      ],
+      "addedAt": "2026-09-11T12:47:29.324Z"
+    },
+    {
+      "id": "ed2e924569ab",
+      "name": "王树森 ShusenWang（B站）",
+      "url": "http://127.0.0.1:1200/bilibili/user/video/1369507485",
+      "platform": "bilibili",
+      "platformLabel": "B站",
+      "tier": 2,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "http://127.0.0.1:1200/bilibili/user/video/1369507485"
+      ],
+      "addedAt": "2026-09-11T12:47:37.388Z"
+    },
+    {
+      "id": "132543240a30",
+      "name": "AITIME论道（B站）",
+      "url": "http://127.0.0.1:1200/bilibili/user/video/503316308",
+      "platform": "bilibili",
+      "platformLabel": "B站",
+      "tier": 2,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [
+        "http://127.0.0.1:1200/bilibili/user/video/503316308"
+      ],
+      "addedAt": "2026-09-11T12:47:56.149Z"
+    },
+    {
+      "id": "67d3fc874cf6",
+      "name": "蘑菇先生",
+      "url": "https://www.zhihu.com/people/xuetf",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T11:45:05.276Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "xuetf"
+      }
+    },
+    {
+      "id": "802df05aeb0a",
+      "name": "武侠超人",
+      "url": "https://www.zhihu.com/people/wu-xia-chao-ren",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T11:45:05.276Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wu-xia-chao-ren"
+      }
+    },
+    {
+      "id": "bfefb38e62d2",
+      "name": "张峻旗",
+      "url": "https://www.zhihu.com/people/zhang-jun-qi-44",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T11:45:05.276Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zhang-jun-qi-44"
+      }
+    },
+    {
+      "id": "84a74fc0ed17",
+      "name": "RUC AI Engine",
+      "url": "https://www.zhihu.com/people/ruc-ai-engine",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "生成式推荐",
+        "Agent",
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T11:45:05.276Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "ruc-ai-engine"
+      }
+    },
+    {
+      "id": "d88c6605f82d",
+      "name": "twilly",
+      "url": "https://www.zhihu.com/people/hei-bai-kun-shou",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "生成式推荐",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T11:51:13.706Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "hei-bai-kun-shou"
+      }
+    },
+    {
+      "id": "1df17e222ff3",
+      "name": "torsor",
+      "url": "https://www.zhihu.com/people/torsor",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.782Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "torsor"
+      }
+    },
+    {
+      "id": "d7f2cc4ac6e6",
+      "name": "凇数",
+      "url": "https://www.zhihu.com/people/tan-song-",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "tan-song-"
+      }
+    },
+    {
+      "id": "fada4e1a58a7",
+      "name": "MathHub",
+      "url": "https://www.zhihu.com/people/haochizhang",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "haochizhang"
+      }
+    },
+    {
+      "id": "933f710b9c2e",
+      "name": "马同学",
+      "url": "https://www.zhihu.com/people/matongxue",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "matongxue"
+      }
+    },
+    {
+      "id": "bfc17d1a0c87",
+      "name": "yang元祐",
+      "url": "https://www.zhihu.com/people/huo-bo-li",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "huo-bo-li"
+      }
+    },
+    {
+      "id": "daaee77cc81c",
+      "name": "VincentLee",
+      "url": "https://www.zhihu.com/people/VincentLee-9527",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "CV",
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "VincentLee-9527"
+      }
+    },
+    {
+      "id": "bb4b077e9c26",
+      "name": "叶子哥AI",
+      "url": "https://www.zhihu.com/people/yezibro",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yezibro"
+      }
+    },
+    {
+      "id": "5f52c44173fd",
+      "name": "魔法学院的Chilia",
+      "url": "https://www.zhihu.com/people/wang-zi-han-81-18",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "Agent",
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wang-zi-han-81-18"
+      }
+    },
+    {
+      "id": "13fb318f7c87",
+      "name": "Tete",
+      "url": "https://www.zhihu.com/people/tete-77-44",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "tete-77-44"
+      }
+    },
+    {
+      "id": "417d5557de9c",
+      "name": "刀刀宁",
+      "url": "https://www.zhihu.com/people/zzningxp",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zzningxp"
+      }
+    },
+    {
+      "id": "6f04dbedf156",
+      "name": "xyiz",
+      "url": "https://www.zhihu.com/people/yan-xin-65",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yan-xin-65"
+      }
+    },
+    {
+      "id": "4df9d21fa54b",
+      "name": "泽宇",
+      "url": "https://www.zhihu.com/people/ngl567",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "ngl567"
+      }
+    },
+    {
+      "id": "c84a17606861",
+      "name": "Hao Bai",
+      "url": "https://www.zhihu.com/people/jackgethome",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jackgethome"
+      }
+    },
+    {
+      "id": "e314a5d41959",
+      "name": "吃果冻不吐果冻皮",
+      "url": "https://www.zhihu.com/people/liguodong-iot",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "liguodong-iot"
+      }
+    },
+    {
+      "id": "d9c21c9c1b6e",
+      "name": "北京智源人工智能研究院",
+      "url": "https://www.zhihu.com/people/bei-jing-zhi-yuan-ren-gong-zhi-neng-yan-jiu-yuan",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "NLP",
+        "多模态",
+        "具身"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "bei-jing-zhi-yuan-ren-gong-zhi-neng-yan-jiu-yuan"
+      }
+    },
+    {
+      "id": "433845a20c52",
+      "name": "胡伟",
+      "url": "https://www.zhihu.com/people/whu1982",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "whu1982"
+      }
+    },
+    {
+      "id": "4c0b70bd334c",
+      "name": "莲子",
+      "url": "https://www.zhihu.com/people/qalian",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "NLP",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "qalian"
+      }
+    },
+    {
+      "id": "ae2b491ee25b",
+      "name": "几点 James",
+      "url": "https://www.zhihu.com/people/luan-77-13",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "luan-77-13"
+      }
+    },
+    {
+      "id": "6c1502cbb417",
+      "name": "赵世钰-西湖大学",
+      "url": "https://www.zhihu.com/people/WINDYLab",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "CV",
+        "具身"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "WINDYLab"
+      }
+    },
+    {
+      "id": "338015edf299",
+      "name": "悟乙己",
+      "url": "https://www.zhihu.com/people/mattzheng7",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数据分析"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "mattzheng7"
+      }
+    },
+    {
+      "id": "f4af88bea011",
+      "name": "AI4Science探索",
+      "url": "https://www.zhihu.com/people/jiu-ri-jiu-ri-1",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理",
+        "深度学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jiu-ri-jiu-ri-1"
+      }
+    },
+    {
+      "id": "35d00edf78b2",
+      "name": "Chaos AI Studio",
+      "url": "https://www.zhihu.com/people/chaoswork",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "chaoswork"
+      }
+    },
+    {
+      "id": "c5c7c8fabae1",
+      "name": "LLMCat",
+      "url": "https://www.zhihu.com/people/AiCamp",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "AiCamp"
+      }
+    },
+    {
+      "id": "308f863c3072",
+      "name": "SiriusNEO",
+      "url": "https://www.zhihu.com/people/chaofanlin",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "Agent",
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "chaofanlin"
+      }
+    },
+    {
+      "id": "8c4e6f9d018c",
+      "name": "薛天帆",
+      "url": "https://www.zhihu.com/people/xiao-lao-shu-79",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "xiao-lao-shu-79"
+      }
+    },
+    {
+      "id": "944911972346",
+      "name": "强化学习实验室",
+      "url": "https://www.zhihu.com/people/hao-jian-ye-tian-jin-da-xue-51",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "具身",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "hao-jian-ye-tian-jin-da-xue-51"
+      }
+    },
+    {
+      "id": "e73d7c460a23",
+      "name": "微软亚洲研究院",
+      "url": "https://www.zhihu.com/people/wei-ruan-ya-zhou-yan-jiu-yuan",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "Agent",
+        "CV"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T16:31:51.783Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wei-ruan-ya-zhou-yan-jiu-yuan"
+      }
+    },
+    {
+      "id": "5245f7af9b51",
+      "name": "直觉优先",
+      "url": "https://www.zhihu.com/people/jinzhao2022",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.133Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jinzhao2022"
+      }
+    },
+    {
+      "id": "ca083d1d81e6",
+      "name": "学习成瘾",
+      "url": "https://www.zhihu.com/people/31006-40",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学",
+        "深度学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "31006-40"
+      }
+    },
+    {
+      "id": "9d0c7b3f1acf",
+      "name": "林深见志",
+      "url": "https://www.zhihu.com/people/justopit",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学",
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "justopit"
+      }
+    },
+    {
+      "id": "2adf81f568ac",
+      "name": "Control",
+      "url": "https://www.zhihu.com/people/guofenmiao",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "guofenmiao"
+      }
+    },
+    {
+      "id": "601bc073d7d0",
+      "name": "tiantianheheaa",
+      "url": "https://www.zhihu.com/people/tiantianheheaa-76",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "tiantianheheaa-76"
+      }
+    },
+    {
+      "id": "d3aee442f110",
+      "name": "定西",
+      "url": "https://www.zhihu.com/people/reakins",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "reakins"
+      }
+    },
+    {
+      "id": "4e82ca396258",
+      "name": "emiya",
+      "url": "https://www.zhihu.com/people/emiya-98",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "emiya-98"
+      }
+    },
+    {
+      "id": "bf6e650046b3",
+      "name": "kaiyuan",
+      "url": "https://www.zhihu.com/people/xky7",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "xky7"
+      }
+    },
+    {
+      "id": "015488258fa4",
+      "name": "SuSun",
+      "url": "https://www.zhihu.com/people/yixie-gu-zhou-6-9",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yixie-gu-zhou-6-9"
+      }
+    },
+    {
+      "id": "76ff66a0b707",
+      "name": "BBuf",
+      "url": "https://www.zhihu.com/people/zhang-xiao-yu-45-67-74",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zhang-xiao-yu-45-67-74"
+      }
+    },
+    {
+      "id": "ad59425ddae2",
+      "name": "方佳瑞",
+      "url": "https://www.zhihu.com/people/feifeibear",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:16:15.134Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "feifeibear"
+      }
+    },
+    {
+      "id": "2d897895d894",
+      "name": "陈乐群",
+      "url": "https://www.zhihu.com/people/abcdabcd987",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:24:00.296Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "abcdabcd987"
+      }
+    },
+    {
+      "id": "620dcd74d8ab",
+      "name": "KuangjuX",
+      "url": "https://www.zhihu.com/people/qi-cheng-xiang-59",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:24:00.297Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "qi-cheng-xiang-59"
+      }
+    },
+    {
+      "id": "c0c6feb76537",
+      "name": "zzk again",
+      "url": "https://www.zhihu.com/people/mardino",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:24:00.297Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "mardino"
+      }
+    },
+    {
+      "id": "e735935d19c4",
+      "name": "Han Shen",
+      "url": "https://www.zhihu.com/people/han-shen-86",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:24:00.297Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "han-shen-86"
+      }
+    },
+    {
+      "id": "8c6f2efdd73b",
+      "name": "beanandbean",
+      "url": "https://www.zhihu.com/people/beanandbean",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T17:24:00.297Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "beanandbean"
+      }
+    },
+    {
+      "id": "0f83cac49128",
+      "name": "猛猿",
+      "url": "https://www.zhihu.com/people/lemonround",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.626Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "lemonround"
+      }
+    },
+    {
+      "id": "5ecff01b2596",
+      "name": "曹宇",
+      "url": "https://www.zhihu.com/people/moland",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "moland"
+      }
+    },
+    {
+      "id": "7a63f97072a6",
+      "name": "swtheking",
+      "url": "https://www.zhihu.com/people/swtheking",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "swtheking"
+      }
+    },
+    {
+      "id": "f680a31588c1",
+      "name": "严格鸽",
+      "url": "https://www.zhihu.com/people/yan-ge-ge-32-1",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yan-ge-ge-32-1"
+      }
+    },
+    {
+      "id": "7ea336980954",
+      "name": "歪门正道",
+      "url": "https://www.zhihu.com/people/waimen99",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "waimen99"
+      }
+    },
+    {
+      "id": "a65e989be988",
+      "name": "晚安汤姆布利多",
+      "url": "https://www.zhihu.com/people/Rancho2508",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "Rancho2508"
+      }
+    },
+    {
+      "id": "44c369f8c40b",
+      "name": "李金ECHO",
+      "url": "https://www.zhihu.com/people/li-jin-33-15",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "li-jin-33-15"
+      }
+    },
+    {
+      "id": "d8ef6b72ef7d",
+      "name": "播播",
+      "url": "https://www.zhihu.com/people/bobonote",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "bobonote"
+      }
+    },
+    {
+      "id": "65137562fb04",
+      "name": "ybq",
+      "url": "https://www.zhihu.com/people/ybq-29-32",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "ybq-29-32"
+      }
+    },
+    {
+      "id": "2efe9535bf70",
+      "name": "hzwer 黄哲威",
+      "url": "https://www.zhihu.com/people/hzwer",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "hzwer"
+      }
+    },
+    {
+      "id": "0586ca989620",
+      "name": "周舒畅",
+      "url": "https://www.zhihu.com/people/zhou-shu-chang-45",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "数学",
+        "具身"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zhou-shu-chang-45"
+      }
+    },
+    {
+      "id": "71040bd56d26",
+      "name": "金鱼马",
+      "url": "https://www.zhihu.com/people/he-eeeeeeeee",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "he-eeeeeeeee"
+      }
+    },
+    {
+      "id": "2248f47ce77c",
+      "name": "Unit ideal",
+      "url": "https://www.zhihu.com/people/tang-tian-long-4",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "tang-tian-long-4"
+      }
+    },
+    {
+      "id": "899ce1bcd928",
+      "name": "好地方bug",
+      "url": "https://www.zhihu.com/people/hao-di-fang-bug",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "hao-di-fang-bug"
+      }
+    },
+    {
+      "id": "4c53c851db69",
+      "name": "mathzeta2",
+      "url": "https://www.zhihu.com/people/zhe-ci-bu-neng",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zhe-ci-bu-neng"
+      }
+    },
+    {
+      "id": "0a58c6dca41b",
+      "name": "东城居士",
+      "url": "https://www.zhihu.com/people/wen-da-xue-shi-56",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T19:44:28.627Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wen-da-xue-shi-56"
+      }
+    },
+    {
+      "id": "b3df91e659cf",
+      "name": "礼空",
+      "url": "https://www.zhihu.com/people/jimmyjustin-35",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T20:34:43.162Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jimmyjustin-35"
+      }
+    },
+    {
+      "id": "839b031663e4",
+      "name": "清雅白鹿记",
+      "url": "https://www.zhihu.com/people/qingyblj",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T20:34:43.162Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "qingyblj"
+      }
+    },
+    {
+      "id": "1cc5578a8a7e",
+      "name": "刘醉白",
+      "url": "https://www.zhihu.com/people/LIU-S-ecc",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T20:34:43.162Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "LIU-S-ecc"
+      }
+    },
+    {
+      "id": "c550659cdf5a",
+      "name": "三千弱水",
+      "url": "https://www.zhihu.com/people/math1024",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T20:34:43.162Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "math1024"
+      }
+    },
+    {
+      "id": "aae96b5705dd",
+      "name": "罗旻杰",
+      "url": "https://www.zhihu.com/people/luo-min-jie",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T20:34:43.162Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "luo-min-jie"
+      }
+    },
+    {
+      "id": "1cb7c0cb5923",
+      "name": "予一人",
+      "url": "https://www.zhihu.com/people/yu-yiren-62",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T20:34:43.162Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yu-yiren-62"
+      }
+    },
+    {
+      "id": "3db98c781e18",
+      "name": "yuannnn",
+      "url": "https://www.zhihu.com/people/yuannnn-53",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T20:39:53.127Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yuannnn-53"
+      }
+    },
+    {
+      "id": "4173fd797c4c",
+      "name": "刍狗",
+      "url": "https://www.zhihu.com/people/wulc",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T22:57:21.152Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wulc"
+      }
+    },
+    {
+      "id": "22febc63d453",
+      "name": "MECH",
+      "url": "https://www.zhihu.com/people/sharkalwayslovebunny",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T22:57:21.153Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "sharkalwayslovebunny"
+      }
+    },
+    {
+      "id": "dab4130a3e04",
+      "name": "张俊林",
+      "url": "https://www.zhihu.com/people/zhang-jun-lin-76",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T22:57:21.153Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "zhang-jun-lin-76"
+      }
+    },
+    {
+      "id": "dc71ff641f05",
+      "name": "yahah",
+      "url": "https://www.zhihu.com/people/yahah-97",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T22:57:21.153Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "yahah-97"
+      }
+    },
+    {
+      "id": "99ba62d45c2a",
+      "name": "孔某人",
+      "url": "https://www.zhihu.com/people/hamann-lo",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "Agent",
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T22:57:21.153Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "hamann-lo"
+      }
+    },
+    {
+      "id": "8aa16acc60bd",
+      "name": "陈巍 博士",
+      "url": "https://www.zhihu.com/people/chenweiphd",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T22:57:21.153Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "chenweiphd"
+      }
+    },
+    {
+      "id": "a50791234d94",
+      "name": "丙陆数理",
+      "url": "https://www.zhihu.com/people/bing-lu-88-66",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-12T22:57:21.153Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "bing-lu-88-66"
+      }
+    },
+    {
+      "id": "89ed79c51ee9",
+      "name": "杂然赋流形丶",
+      "url": "https://www.zhihu.com/people/za-ran-zhu-fu-liu-xing",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理",
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.334Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "za-ran-zhu-fu-liu-xing"
+      }
+    },
+    {
+      "id": "0de3d804c75e",
+      "name": "Austeritas",
+      "url": "https://www.zhihu.com/people/Junkai-Wang",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理",
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "Junkai-Wang"
+      }
+    },
+    {
+      "id": "64831577fe96",
+      "name": "永公街的小魚",
+      "url": "https://www.zhihu.com/people/isaac-22-13",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "isaac-22-13"
+      }
+    },
+    {
+      "id": "268602091a8f",
+      "name": "Trivial",
+      "url": "https://www.zhihu.com/people/anyusen",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "anyusen"
+      }
+    },
+    {
+      "id": "5da7f142969c",
+      "name": "Frank Hua",
+      "url": "https://www.zhihu.com/people/bu-sub10bu-gai-ming-39",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "bu-sub10bu-gai-ming-39"
+      }
+    },
+    {
+      "id": "8b5d3a906f6c",
+      "name": "拉格朗日的忧郁",
+      "url": "https://www.zhihu.com/people/li-hui-53-72",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "li-hui-53-72"
+      }
+    },
+    {
+      "id": "a5edd6d9c240",
+      "name": "hahakity",
+      "url": "https://www.zhihu.com/people/deepphysics",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数理物理"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "deepphysics"
+      }
+    },
+    {
+      "id": "5b14c40ca360",
+      "name": "Chiahsin",
+      "url": "https://www.zhihu.com/people/wu-jia-47-90",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "数学",
+        "数据分析"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "wu-jia-47-90"
+      }
+    },
+    {
+      "id": "8ec20a8a1463",
+      "name": "tomsheep",
+      "url": "https://www.zhihu.com/people/tomsheep",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "具身",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "tomsheep"
+      }
+    },
+    {
+      "id": "16bae34209bc",
+      "name": "来一块葱花饼",
+      "url": "https://www.zhihu.com/people/gang-hao-ji-ji-mang-mang-ma",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "CV",
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "gang-hao-ji-ji-mang-mang-ma"
+      }
+    },
+    {
+      "id": "d72479f8ae8b",
+      "name": "蒹葭苍苍",
+      "url": "https://www.zhihu.com/people/jian-jia-cang-cang",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jian-jia-cang-cang"
+      }
+    },
+    {
+      "id": "a40ce67ada08",
+      "name": "繁凡",
+      "url": "https://www.zhihu.com/people/fanfansann",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "fanfansann"
+      }
+    },
+    {
+      "id": "01638b3c7251",
+      "name": "JamesAslan",
+      "url": "https://www.zhihu.com/people/jamesaslan",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "大模型Infra"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "jamesaslan"
+      }
+    },
+    {
+      "id": "c7aa481a061d",
+      "name": "Fiddie",
+      "url": "https://www.zhihu.com/people/RealFiddie",
+      "platform": "zhihu",
+      "platformLabel": "知乎",
+      "tier": 3,
+      "tags": [
+        "数学"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T04:47:09.335Z",
+      "adapter": {
+        "platform": "zhihu",
+        "id": "RealFiddie"
+      }
+    },
+    {
+      "id": "2730dec10d83",
+      "name": "搜广推工业实践策展（Doragd）",
+      "url": "https://github.com/Doragd/Algorithm-Practice-in-Industry/commits.atom",
+      "platform": "github",
+      "platformLabel": "GitHub",
+      "tier": 1,
+      "tags": [
+        "搜广推",
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://github.com/Doragd/Algorithm-Practice-in-Industry/commits.atom"
+      ],
+      "addedAt": "2026-09-13T06:16:31.305Z"
+    },
+    {
+      "id": "cc9c3e031d30",
+      "name": "Awesome-CTR-Scaling（精排 scaling 日更）",
+      "url": "https://github.com/byby221b/Awesome-CTR-Scaling/commits.atom",
+      "platform": "github",
+      "platformLabel": "GitHub",
+      "tier": 1,
+      "tags": [
+        "搜广推",
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://github.com/byby221b/Awesome-CTR-Scaling/commits.atom"
+      ],
+      "addedAt": "2026-09-13T06:16:32.214Z"
+    },
+    {
+      "id": "278a2c56abee",
+      "name": "Awesome-Generative-Recommendation（uestc）",
+      "url": "https://github.com/uestc-huangyw/Awesome-Generative-Recommendation/commits.atom",
+      "platform": "github",
+      "platformLabel": "GitHub",
+      "tier": 1,
+      "tags": [
+        "生成式推荐",
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://github.com/uestc-huangyw/Awesome-Generative-Recommendation/commits.atom"
+      ],
+      "addedAt": "2026-09-13T06:16:33.623Z"
+    },
+    {
+      "id": "3df9bd0cf585",
+      "name": "Awesome-Item-ID-Gen-RecSys（语义 ID）",
+      "url": "https://github.com/HKBU-LAGAS/Awesome-Item-ID-Gen-RecSys/commits.atom",
+      "platform": "github",
+      "platformLabel": "GitHub",
+      "tier": 1,
+      "tags": [
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://github.com/HKBU-LAGAS/Awesome-Item-ID-Gen-RecSys/commits.atom"
+      ],
+      "addedAt": "2026-09-13T06:16:34.844Z"
+    },
+    {
+      "id": "100b9c4c76be",
+      "name": "Ed H. Chi（Semantic Scholar 作者页）",
+      "url": "https://www.semanticscholar.org/author/Ed-H.-Chi/2226805",
+      "platform": "semanticscholar",
+      "platformLabel": "Semantic Scholar",
+      "tier": 1,
+      "tags": [
+        "生成式推荐",
+        "推荐系统"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T06:16:54.825Z",
+      "adapter": {
+        "platform": "semanticscholar",
+        "id": "2226805",
+        "itemCount": 20,
+        "latest": 1694649600000
+      }
+    },
+    {
+      "id": "ebdf788b9ed5",
+      "name": "稳扎稳打学AI",
+      "url": "",
+      "platform": "wechat",
+      "platformLabel": "公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐",
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T06:50:56.750Z",
+      "manual": true
+    },
+    {
+      "id": "3808fdee1145",
+      "name": "Cici学算法（小红书）",
+      "url": "https://www.xiaohongshu.com/user/profile/5c04740600000000050185b2",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "生成式推荐",
+        "搜广推"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:12:18.814Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "5c04740600000000050185b2",
+        "itemCount": 20,
+        "latest": 1783136250000
+      }
+    },
+    {
+      "id": "a4428719f0b2",
+      "name": "江河（小红书）",
+      "url": "https://www.xiaohongshu.com/user/profile/5fe1df21000000000101d824",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "生成式推荐"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:12:26.359Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "5fe1df21000000000101d824",
+        "itemCount": 20,
+        "latest": 1789208005000
+      }
+    },
+    {
+      "id": "92ed6341b71f",
+      "name": "Panda师兄的AI笔记",
+      "url": "https://www.xiaohongshu.com/user/profile/5d0debf0000000001202c733",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:12:33.296Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "5d0debf0000000001202c733",
+        "itemCount": 20,
+        "latest": 1789138600000
+      }
+    },
+    {
+      "id": "2d953110c171",
+      "name": "DailyLLM",
+      "url": "https://www.xiaohongshu.com/user/profile/65f05042000000000d026a0a",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "Agent",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:12:40.296Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "65f05042000000000d026a0a",
+        "itemCount": 20,
+        "latest": 1787064714000
+      }
+    },
+    {
+      "id": "531c3498b272",
+      "name": "Hunter",
+      "url": "https://www.xiaohongshu.com/user/profile/60c6cde3000000000101cefe",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "多模态",
+        "NLP"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:12:49.582Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "60c6cde3000000000101cefe",
+        "itemCount": 13,
+        "latest": 1789123900000
+      }
+    },
+    {
+      "id": "ca3a43f66d46",
+      "name": "梁定康",
+      "url": "https://www.xiaohongshu.com/user/profile/646e3571000000000f005ae2",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "CV",
+        "具身"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:12:59.024Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "646e3571000000000f005ae2",
+        "itemCount": 20,
+        "latest": 1789031162000
+      }
+    },
+    {
+      "id": "cea056b5a712",
+      "name": "锦砺",
+      "url": "https://www.xiaohongshu.com/user/profile/5bbb32c03c2ad90001a345e0",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:13:06.038Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "5bbb32c03c2ad90001a345e0",
+        "itemCount": 20,
+        "latest": 1788673140000
+      }
+    },
+    {
+      "id": "17822a11ca30",
+      "name": "具身漫步",
+      "url": "https://www.xiaohongshu.com/user/profile/61f036ec0000000010006548",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "具身",
+        "强化学习"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:13:12.660Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "61f036ec0000000010006548",
+        "itemCount": 20,
+        "latest": 1789114799000
+      }
+    },
+    {
+      "id": "d465db1f4172",
+      "name": "算法工程师成长记",
+      "url": "https://www.xiaohongshu.com/user/profile/63948454000000002702b5c8",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "Agent"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:13:19.673Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "63948454000000002702b5c8",
+        "itemCount": 20,
+        "latest": 1788082207000
+      }
+    },
+    {
+      "id": "ad0410effa12",
+      "name": "Coral quant",
+      "url": "https://www.xiaohongshu.com/user/profile/5c1b52a500000000060387db",
+      "platform": "xiaohongshu",
+      "platformLabel": "小红书",
+      "tier": 3,
+      "tags": [
+        "金融量化"
+      ],
+      "feeds": [],
+      "addedAt": "2026-09-13T08:13:29.806Z",
+      "adapter": {
+        "platform": "xiaohongshu",
+        "id": "5c1b52a500000000060387db",
+        "itemCount": 20,
+        "latest": 1789118720000
+      }
+    }
+  ],
+  "itemTags": {
+    "43246152710faae2": [
+      "生成式推荐",
+      "语义ID"
+    ]
+  }
+}

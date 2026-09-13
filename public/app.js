@@ -6,6 +6,12 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const READ_KEY = 'quiet-river:read';
 const SORT_KEY = 'quiet-river:sort';
 const THEME_KEY = 'quiet-river:theme';
+const PAGE_SIZE_KEY = 'quiet-river:pageSize';
+
+// 每页条数。库里已经有 4588 条，全量塞进 DOM 的话一次 render 要建四千多个节点，
+// 搜索时每敲一个字重建一遍会明显卡。分页之后一次只建一页。
+const PAGE_SIZES = [20, 40, 80, 200];
+const storedPageSize = Number(localStorage.getItem(PAGE_SIZE_KEY));
 
 const state = {
   data: null,
@@ -17,6 +23,8 @@ const state = {
   viewSources: false,
   viewSubId: null,
   sortMode: ['time', 'title', 'author'].includes(localStorage.getItem(SORT_KEY)) ? localStorage.getItem(SORT_KEY) : 'time',
+  page: 1,
+  pageSize: PAGE_SIZES.includes(storedPageSize) ? storedPageSize : 40,
 };
 
 let readSet = new Set(JSON.parse(localStorage.getItem(READ_KEY) || 'null') || []);
@@ -125,9 +133,14 @@ function queryActive() {
 
 function applyHash() {
   const m = /^#\/author\/([\w-]+)/.exec(location.hash);
-  state.viewSubId = m ? m[1] : null;
+  const subId = m ? m[1] : null;
+  const viewSources = location.hash === '#/sources';
+  // 换视图等于换一批卡片，页码回到 1。hash 没变就不用重置——
+  // 否则点「返回全部」再点同一个博主，会丢掉正在看的页。
+  if (subId !== state.viewSubId || viewSources !== state.viewSources) state.page = 1;
+  state.viewSubId = subId;
   state.viewAdd = location.hash === '#/add';
-  state.viewSources = location.hash === '#/sources';
+  state.viewSources = viewSources;
 }
 
 function currentViewSub() {
@@ -192,18 +205,155 @@ function renderCounts() {
     return;
   }
   if (state.viewSources) {
-    const list = sourceCards();
+    const list = memo('sources', sourceCards);
     const off = list.filter((s) => s.disabled).length;
     $('#counts').textContent = `${scope} ${list.length} 个博主${off ? `（${off} 个已关闭）` : ''}`;
     return;
   }
   if (queryActive()) {
-    $('#counts').textContent = `${scope} 搜「${state.query.trim()}」 ${articleCards().length} 条`;
+    $('#counts').textContent = `${scope} 搜「${state.query.trim()}」 ${memo('articles', articleCards).length} 条`;
     return;
   }
   const subs = state.data.subscriptions;
   const off = subs.filter((s) => s.disabled).length;
-  $('#counts').textContent = `${scope} ${articleCards().length} 篇文章 · ${subs.length - off} 个博主${off ? `（另有 ${off} 个已关闭）` : ''}`;
+  $('#counts').textContent = `${scope} ${memo('articles', articleCards).length} 篇文章 · ${subs.length - off} 个博主${off ? `（另有 ${off} 个已关闭）` : ''}`;
+}
+
+// articleCards() 和 sourceCards() 都是 O(源数 × 条目数)，一轮 render 里会被
+// renderCounts 和 renderList 各调一次。160 源 × 4588 条，重复算就是白扔两百万次
+// 比较。按 render 轮次缓存：render() 开头 resetMemo() 清掉，同一轮内第二次直接命中。
+// 缓存的 key 只有三个（articles / sources / author），一轮 render 里每个最多算一次。
+let _memo = {};
+function resetMemo() { _memo = {}; }
+function memo(key, fn) {
+  if (!(key in _memo)) _memo[key] = fn();
+  return _memo[key];
+}
+
+/* ---------- pagination ---------- */
+
+function paginate(cards) {
+  const total = cards.length;
+  const pages = Math.max(1, Math.ceil(total / state.pageSize));
+  if (state.page > pages) state.page = pages;
+  if (state.page < 1) state.page = 1;
+  const start = (state.page - 1) * state.pageSize;
+  return {
+    slice: cards.slice(start, start + state.pageSize),
+    page: state.page,
+    pages,
+    total,
+    start,
+    end: Math.min(start + state.pageSize, total),
+  };
+}
+
+// 页码窗口：首尾常驻，当前页左右各两页，中间省略号。115 页全画出来没有意义。
+function windowPages(cur, total) {
+  if (total <= 9) return Array.from({ length: total }, (_, i) => i + 1);
+  const want = new Set([1, 2, total - 1, total, cur - 2, cur - 1, cur, cur + 1, cur + 2]);
+  return [...want].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+}
+
+function gotoPage(n) {
+  state.page = n;
+  renderList();
+  // 翻页后回到列表顶部，否则会停在上一页滚到的位置，看着像没反应。
+  // 不用 scrollIntoView：吸顶的顶栏+tag 栏会盖住列表头，偏移量得按实际高度算。
+  const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const head = document.querySelector('.stickyhead');
+  const y = $('#river').getBoundingClientRect().top + scrollY - (head ? head.offsetHeight : 0) - 8;
+  scrollTo({ top: Math.max(0, y), behavior: smooth ? 'smooth' : 'auto' });
+}
+
+function setPageSize(n) {
+  state.pageSize = n;
+  state.page = 1;
+  localStorage.setItem(PAGE_SIZE_KEY, String(n));
+  renderList();
+}
+
+function renderPager(info) {
+  const box = $('#pager');
+  box.innerHTML = '';
+  if (!info || info.pages <= 1) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const nav = (label, page, ariaLabel, disabled) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pager-btn nav';
+    b.textContent = label;
+    b.setAttribute('aria-label', ariaLabel);
+    if (disabled) b.disabled = true;
+    else b.onclick = () => gotoPage(page);
+    return b;
+  };
+
+  const num = (n) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pager-btn';
+    b.textContent = String(n);
+    if (n === info.page) {
+      b.setAttribute('aria-current', 'page');
+      b.setAttribute('aria-label', `第 ${n} 页，当前页`);
+    } else {
+      b.setAttribute('aria-label', `跳到第 ${n} 页`);
+      b.onclick = () => gotoPage(n);
+    }
+    return b;
+  };
+
+  box.appendChild(nav('上一页', info.page - 1, '上一页', info.page <= 1));
+
+  let prev = 0;
+  for (const n of windowPages(info.page, info.pages)) {
+    if (prev && n - prev > 1) {
+      const gap = document.createElement('span');
+      gap.className = 'pager-gap';
+      gap.textContent = '…';
+      gap.setAttribute('aria-hidden', 'true');
+      box.appendChild(gap);
+    }
+    box.appendChild(num(n));
+    prev = n;
+  }
+
+  box.appendChild(nav('下一页', info.page + 1, '下一页', info.page >= info.pages));
+
+  const meta = document.createElement('div');
+  meta.className = 'pager-meta';
+  const span = document.createElement('span');
+  span.textContent = `第 ${info.start + 1}–${info.end} 条 / 共 ${info.total} 条 · 第 ${info.page} / ${info.pages} 页`;
+  meta.appendChild(span);
+
+  const wrap = document.createElement('label');
+  wrap.className = 'pager-size';
+  wrap.appendChild(document.createTextNode('每页'));
+  const sel = document.createElement('select');
+  sel.setAttribute('aria-label', '每页显示条数');
+  for (const n of PAGE_SIZES) {
+    const opt = document.createElement('option');
+    opt.value = String(n);
+    opt.textContent = String(n);
+    if (n === state.pageSize) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.onchange = () => setPageSize(Number(sel.value));
+  wrap.appendChild(sel);
+  meta.appendChild(wrap);
+
+  box.appendChild(meta);
+}
+
+// 换 tag / 换搜索词 / 换排序都是在换「在看哪一批卡片」，页码要回到 1，
+// 否则会停在一个新列表可能根本没有的页上，看起来像空白。
+// 所有筛选入口都走 setTag，省得每处都记得重置页码。
+function setTag(tag) {
+  state.activeTag = tag;
+  state.page = 1;
+  render();
 }
 
 function renderTagbar() {
@@ -215,7 +365,7 @@ function renderTagbar() {
   all.type = 'button';
   all.setAttribute('aria-pressed', String(!state.activeTag));
   all.textContent = '全部';
-  all.onclick = () => { state.activeTag = null; render(); };
+  all.onclick = () => setTag(null);
   bar.appendChild(all);
 
   // Union of your author-level tags and the article-level categories the
@@ -246,8 +396,7 @@ function renderTagbar() {
     btn.setAttribute('aria-pressed', String(state.activeTag === tag));
     btn.innerHTML = `${esc(tag)}<span class="n">${n}</span>`;
     btn.onclick = () => {
-      state.activeTag = state.activeTag === tag ? null : tag;
-      render();
+      setTag(state.activeTag === tag ? null : tag);
     };
     bar.appendChild(btn);
   }
@@ -307,8 +456,7 @@ function cardNode({ sub, items, latest, single }) {
   for (const chip of $$('.chip:not(.chip-add)', li)) {
     chip.onclick = (e) => {
       e.preventDefault();
-      state.activeTag = chip.dataset.tag;
-      render();
+      setTag(chip.dataset.tag);
     };
   }
   const link = $('.card-title[data-item]', li);
@@ -392,8 +540,7 @@ function sourceNode(sub) {
   for (const chip of $$('.chip', li)) {
     chip.onclick = (e) => {
       e.preventDefault();
-      state.activeTag = chip.dataset.tag;
-      render();
+      setTag(chip.dataset.tag);
     };
   }
   $('.toggle', li).onclick = (e) => {
@@ -404,25 +551,31 @@ function sourceNode(sub) {
   return li;
 }
 
-function renderCards() {
+// renderCards 是旧名，现在叫 renderList：它一次只渲染当前页，并在底部画分页器。
+// memo 在 renderList 开头由调用方（render / 搜索 / 翻页）保证已 reset。
+function renderList() {
   const list = $('#river');
   const empty = $('#empty');
   const viewSub = currentViewSub();
   list.innerHTML = '';
+  const pager = $('#pager');
+  pager.hidden = true;
 
   if (state.viewSources && !viewSub) {
-    const subs = sourceCards();
+    const subs = memo('sources', sourceCards);
     if (!subs.length) {
       empty.hidden = false;
       empty.textContent = state.activeTag ? `没有打「${state.activeTag}」tag 的博主。` : '还没有博主，点右上角添加。';
       return;
     }
     empty.hidden = true;
-    for (const s of subs) list.appendChild(sourceNode(s));
+    const info = paginate(subs);
+    for (const s of info.slice) list.appendChild(sourceNode(s));
+    renderPager(info);
     return;
   }
 
-  const cards = viewSub ? authorCards(viewSub) : articleCards();
+  const cards = viewSub ? memo('author', () => authorCards(viewSub)) : memo('articles', articleCards);
   if (!cards.length) {
     empty.hidden = false;
     if (viewSub && !queryActive()) {
@@ -443,7 +596,9 @@ function renderCards() {
     return;
   }
   empty.hidden = true;
-  for (const card of cards) list.appendChild(cardNode(card));
+  const info = paginate(cards);
+  for (const card of info.slice) list.appendChild(cardNode(card));
+  renderPager(info);
 }
 
 function renderProblems() {
@@ -487,6 +642,7 @@ function syncThemeSegs() {
 }
 
 function render() {
+  resetMemo();
   for (const btn of $$('.viewnav .seg')) {
     btn.setAttribute('aria-pressed', String((btn.dataset.view === 'sources') === state.viewSources));
   }
@@ -524,7 +680,7 @@ function render() {
   }
   renderCounts();
   renderTagbar();
-  renderCards();
+  renderList();
   renderProblems();
   renderFooter();
 }
@@ -943,11 +1099,18 @@ function bind() {
   $('#btn-save-edit').onclick = saveEdit;
   $('#btn-delete-sub').onclick = deleteSub;
 
-  $('#search').addEventListener('input', (e) => { state.query = e.target.value; renderCounts(); renderCards(); });
+  $('#search').addEventListener('input', (e) => {
+    state.query = e.target.value;
+    state.page = 1;
+    resetMemo();
+    renderCounts();
+    renderList();
+  });
 
   for (const btn of $$('.seg')) {
     btn.onclick = () => {
       state.sortMode = btn.dataset.sort;
+      state.page = 1;
       localStorage.setItem(SORT_KEY, state.sortMode);
       render();
     };
