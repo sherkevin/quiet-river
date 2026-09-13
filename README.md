@@ -5,7 +5,7 @@
 没有推荐算法，没有「猜你喜欢」，没有信息流广告。你关注谁，就看到谁；点了某个 tag，就只看那一类；什么都不点，就是全部混排。
 
 ```
-git clone <your-fork> && cd quiet-river
+git clone https://github.com/sherkevin/quiet-river && cd quiet-river
 node server.js            # 零依赖，不需要 npm install
 open http://127.0.0.1:4321
 ```
