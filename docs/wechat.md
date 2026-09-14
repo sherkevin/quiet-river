@@ -10,6 +10,8 @@
 >
 > 现在实际在用的是 **wechat2rss 免费公开目录**：`https://wechat2rss.xlab.app/list/all/`，
 > 395 个公众号，直接给标准 RSS 地址，无需登录、无需部署、无需付费。
+> （**同一天又发现第二个实例** `https://wechat2rss.bestblogs.dev/`，375 个号，取向不同，
+> 两边并集约 748 个；详见下面「wechat2rss 免费公开目录」一节的补记。）
 > 覆盖率低（我们 18 个只命中 1 个，目录以安全类为主），但里面有大厂研发号，
 > 2026-09-14 用它把公众号从 18 个做到 26 个、其中 9 个有内容。
 > 下面原文保留作历史记录，**其中「建议先试 wewe-rss」的推荐作废**。
@@ -44,6 +46,16 @@ wewe-rss 上游仓库**仍可访问**（2026-03-20 归档但没下架，源码�
 目录地址 `https://wechat2rss.xlab.app/list/all/`，收录 395 个公众号，每个直接给标准 RSS 地址
 （形如 `https://wechat2rss.xlab.app/feed/<sha1>.xml`）。无需登录、无需部署、无需付费，`curl` 就能拿。
 项目从 2021.9 运行至今，自述更新周期在 24 小时内，所以卡片新鲜度圆点经常是灰的，属正常。
+
+**2026-09-14 补：不止一个实例，覆盖率被低估了。** 同一天发现 BestBlogs 也自建了一个
+`https://wechat2rss.bestblogs.dev/`，跑的是同一套代码（它的 feed 自述里就写着
+`wechat feed made by @ttttmr https://wechat2rss.xlab.app`），收录 375 个公众号，
+取向完全不同：xlab.app 以安全类为主，bestblogs 这个以 AI、大厂研发、商业科技为主。
+两个实例的 **feed hash 零重叠**（同一个号在两边是不同 URL，hash 不通用），
+而公众号**名字只重叠 23 个**，所以**并集约 748 个**，不是 395 个。
+注意 bestblogs 那个实例**没有目录页**（`/list/all/` 返回 404），只能按 feed 地址直连，
+地址要从它公开的 OPML 里取（上游 `ginobefun/BestBlogs` 仓库根目录，该仓库无 license，
+我们只在本机留副本、不随本项目发布）。
 
 用法：在目录页里搜公众号名字，拿到 feed 地址，然后
 
