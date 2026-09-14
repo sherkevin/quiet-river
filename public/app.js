@@ -844,7 +844,7 @@ const PLATFORM_FORMS = [
       return { block: '小红书用户 ID 是 24 位十六进制串：从主页链接 /user/profile/ 后面那段复制。' };
     },
   },
-  { group: '需要额外条件', key: 'wechat', label: '微信公众号（手动登记）', note: '不抓微信。登记名字后有自己的专属页，内容暂时为空；去微信里搜这个名字读。以后拿到 RSS（如 wewe-rss 输出）可在编辑里补。', fields: [{ id: 'rss', label: 'RSS 地址（可留空，以后拿到再补）', placeholder: 'https://…/feed.xml' }], build: (v) => ({ manual: true, url: v.rss || undefined }) },
+  { group: '需要额外条件', key: 'wechat', label: '微信公众号（手动登记）', note: '不抓微信。登记名字后有自己的专属页，内容暂时为空；去微信里搜这个名字读。以后拿到 RSS 可在编辑里补——先查 wechat2rss 公开目录（wechat2rss.xlab.app/list/all/），收录的号直接给 RSS 地址；WeWe RSS 已失效，别再照旧教程部署。', fields: [{ id: 'rss', label: 'RSS 地址（可留空，以后拿到再补）', placeholder: 'https://…/feed.xml' }], build: (v) => ({ manual: true, url: v.rss || undefined }) },
 ];
 
 let addFormKey = null;
