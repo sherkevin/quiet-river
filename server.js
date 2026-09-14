@@ -5,7 +5,7 @@ const http = require('node:http');
 const path = require('node:path');
 const fsp = require('node:fs/promises');
 const store = require('./lib/store');
-const { resolve, verifyFeed } = require('./lib/resolve');
+const { resolve, verifyFeed, relayPlatform } = require('./lib/resolve');
 const { refreshAll, refreshOne, refreshAdapter } = require('./lib/refresh');
 const { adapterPlatforms } = require('./lib/adapters');
 
@@ -130,25 +130,38 @@ async function handleApi(req, res, pathname) {
     let meta = { platform: 'blog', platformLabel: '自定义', tier: 1 };
     let name = String(body.name || '').trim();
     let adapter = null;
+    // 转发服务地址解析出来的作者主页（api.xgo.ing/rss/user/<hash> → x.com/<handle>）
+    let homepage = '';
 
-    // 直接贴 feed 地址时默认标「自定义」，但 RSSHub 路由的第一段就是平台名
-    // （…/bilibili/user/video/123 → bilibili），别让 B站源显示成「自定义」。
+    // 直接贴 feed 地址时默认标「自定义」，但两类地址能认出真实平台，别让它们显示成
+    // 「自定义」：RSSHub 路由的第一段就是平台名（…/bilibili/user/video/123 → bilibili），
+    // 以及转发服务给的地址（api.xgo.ing/rss/user/<hash> → X / Twitter）。
     const rsshubBase = String(config.settings?.rsshubBase || '').replace(/\/+$/, '');
     if (feeds.length && rsshubBase && feeds[0].startsWith(rsshubBase)) {
       const seg = feeds[0].slice(rsshubBase.length).replace(/^\/+/, '').split('/')[0];
       const LABELS = { bilibili: 'B站', weibo: '微博', zhihu: '知乎', twitter: 'X / Twitter', xiaohongshu: '小红书' };
       if (seg) meta = { platform: seg, platformLabel: LABELS[seg] || seg, tier: 2 };
     }
+    if (feeds.length) {
+      const relay = relayPlatform(feeds[0]);
+      if (relay) meta = relay;
+    }
 
     if (body.url && body.url.trim()) {
       const trimmed = body.url.trim();
-      const dupe = config.subscriptions.find((s) => normUrl(s.url) === normUrl(trimmed));
+      // 重复判定要比到 feeds：转发服务地址解析出来之后，url 存的是作者主页
+      // （x.com/<handle>），只比 url 的话，把同一条 api.xgo.ing 地址再贴一次
+      // 就会被当成新源。
+      const dupe = config.subscriptions.find(
+        (s) => normUrl(s.url) === normUrl(trimmed) || (s.feeds || []).some((f) => normUrl(f) === normUrl(trimmed)),
+      );
       if (dupe) return sendJson(res, 409, { error: `这个链接已经在清单里了：${dupe.name}` });
 
       if (!feeds.length) {
         const result = await resolve(trimmed, { rsshubBase: config.settings?.rsshubBase || '' });
         meta = { platform: result.platform, platformLabel: result.platformLabel, tier: result.tier };
         if (!name) name = result.name || '';
+        homepage = result.homepage || '';
         if (result.adapter && result.ok) {
           adapter = result.adapter;
         } else {
@@ -179,7 +192,7 @@ async function handleApi(req, res, pathname) {
 
     const sub = store.addSubscription(config, {
       name,
-      url: String(body.url || '').trim() || feeds[0] || '',
+      url: homepage || String(body.url || '').trim() || feeds[0] || '',
       platform: meta.platform,
       platformLabel: meta.platformLabel,
       tier: meta.tier,
@@ -250,13 +263,16 @@ async function handleApi(req, res, pathname) {
           if (!okFeeds.length && !result.adapter) {
             return sendJson(res, 422, { error: result.blocked || result.note || '这个地址抓不到 feed' });
           }
-          sub.url = raw;
+          // 转发服务的地址只进 feeds，主页链接仍是作者主页——和 POST 一致，
+          // 否则在编辑弹窗里补一次 feed 地址，「去主页」就跳去 api.xgo.ing 了。
+          sub.url = result.homepage || raw;
           sub.feeds = okFeeds;
           if (result.adapter) sub.adapter = result.adapter;
           // feed 地址换了平台，归类跟着走，别让公众号源显示成「博客」
           if (result.platform && result.platform !== 'unknown' && !sub.adapter) {
             sub.platform = result.platform;
             sub.platformLabel = result.platformLabel;
+            sub.tier = result.tier;
           }
           // 拿到可抓的 feed 之后它就不再是「只登记名字」的手动源了
           delete sub.manual;

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { parseXML, child, children, descendant, textOf, attr } = require('../lib/xml');
 const { parseFeed, looksLikeFeed, stripHTML } = require('../lib/feeds');
-const { detectPlatform } = require('../lib/resolve');
+const { detectPlatform, relayPlatform } = require('../lib/resolve');
 
 test('XML: CDATA 内容按原样保留，不再解一次实体', () => {
   const doc = parseXML('<rss><channel><item><title><![CDATA[A &amp; B &lt;C&gt;]]></title></item></channel></rss>');
@@ -206,9 +206,16 @@ test('平台识别：hostname 与路径决定归属', () => {
     'https://mp.weixin.qq.com/s?__biz=x': 'wechat',
     // wechat2rss 这类第三方服务把公众号转成 RSS，内容源仍是公众号，不能判成 blog
     'https://wechat2rss.xlab.app/feed/51e92aad2728acdd1fda7314be32b16639353001.xml': 'wechat',
+    // 2026-09-14 起 wechat2rss 有两个公开目录实例，两个都要认
+    'https://wechat2rss.bestblogs.dev/feed/26fef2307bebc8673703f7e726982d8f56c9a219.xml': 'wechat',
+    // X 的免费转发：地址里没有扩展名，也不能因为不是 x.com 就判成 blog
+    'https://api.xgo.ing/rss/user/e30d4cd223f44bed9d404807105c8927': 'twitter',
     // 按点边界匹配：同后缀的仿冒域名不能被认成可信来源
     'https://evil-wechat2rss.xlab.app/feed/abc.xml': 'blog',
     'https://wechat2rss.xlab.app.evil.example/feed/abc.xml': 'blog',
+    'https://evil-wechat2rss.bestblogs.dev/feed/abc.xml': 'blog',
+    'https://api.xgo.ing.evil.example/rss/user/abc': 'blog',
+    'https://notapi.xgo.ing/rss/user/abc': 'blog',
     'https://weibo.com/u/123': 'weibo',
     'https://x.com/edchi': 'twitter',
     'https://bsky.app/profile/handle.bsky.social': 'bluesky',
@@ -222,4 +229,17 @@ test('平台识别：hostname 与路径决定归属', () => {
   for (const [url, expected] of Object.entries(cases)) {
     assert.equal(detectPlatform(url), expected, url);
   }
+});
+
+test('转发服务地址的平台归类：POST 直接给 feed 时也要认出来', () => {
+  // POST /api/subscriptions 收的是现成 feed 地址，不走 resolve 的平台分支；
+  // 没有这条，X 账号会被记成「自定义」博客，UI 里就看不出它是谁。
+  assert.deepEqual(relayPlatform('https://api.xgo.ing/rss/user/abc123'), {
+    platform: 'twitter',
+    platformLabel: 'X / Twitter',
+    tier: 3,
+  });
+  assert.equal(relayPlatform('https://wechat2rss.bestblogs.dev/feed/abc.xml').platform, 'wechat');
+  assert.equal(relayPlatform('https://blog.cloudflare.com/rss'), null);
+  assert.equal(relayPlatform('不是链接'), null);
 });

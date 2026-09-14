@@ -844,7 +844,13 @@ const PLATFORM_FORMS = [
       return { block: '小红书用户 ID 是 24 位十六进制串：从主页链接 /user/profile/ 后面那段复制。' };
     },
   },
-  { group: '需要额外条件', key: 'wechat', label: '微信公众号（手动登记）', note: '不抓微信。登记名字后有自己的专属页，内容暂时为空；去微信里搜这个名字读。以后拿到 RSS 可在编辑里补——先查 wechat2rss 公开目录（wechat2rss.xlab.app/list/all/），收录的号直接给 RSS 地址；WeWe RSS 已失效，别再照旧教程部署。', fields: [{ id: 'rss', label: 'RSS 地址（可留空，以后拿到再补）', placeholder: 'https://…/feed.xml' }], build: (v) => ({ manual: true, url: v.rss || undefined }) },
+  { group: '需要额外条件', key: 'wechat', label: '微信公众号（手动登记）', note: '不抓微信。登记名字后有自己的专属页，内容暂时为空；去微信里搜这个名字读。以后拿到 RSS 可在编辑里补——先查 wechat2rss 的两个公开目录（wechat2rss.xlab.app/list/all/，以及 BestBlogs 仓库的 opml/bestblogs_wechat2rss_opml_all.opml），两者只重叠 23 个号，大厂技术号多在后者；WeWe RSS 已失效，别再照旧教程部署。', fields: [{ id: 'rss', label: 'RSS 地址（可留空，以后拿到再补）', placeholder: 'https://…/feed.xml' }], build: (v) => ({ manual: true, url: v.rss || undefined }) },
+  {
+    group: '需要额外条件', key: 'twitter', label: 'X / Twitter',
+    note: '贴 x.com 主页抓不到（官方 API 收费，Nitter 公共实例已死）。但转发服务 api.xgo.ing 给的是标准 RSS：https://api.xgo.ing/rss/user/<32位哈希>。哈希不可由 handle 推导，只能从现成目录取，例如 BestBlogs 的 opml/BestBlogs_RSS_Twitters.opml（160 个账号）。把那条地址贴进来即可，本项目认这个域名。',
+    fields: [{ id: 'rss', label: '转发后的 RSS 地址', placeholder: 'https://api.xgo.ing/rss/user/…' }],
+    build: (v) => { const rss = need(v, 'rss', 'RSS 地址'); return rss.block ? rss : { url: rss }; },
+  },
 ];
 
 let addFormKey = null;

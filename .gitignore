@@ -33,9 +33,3 @@ tools/zhihu-followees.js
 data/experiments/
 tools/zhihu-probe.js
 tools/zhihu-shortlist.js
-
-# 从 ginobefun/BestBlogs 拉下来的 OPML 副本（公众号 / X / 播客 / YouTube 源池）。
-# 两条理由都不进仓库：上游仓库 license 字段为空、没有 LICENSE 文件，法律上未授权复制；
-# 而 375 + 160 个第三方 feed 地址跟着我们公开发布，等于替对方承担分发责任。
-# 要用的人自己去上游取。调研结论已落在 docs/决议/0011（决议目录本身也不发布）。
-docs/bestblogs-sources/

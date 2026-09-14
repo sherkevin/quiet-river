@@ -3228,6 +3228,1415 @@
         "https://wechat2rss.xlab.app/feed/a1cd365aa14ed7d64cabfc8aa086da40ecaba34d.xml"
       ],
       "addedAt": "2026-09-14T05:14:27.931Z"
+    },
+    {
+      "id": "95469caf40bf",
+      "name": "快手技术",
+      "url": "https://wechat2rss.bestblogs.dev/feed/c4cc10d2e32a5fa12927581ae581a336f399fe75.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "生成式推荐"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/c4cc10d2e32a5fa12927581ae581a336f399fe75.xml"
+      ],
+      "addedAt": "2026-09-14T07:49:51.014Z"
+    },
+    {
+      "id": "3db329cf8c72",
+      "name": "Andrej Karpathy（X @karpathy）",
+      "url": "https://x.com/karpathy",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "深度学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/edf707b5c0b248579085f66d7a3c5524"
+      ],
+      "addedAt": "2026-09-14T07:50:05.471Z"
+    },
+    {
+      "id": "65078ea0384e",
+      "name": "大淘宝技术",
+      "url": "https://wechat2rss.bestblogs.dev/feed/26fef2307bebc8673703f7e726982d8f56c9a219.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/26fef2307bebc8673703f7e726982d8f56c9a219.xml"
+      ],
+      "addedAt": "2026-09-14T07:50:37.662Z"
+    },
+    {
+      "id": "69e4d7b39459",
+      "name": "小红书技术REDtech",
+      "url": "https://wechat2rss.bestblogs.dev/feed/0f8c47df6fd304112518544776e0bbf1d98ba0b9.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "多模态"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/0f8c47df6fd304112518544776e0bbf1d98ba0b9.xml"
+      ],
+      "addedAt": "2026-09-14T07:50:41.345Z"
+    },
+    {
+      "id": "9091f6fb72a0",
+      "name": "百度Geek说",
+      "url": "https://wechat2rss.bestblogs.dev/feed/6cc437d76f9dc4f7c35011c72e471e33e7bdd384.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "搜广推"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/6cc437d76f9dc4f7c35011c72e471e33e7bdd384.xml"
+      ],
+      "addedAt": "2026-09-14T07:50:45.147Z"
+    },
+    {
+      "id": "32d25246b112",
+      "name": "蚂蚁技术AntTech",
+      "url": "https://wechat2rss.bestblogs.dev/feed/15738401f49466ad01b324b69f779f9bef0cb3e7.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/15738401f49466ad01b324b69f779f9bef0cb3e7.xml"
+      ],
+      "addedAt": "2026-09-14T07:50:48.851Z"
+    },
+    {
+      "id": "62017cec8335",
+      "name": "京东技术",
+      "url": "https://wechat2rss.bestblogs.dev/feed/fa0be550682410cc187c0d1eab1a0fc4e073b949.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/fa0be550682410cc187c0d1eab1a0fc4e073b949.xml"
+      ],
+      "addedAt": "2026-09-14T07:50:53.029Z"
+    },
+    {
+      "id": "7a2ff6fc2f05",
+      "name": "腾讯技术工程",
+      "url": "https://wechat2rss.bestblogs.dev/feed/1e0ac39f8952b2e7f0807313cf2633d25078a171.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/1e0ac39f8952b2e7f0807313cf2633d25078a171.xml"
+      ],
+      "addedAt": "2026-09-14T07:50:56.491Z"
+    },
+    {
+      "id": "413b060f4754",
+      "name": "阿里云开发者",
+      "url": "https://wechat2rss.bestblogs.dev/feed/39fc51b0b1316137e608c45da5dbbca4f9eb9538.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/39fc51b0b1316137e608c45da5dbbca4f9eb9538.xml"
+      ],
+      "addedAt": "2026-09-14T07:50:59.796Z"
+    },
+    {
+      "id": "4b11e4b2bfef",
+      "name": "滴滴技术",
+      "url": "https://wechat2rss.bestblogs.dev/feed/b9a02e7d9e35178ef44fc560fcb5ec4995613af2.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "强化学习"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/b9a02e7d9e35178ef44fc560fcb5ec4995613af2.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:02.912Z"
+    },
+    {
+      "id": "edf712f4e785",
+      "name": "vivo互联网技术",
+      "url": "https://wechat2rss.bestblogs.dev/feed/b3ceb5cb1e4602ca55704650a157ec9c5b2f0d31.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/b3ceb5cb1e4602ca55704650a157ec9c5b2f0d31.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:05.816Z"
+    },
+    {
+      "id": "9b8120218ff2",
+      "name": "携程技术",
+      "url": "https://wechat2rss.bestblogs.dev/feed/b5d5237d609fe96d74ae9d0241ffa8daad2f147b.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/b5d5237d609fe96d74ae9d0241ffa8daad2f147b.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:09.692Z"
+    },
+    {
+      "id": "dbfc76f32fd8",
+      "name": "Qunar技术沙龙",
+      "url": "https://wechat2rss.bestblogs.dev/feed/84c072f8d34d1690f2783d7dda6013cf6d892b7f.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/84c072f8d34d1690f2783d7dda6013cf6d892b7f.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:12.706Z"
+    },
+    {
+      "id": "cf64a166c246",
+      "name": "转转技术",
+      "url": "https://wechat2rss.bestblogs.dev/feed/321ca7771cad36a3875e232d2a7bec9049dd2ed3.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "搜广推"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/321ca7771cad36a3875e232d2a7bec9049dd2ed3.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:16.497Z"
+    },
+    {
+      "id": "68a18783e5bb",
+      "name": "字节跳动Seed",
+      "url": "https://wechat2rss.bestblogs.dev/feed/6efd40bb335d2037f365d284cb5e00f0843e737e.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/6efd40bb335d2037f365d284cb5e00f0843e737e.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:19.468Z"
+    },
+    {
+      "id": "45347c013905",
+      "name": "通义实验室",
+      "url": "https://wechat2rss.bestblogs.dev/feed/4ebee6222ae08705b8aabc9116f0defbcb6b17c6.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/4ebee6222ae08705b8aabc9116f0defbcb6b17c6.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:22.123Z"
+    },
+    {
+      "id": "a4a66f302bf6",
+      "name": "字节跳动开源",
+      "url": "https://wechat2rss.bestblogs.dev/feed/bbe26264379897525e0803213c617b4c3c205f5f.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/bbe26264379897525e0803213c617b4c3c205f5f.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:24.934Z"
+    },
+    {
+      "id": "ba58e7a8bbef",
+      "name": "腾讯混元",
+      "url": "https://wechat2rss.bestblogs.dev/feed/306ce19a1ca590c9c2df781789e828d1acfa1356.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/306ce19a1ca590c9c2df781789e828d1acfa1356.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:27.638Z"
+    },
+    {
+      "id": "3677e9ff3ef5",
+      "name": "月之暗面 Kimi",
+      "url": "https://wechat2rss.bestblogs.dev/feed/c5c43d4bc17bae656763859ed0903bb6314ec6fe.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/c5c43d4bc17bae656763859ed0903bb6314ec6fe.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:30.667Z"
+    },
+    {
+      "id": "59f10750aa89",
+      "name": "DeepSeek",
+      "url": "https://wechat2rss.bestblogs.dev/feed/1709da4f538d4ce4fb6d7a8ba1a5a1c297919601.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "强化学习"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/1709da4f538d4ce4fb6d7a8ba1a5a1c297919601.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:32.591Z"
+    },
+    {
+      "id": "b2461818108f",
+      "name": "智谱",
+      "url": "https://wechat2rss.bestblogs.dev/feed/433d2134dca54d80804daf32e8be546155be3300.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/433d2134dca54d80804daf32e8be546155be3300.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:35.222Z"
+    },
+    {
+      "id": "e8e2bb4369ea",
+      "name": "MiniMax 稀宇科技",
+      "url": "https://wechat2rss.bestblogs.dev/feed/00306b171f754d463b28cf83f3ba086ad009b430.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/00306b171f754d463b28cf83f3ba086ad009b430.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:38.536Z"
+    },
+    {
+      "id": "d8c1e32d50a1",
+      "name": "阶跃星辰",
+      "url": "https://wechat2rss.bestblogs.dev/feed/3e2714d06aa36142e8ed6b3f4e5cf9090a069dd2.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/3e2714d06aa36142e8ed6b3f4e5cf9090a069dd2.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:40.845Z"
+    },
+    {
+      "id": "a1a631d30829",
+      "name": "Xiaomi MiMo",
+      "url": "https://wechat2rss.bestblogs.dev/feed/19c2af88005704d49ea397c203dcb45339532946.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/19c2af88005704d49ea397c203dcb45339532946.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:43.594Z"
+    },
+    {
+      "id": "8f1c5a99c18f",
+      "name": "AINLP",
+      "url": "https://wechat2rss.bestblogs.dev/feed/875df1d1a991bf9250ba9813e3148f58ef2240d4.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "NLP",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/875df1d1a991bf9250ba9813e3148f58ef2240d4.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:47.828Z"
+    },
+    {
+      "id": "e70a0c04f3ab",
+      "name": "PaperWeekly",
+      "url": "https://wechat2rss.bestblogs.dev/feed/0120e999fc95e098c74bd5482a2a4c8407c42c38.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "生成式推荐",
+        "NLP"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/0120e999fc95e098c74bd5482a2a4c8407c42c38.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:50.999Z"
+    },
+    {
+      "id": "f27e23738113",
+      "name": "AI前线",
+      "url": "https://wechat2rss.bestblogs.dev/feed/25185b01482da0f485418ecb92e208b4416712fb.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/25185b01482da0f485418ecb92e208b4416712fb.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:54.361Z"
+    },
+    {
+      "id": "ff1297589025",
+      "name": "机器之心SOTA模型",
+      "url": "https://wechat2rss.bestblogs.dev/feed/2f520471856d56c7b3a95cd09eb777149b32828a.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/2f520471856d56c7b3a95cd09eb777149b32828a.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:57.171Z"
+    },
+    {
+      "id": "772a089267b7",
+      "name": "Datawhale",
+      "url": "https://wechat2rss.bestblogs.dev/feed/ea0dd8bddfe4fbfb32eaa81a1e1b628d45e97a80.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "深度学习"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/ea0dd8bddfe4fbfb32eaa81a1e1b628d45e97a80.xml"
+      ],
+      "addedAt": "2026-09-14T07:51:59.935Z"
+    },
+    {
+      "id": "291ab2af9a7f",
+      "name": "魔搭ModelScope社区",
+      "url": "https://wechat2rss.bestblogs.dev/feed/d993a885260f96057b9a4c96212cb2c95bb5054b.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/d993a885260f96057b9a4c96212cb2c95bb5054b.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:02.653Z"
+    },
+    {
+      "id": "94cea744de2e",
+      "name": "高可用架构",
+      "url": "https://wechat2rss.bestblogs.dev/feed/ee1046514840272a85fe7f67731bc322a0a2c18d.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/ee1046514840272a85fe7f67731bc322a0a2c18d.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:05.692Z"
+    },
+    {
+      "id": "a1e07f9dd41d",
+      "name": "架构师之路",
+      "url": "https://wechat2rss.bestblogs.dev/feed/f6dec1c3ad16e43532dd427c85eaeb3a7b7b084e.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/f6dec1c3ad16e43532dd427c85eaeb3a7b7b084e.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:08.341Z"
+    },
+    {
+      "id": "2567a943750e",
+      "name": "dbaplus社群",
+      "url": "https://wechat2rss.bestblogs.dev/feed/a92cc44a756e2b9165fed5572aa7337843a73eee.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "数据分析",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/a92cc44a756e2b9165fed5572aa7337843a73eee.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:11.840Z"
+    },
+    {
+      "id": "fcb7cbf40e40",
+      "name": "稀土掘金技术社区",
+      "url": "https://wechat2rss.bestblogs.dev/feed/33ecd2122ae788ea02dfcf1df857a54b9ae1338d.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/33ecd2122ae788ea02dfcf1df857a54b9ae1338d.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:17.095Z"
+    },
+    {
+      "id": "17387b9a1890",
+      "name": "数据可视化 AntV",
+      "url": "https://wechat2rss.bestblogs.dev/feed/c1a09e8847fbaea14eaa89db218d783fe176c5a6.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "数据分析",
+        "CV"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/c1a09e8847fbaea14eaa89db218d783fe176c5a6.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:20.758Z"
+    },
+    {
+      "id": "c3a8e0fb38c2",
+      "name": "有赞coder",
+      "url": "https://wechat2rss.bestblogs.dev/feed/75ad69f1c1d0d1f289f7702cf5eb553287441fdc.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "搜广推"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/75ad69f1c1d0d1f289f7702cf5eb553287441fdc.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:25.151Z"
+    },
+    {
+      "id": "ab14de63fe09",
+      "name": "支付宝体验科技",
+      "url": "https://wechat2rss.bestblogs.dev/feed/666d6e30c773dd35ecc593866bab680db95b27f2.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "多模态"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/666d6e30c773dd35ecc593866bab680db95b27f2.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:30.254Z"
+    },
+    {
+      "id": "6b8171d3dbd4",
+      "name": "阿里研究院",
+      "url": "https://wechat2rss.bestblogs.dev/feed/e2f1190c120f7f3d74b630bfcfe9e58296bd535c.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "数据分析",
+        "金融量化"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/e2f1190c120f7f3d74b630bfcfe9e58296bd535c.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:35.550Z"
+    },
+    {
+      "id": "9a2aeb602038",
+      "name": "集智俱乐部",
+      "url": "https://wechat2rss.bestblogs.dev/feed/bb50f406adb7c85720fcbf0882dc84887f81b67a.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "数理物理",
+        "强化学习"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/bb50f406adb7c85720fcbf0882dc84887f81b67a.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:40.882Z"
+    },
+    {
+      "id": "3c0993c8d99f",
+      "name": "返朴",
+      "url": "https://wechat2rss.bestblogs.dev/feed/950508da45d4ca1be856422f6fcc6c9822ea0439.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "数学",
+        "数理物理"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/950508da45d4ca1be856422f6fcc6c9822ea0439.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:46.671Z"
+    },
+    {
+      "id": "51cf1fc9e691",
+      "name": "中科院物理所",
+      "url": "https://wechat2rss.bestblogs.dev/feed/ac81c77745a3add18aaaae0bc5832b2f3fb81ccc.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "数理物理",
+        "数学"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/ac81c77745a3add18aaaae0bc5832b2f3fb81ccc.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:52.499Z"
+    },
+    {
+      "id": "29853b4b6fa2",
+      "name": "神经现实",
+      "url": "https://wechat2rss.bestblogs.dev/feed/66c8815235aa2853fb61e2f08d5bd930b4156cef.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "数理物理"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/66c8815235aa2853fb61e2f08d5bd930b4156cef.xml"
+      ],
+      "addedAt": "2026-09-14T07:52:57.845Z"
+    },
+    {
+      "id": "820a53f0f4e7",
+      "name": "中金点睛",
+      "url": "https://wechat2rss.bestblogs.dev/feed/5d4eef298108dd63ce77f40257436e0585bab425.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "金融量化",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/5d4eef298108dd63ce77f40257436e0585bab425.xml"
+      ],
+      "addedAt": "2026-09-14T07:53:02.441Z"
+    },
+    {
+      "id": "5ea8b554b0c7",
+      "name": "香帅的金融江湖",
+      "url": "https://wechat2rss.bestblogs.dev/feed/14cb1167539ceb3e3b235e1fb01e478056244e23.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "金融量化",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/14cb1167539ceb3e3b235e1fb01e478056244e23.xml"
+      ],
+      "addedAt": "2026-09-14T07:53:07.370Z"
+    },
+    {
+      "id": "8e25ca0cfc92",
+      "name": "格兰投研",
+      "url": "https://wechat2rss.bestblogs.dev/feed/fdb968fa04c741aee954dc36c25d3dee8063ecee.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "金融量化",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/fdb968fa04c741aee954dc36c25d3dee8063ecee.xml"
+      ],
+      "addedAt": "2026-09-14T07:53:10.902Z"
+    },
+    {
+      "id": "520f89782bb9",
+      "name": "饭统戴老板",
+      "url": "https://wechat2rss.bestblogs.dev/feed/5f4c620560bd63023df9fb7d330aeee524e41676.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "金融量化",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://wechat2rss.bestblogs.dev/feed/5f4c620560bd63023df9fb7d330aeee524e41676.xml"
+      ],
+      "addedAt": "2026-09-14T07:53:14.527Z"
+    },
+    {
+      "id": "2ce2fda2aed4",
+      "name": "Yann LeCun（X @ylecun）",
+      "url": "https://x.com/ylecun",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "CV"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/f5f4f928dede472ea55053672ad27ab6"
+      ],
+      "addedAt": "2026-09-14T07:53:17.956Z"
+    },
+    {
+      "id": "5f2318fe7932",
+      "name": "Jeff Dean（X @JeffDean）",
+      "url": "https://x.com/JeffDean",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "深度学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/b1013166769c49f8aa3fbdc222867054"
+      ],
+      "addedAt": "2026-09-14T07:53:20.766Z"
+    },
+    {
+      "id": "9672f72711ac",
+      "name": "Lilian Weng（X @lilianweng）",
+      "url": "https://x.com/lilianweng",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "推荐系统",
+        "强化学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/a8f7e2238039461cbc8bf55f5f194498"
+      ],
+      "addedAt": "2026-09-14T07:53:24.403Z"
+    },
+    {
+      "id": "3c6c17b72a29",
+      "name": "Jim Fan（X @DrJimFan）",
+      "url": "https://x.com/DrJimFan",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "具身",
+        "多模态"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/c6cfe7c0d6b74849997073233fdea840"
+      ],
+      "addedAt": "2026-09-14T07:53:27.092Z"
+    },
+    {
+      "id": "9bd1f473af9e",
+      "name": "Fei-Fei Li（X @drfeifei）",
+      "url": "https://x.com/drfeifei",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "CV",
+        "多模态"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/a4bfe44bfc0d4c949da21ebd3f5f42a5"
+      ],
+      "addedAt": "2026-09-14T07:53:31.095Z"
+    },
+    {
+      "id": "ee090e076366",
+      "name": "Junyang Lin（X @JustinLin610）",
+      "url": "https://x.com/JustinLin610",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "强化学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/082097117b4543e9a741cd2580f936d3"
+      ],
+      "addedAt": "2026-09-14T07:53:36.335Z"
+    },
+    {
+      "id": "49eb7e0738c5",
+      "name": "Qwen（X @Alibaba_Qwen）",
+      "url": "https://x.com/Alibaba_Qwen",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/80032d016d654eb4afe741ff34b7643d"
+      ],
+      "addedAt": "2026-09-14T07:53:39.977Z"
+    },
+    {
+      "id": "3af0f41e233e",
+      "name": "Geoffrey Hinton（X @geoffreyhinton）",
+      "url": "https://x.com/geoffreyhinton",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "数理物理"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/cb6169815e2e447e8e6148a4af3f9686"
+      ],
+      "addedAt": "2026-09-14T07:53:46.166Z"
+    },
+    {
+      "id": "bee0e88a98c6",
+      "name": "Richard Socher（X @RichardSocher）",
+      "url": "https://x.com/RichardSocher",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "NLP",
+        "深度学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/4d2d4165a7524217a08d3f57f27fa190"
+      ],
+      "addedAt": "2026-09-14T07:53:48.352Z"
+    },
+    {
+      "id": "740ec2d885bd",
+      "name": "Jan Leike（X @janleike）",
+      "url": "https://x.com/janleike",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/dceb5cd131b34c72a8376cba8ea5d864"
+      ],
+      "addedAt": "2026-09-14T07:53:52.216Z"
+    },
+    {
+      "id": "93eebd7e539f",
+      "name": "Demis Hassabis（X @demishassabis）",
+      "url": "https://x.com/demishassabis",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/4a884d5e2f3740c5a26c9c093de6388a"
+      ],
+      "addedAt": "2026-09-14T07:53:54.397Z"
+    },
+    {
+      "id": "33507ac4f0e9",
+      "name": "Google DeepMind（X @GoogleDeepMind）",
+      "url": "https://x.com/GoogleDeepMind",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/a99538443a484fcc846bdcc8f50745ec"
+      ],
+      "addedAt": "2026-09-14T07:53:58.982Z"
+    },
+    {
+      "id": "676868d354c3",
+      "name": "AI at Meta（X @AIatMeta）",
+      "url": "https://x.com/AIatMeta",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/ef7c70f9568d45f4915169fef4ce90b4"
+      ],
+      "addedAt": "2026-09-14T07:54:01.277Z"
+    },
+    {
+      "id": "59e306b0ad69",
+      "name": "Hugging Face（X @huggingface）",
+      "url": "https://x.com/huggingface",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "NLP"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/fc16750ce50741f1b1f05ea1fb29436f"
+      ],
+      "addedAt": "2026-09-14T07:54:04.313Z"
+    },
+    {
+      "id": "2fd048895037",
+      "name": "Andrew Ng（X @AndrewYNg）",
+      "url": "https://x.com/AndrewYNg",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/08b5488b20bc437c8bfc317a52e5c26d"
+      ],
+      "addedAt": "2026-09-14T07:54:07.672Z"
+    },
+    {
+      "id": "0b41cd46293d",
+      "name": "Berkeley AI Research（X @berkeley_ai）",
+      "url": "https://x.com/berkeley_ai",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "强化学习",
+        "深度学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/6bbf31cac345443585c3280320ba9009"
+      ],
+      "addedAt": "2026-09-14T07:54:16.914Z"
+    },
+    {
+      "id": "7deb73c8cc4f",
+      "name": "Stanford AI Lab（X @StanfordAILab）",
+      "url": "https://x.com/StanfordAILab",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "CV",
+        "强化学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/d5fc365556e641cba2278f501e8c6f92"
+      ],
+      "addedAt": "2026-09-14T07:54:18.954Z"
+    },
+    {
+      "id": "fdb6141bb0e7",
+      "name": "Microsoft Research（X @MSFTResearch）",
+      "url": "https://x.com/MSFTResearch",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/61f4b78554fb4b8fa5653ec5d924d15a"
+      ],
+      "addedAt": "2026-09-14T07:54:25.123Z"
+    },
+    {
+      "id": "8e98e1806ff5",
+      "name": "Thomas Wolf（X @Thom_Wolf）",
+      "url": "https://x.com/Thom_Wolf",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "NLP"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/4918efb13c47459b8dcaa79cfdf72d09"
+      ],
+      "addedAt": "2026-09-14T07:54:31.486Z"
+    },
+    {
+      "id": "15bba79cf5a1",
+      "name": "Philipp Schmid（X @_philschmid）",
+      "url": "https://x.com/_philschmid",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/ce352bbf72e44033985bc756db2ee0e2"
+      ],
+      "addedAt": "2026-09-14T07:54:36.178Z"
+    },
+    {
+      "id": "2901730e422b",
+      "name": "宝玉（X @dotey）",
+      "url": "https://x.com/dotey",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/97f1484ae48c430fbbf3438099743674"
+      ],
+      "addedAt": "2026-09-14T07:54:39.355Z"
+    },
+    {
+      "id": "ebb434e15d12",
+      "name": "歸藏(guizang.ai)（X @op7418）",
+      "url": "https://x.com/op7418",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "多模态"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/831fac36aa0a49a9af79f35dc1c9b5d9"
+      ],
+      "addedAt": "2026-09-14T07:54:44.160Z"
+    },
+    {
+      "id": "3d0890e4cb16",
+      "name": "Simon Willison（X @simonw）",
+      "url": "https://x.com/simonw",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/30ad80be93c84e44acc37d5ddf31db57"
+      ],
+      "addedAt": "2026-09-14T07:54:47.800Z"
+    },
+    {
+      "id": "b261e9b4bc1d",
+      "name": "elvis（X @omarsar0）",
+      "url": "https://x.com/omarsar0",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "深度学习"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/931d6e88e067496cac6bf23f69d60f33"
+      ],
+      "addedAt": "2026-09-14T07:54:50.504Z"
+    },
+    {
+      "id": "56fe481c83e7",
+      "name": "AK（X @_akhaliq）",
+      "url": "https://x.com/_akhaliq",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "生成式推荐",
+        "多模态"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/341f7b9f8d9b477e8bb200caa7f32c6e"
+      ],
+      "addedAt": "2026-09-14T07:54:55.387Z"
+    },
+    {
+      "id": "0dbb32379acb",
+      "name": "meng shao（X @shao__meng）",
+      "url": "https://x.com/shao__meng",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/48aae530e0bf413aa7d44380f418e2e3"
+      ],
+      "addedAt": "2026-09-14T07:54:57.292Z"
+    },
+    {
+      "id": "df1eb57a83d3",
+      "name": "Latent.Space（X @latentspacepod）",
+      "url": "https://x.com/latentspacepod",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/a7be8b61a1264ea7984abfaea3eff686"
+      ],
+      "addedAt": "2026-09-14T07:55:06.645Z"
+    },
+    {
+      "id": "7396f172b724",
+      "name": "AI Engineer（X @aiDotEngineer）",
+      "url": "https://x.com/aiDotEngineer",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/7d19a619a1cc4a9896129211269d2c85"
+      ],
+      "addedAt": "2026-09-14T07:55:10.975Z"
+    },
+    {
+      "id": "0ea19a2169ba",
+      "name": "Paul Graham（X @paulg）",
+      "url": "https://x.com/paulg",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "数据分析",
+        "金融量化"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/900549ddadf04e839d3f7a17ebaba3fc"
+      ],
+      "addedAt": "2026-09-14T07:55:13.875Z"
+    },
+    {
+      "id": "884e730fcfc6",
+      "name": "Naval（X @naval）",
+      "url": "https://x.com/naval",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "金融量化",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/b43bc203409e4c5a9c3ae86fe1ac00c9"
+      ],
+      "addedAt": "2026-09-14T07:55:17.398Z"
+    },
+    {
+      "id": "c2a6c4a6f2ad",
+      "name": "Ray Dalio（X @RayDalio）",
+      "url": "https://x.com/RayDalio",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "金融量化",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/4838204097ed422eac24ad48e68dc3ff"
+      ],
+      "addedAt": "2026-09-14T07:55:20.268Z"
+    },
+    {
+      "id": "78a7e9957596",
+      "name": "AI Will（X @FinanceYF5）",
+      "url": "https://x.com/FinanceYF5",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "金融量化",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/aa74321087f9405a872fd9a76b743bf8"
+      ],
+      "addedAt": "2026-09-14T07:55:23.072Z"
+    },
+    {
+      "id": "2c87d94b7c53",
+      "name": "Gary Marcus（X @GaryMarcus）",
+      "url": "https://x.com/GaryMarcus",
+      "platform": "twitter",
+      "platformLabel": "X / Twitter",
+      "tier": 3,
+      "tags": [
+        "深度学习",
+        "NLP"
+      ],
+      "feeds": [
+        "https://api.xgo.ing/rss/user/35a38c5646d946fb894d8c30c1d9629e"
+      ],
+      "addedAt": "2026-09-14T07:55:27.081Z"
+    },
+    {
+      "id": "8e6a3b863c00",
+      "name": "Gino Notes",
+      "url": "https://www.ginonotes.com/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "Agent"
+      ],
+      "feeds": [
+        "https://ginonotes.com/feed.xml"
+      ],
+      "addedAt": "2026-09-14T08:09:50.228Z"
+    },
+    {
+      "id": "c9d8dda9a6cc",
+      "name": "Google Research Blog",
+      "url": "https://research.google/blog/rss/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "强化学习",
+        "NLP",
+        "CV"
+      ],
+      "feeds": [
+        "https://research.google/blog/rss/"
+      ],
+      "addedAt": "2026-09-14T08:11:17.415Z"
+    },
+    {
+      "id": "802c5bf0fc9c",
+      "name": "Microsoft Research Blog",
+      "url": "https://www.microsoft.com/en-us/research/feed/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "CV",
+        "多模态"
+      ],
+      "feeds": [
+        "https://www.microsoft.com/en-us/research/feed/"
+      ],
+      "addedAt": "2026-09-14T08:11:21.506Z"
+    },
+    {
+      "id": "08f245b122be",
+      "name": "Apple Machine Learning Research",
+      "url": "https://machinelearning.apple.com/rss.xml",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "多模态",
+        "NLP",
+        "CV"
+      ],
+      "feeds": [
+        "https://machinelearning.apple.com/rss.xml"
+      ],
+      "addedAt": "2026-09-14T08:11:23.675Z"
+    },
+    {
+      "id": "a55ac67237c2",
+      "name": "AWS Machine Learning Blog",
+      "url": "https://aws.amazon.com/blogs/amazon-ai/feed/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://aws.amazon.com/cn/blogs/machine-learning/feed/"
+      ],
+      "addedAt": "2026-09-14T08:11:32.077Z"
+    },
+    {
+      "id": "be28847f5b9c",
+      "name": "GitHub Engineering",
+      "url": "https://github.blog/engineering/feed/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://github.blog/engineering/feed/"
+      ],
+      "addedAt": "2026-09-14T08:11:34.470Z"
+    },
+    {
+      "id": "127b7bd98167",
+      "name": "Spotify Engineering",
+      "url": "https://engineering.atspotify.com/feed",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统",
+        "数据分析"
+      ],
+      "feeds": [
+        "https://engineering.atspotify.com/feed"
+      ],
+      "addedAt": "2026-09-14T08:11:36.011Z"
+    },
+    {
+      "id": "3c2c37d12256",
+      "name": "Latent Space",
+      "url": "https://www.latent.space/feed",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://www.latent.space/feed"
+      ],
+      "addedAt": "2026-09-14T08:11:41.874Z"
+    },
+    {
+      "id": "f510e05743c6",
+      "name": "Simon Willison's Weblog",
+      "url": "https://simonwillison.net/atom/everything/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "Agent",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://simonwillison.net/atom/everything/"
+      ],
+      "addedAt": "2026-09-14T08:11:44.226Z"
     }
   ],
   "itemTags": {
