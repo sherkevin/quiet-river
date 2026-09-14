@@ -253,6 +253,13 @@ async function handleApi(req, res, pathname) {
           sub.url = raw;
           sub.feeds = okFeeds;
           if (result.adapter) sub.adapter = result.adapter;
+          // feed 地址换了平台，归类跟着走，别让公众号源显示成「博客」
+          if (result.platform && result.platform !== 'unknown' && !sub.adapter) {
+            sub.platform = result.platform;
+            sub.platformLabel = result.platformLabel;
+          }
+          // 拿到可抓的 feed 之后它就不再是「只登记名字」的手动源了
+          delete sub.manual;
         }
       }
       await store.saveConfig(config);

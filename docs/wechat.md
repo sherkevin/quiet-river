@@ -1,15 +1,30 @@
 # 微信公众号接入方案
 
-**两条外部服务路线（2026-09-11 调研）**：wechat2rss 私有部署（150 元/年，闭源）；wewe-rss 自部署（免费，开源可审计，但上游已归档）。
+> **2026-09-14 更新（结论翻转，先读这段）**：wewe-rss 这条路已经**死了**，不要再试。
+> 它的全部登录与抓取能力都托管在作者的闭源转发服务 `weread.111965.xyz` 上，
+> 而那个服务跑在 Deno Deploy Classic，平台已于 **2026-07-20 整体下线**，4 个 Cloudflare edge 全返回 502，
+> 官方镜像域名 `weread.965111.xyz` 返回 `DEPLOYMENT_NOT_FOUND`。
+> 部署本身能成（服务能起、`/feeds/all.atom` 能出合法 Atom），但扫码登录必然失败，
+> 而没有任何 fork 修得了——要修就得重写那个闭源转发服务。完整实测记录见
+> 完整实测记录在本仓 `docs/决议/0010`（决议目录不随开源版发布，因为它记的是本机阅读清单的取舍理由）。
+>
+> 现在实际在用的是 **wechat2rss 免费公开目录**：`https://wechat2rss.xlab.app/list/all/`，
+> 395 个公众号，直接给标准 RSS 地址，无需登录、无需部署、无需付费。
+> 覆盖率低（我们 18 个只命中 1 个，目录以安全类为主），但里面有大厂研发号，
+> 2026-09-14 用它把公众号从 18 个做到 26 个、其中 9 个有内容。
+> 下面原文保留作历史记录，**其中「建议先试 wewe-rss」的推荐作废**。
+
+**两条外部服务路线（2026-09-11 调研）**：wechat2rss 私有部署（150 元/年，闭源）；wewe-rss 自部署（免费，开源可审计，但上游已归档 —— 已于 2026-09-14 实测证死，见上方更新）。
 理由：公众号是所有平台里唯一**没有读者侧登录态抓取通道**的——知乎和小红书好歹有 Web 登录态可借，公众号的登录态只在微信客户端和微信读书里。RSSHub 自带公众号路由覆盖率低且验证码重灾，不当主路。
 
-**源码可见性（2026-09-11 实测，改变信任判断）**：wechat2rss 的公开仓库 `ttttmr/Wechat2RSS`（1584★）**代码读不到**——GitHub API 与 raw.githubusercontent 两个通道都返回 404，只有网页壳返回 200 且文件列表标记几乎为空；元数据里 defaultBranch 是 master，但 raw 的 master/README.md 是 404。对照之下 wewe-rss（`cooderl/wewe-rss`，9675★，MIT，2026-03-20 归档）源码完全公开可读，根目录含 apps/、Dockerfile、LICENSE、pnpm workspace，原理可审计。
-这意味着 wechat2rss 私有部署的真实成本不只是 150 元：采集端是**你自己的微信扫码登录**，而实现闭源不可审计——等于把微信登录态交给一个无法审计的服务。**顺序因此反转：先用开源可审计的 wewe-rss 试水；只有当它坏了、且你接受上述信任成本时，再上 wechat2rss。**
+**源码可见性（2026-09-11 实测，2026-09-14 修正）**：wechat2rss 的公开仓库 `ttttmr/Wechat2RSS`（1588★）当初记为「代码读不到」，**这半句是错的**：GitHub API 正常返回文件树，raw 也通，404 只因默认分支上文件名是 `readme.md`（全小写）而当时按 `README.md` 取，raw.githubusercontent 大小写敏感。但**实质结论不变**：仓库里只有 VitePress 站点文档（`deploy/*.md`、`list/*.md`）、一个 `public/scripts/cf-worker.js` 和 `docker-compose.yml`，**采集端实现不在其中**，license 字段为空。对照之下 wewe-rss（`cooderl/wewe-rss`，9675★，MIT，2026-03-20 归档）源码完全公开可读，根目录含 apps/、Dockerfile、LICENSE、pnpm workspace，原理可审计。
+这意味着 wechat2rss 私有部署的真实成本不只是 150 元：采集端是**你自己的微信扫码登录**，而实现未开源不可审计——等于把微信登录态交给一个无法审计的服务。当初据此把顺序反转成「先试开源的 wewe-rss」；2026-09-14 实测证明 wewe-rss 已死，**这个反转不成立了**：免费路线只有 wechat2rss 公开目录（覆盖率低），要全覆盖就只能接受 wechat2rss 私有部署的上述信任成本。
 
 **zlzchat 评估（2026-09-11，不采用为底座）**：`565800105/zlzchat`（284★，2026-09-07 推送）根目录只有 README、images、lib 和一个编译好的 `website.jar`——**闭源 JAR，没有源码**，license 字段为空（法律上未授权修改）。部署要 mysql + redis + jar 三件套，文档挂在裸 IP `111.229.83.152:805` 上（单点个人基础设施）。机制与 wewe-rss 同族：靠**微信读书登录态**拉文章，其用户协议自述「使用本工具可能导致微信读书账号（非微信号）被限制或封禁」。比 wewe-rss 多的是按名称/文章地址添加公众号的 API 与分类 atom 输出；这些能力可以在自己的 fork 里用微信读书搜索接口补，不构成换底座的理由。
+**2026-09-14 补记**：zlzchat 与 wewe-rss 同样依赖微信读书登录态。wewe-rss 死于闭源转发服务消失，zlzchat 的同类风险更高——它的「转发服务」是一个裸 IP 上的个人实例。这条路同样不再考虑。
 
 **quiet-river 自己的做法（2026-09-11 定）：不直接爬微信**，做**手动登记**——添加页选「微信公众号（手动登记）」，只填公众号名字；该源有自己的专属页（`#/author/<id>`），内容为空，卡片与专属页都提示「去微信里搜这个名字」；以后拿到 RSS 地址（无论来自 wewe-rss、wechat2rss 还是别处）在编辑弹窗的 feed 地址栏补上即开始抓取。已实现并实测。
-wewe-rss 上游仓库已下架（2026-03-20 归档，随后不可访问）。**要试这条路先把源码 clone 到本地留一份**——公开渠道已经拿不到了。稳定化清单（低频 cron、专用读书号、失败退避、只在本地跑、不发布）适用于任何登录态抓取方案。
+wewe-rss 上游仓库**仍可访问**（2026-03-20 归档但没下架，源码要自己 clone 一份留着）。归档 ≠ 下架，别再把「拿不到源码」当结论——真正的问题是它的转发服务没了，详见本仓 `docs/决议/0010`。稳定化清单（低频 cron、专用读书号、失败退避、只在本地跑、不发布）适用于任何登录态抓取方案。
 
 ## wechat2rss 私有部署（付费 150 元/年，闭源不可审计）
 
@@ -24,11 +39,71 @@ wewe-rss 上游仓库已下架（2026-03-20 归档，随后不可访问）。**�
 
 **预期校准**：平均 6 小时时延意味着公众号卡片的新鲜度圆点会经常是灰的、内容比别的源晚半天到一天，属正常，不是抓取坏了。
 
-## wewe-rss 自部署（免费，开源可审计，建议先试这个）
+## wechat2rss 免费公开目录（2026-09-14 起实际在用）
+
+目录地址 `https://wechat2rss.xlab.app/list/all/`，收录 395 个公众号，每个直接给标准 RSS 地址
+（形如 `https://wechat2rss.xlab.app/feed/<sha1>.xml`）。无需登录、无需部署、无需付费，`curl` 就能拿。
+项目从 2021.9 运行至今，自述更新周期在 24 小时内，所以卡片新鲜度圆点经常是灰的，属正常。
+
+用法：在目录页里搜公众号名字，拿到 feed 地址，然后
+
+```bash
+# 单个：走 API，resolve 会自己认出平台是公众号并把标题当名字
+curl -X PATCH http://127.0.0.1:4321/api/subscriptions/<id> \
+  -H 'Content-Type: application/json' \
+  -d '{"feedUrl":"https://wechat2rss.xlab.app/feed/<sha1>.xml"}'
+
+# 批量：名字<TAB>地址<TAB>tag
+node tools/import-feeds.js feeds.txt --tags 搜广推
+```
+
+覆盖率是它的短板：目录以安全类为主，我们 18 个公众号只命中 1 个（机器之心）。
+但里面有**大厂研发号**，正好补上「大公司技术公众号」这一块——2026-09-14 据此入库 9 个：
+机器之心、得物技术、字节跳动技术团队、阿里技术、千问AI平台（原「阿里云开发者」，账号已改名）、
+哔哩哔哩技术、小米技术、爱奇艺技术产品团队、夕小瑶科技说。
+每个都实测过 HTTP 200 + 20 篇文章 + 发布日期在两周内。
+查过但没收的两个：`机器学习初学者`（最新文章停在 2025-08，已死）、
+`Android 开发者`（内容与兴趣域不搭）。
+
+公众号名字改了要按 feed 自报的标题入库，别用目录页上的旧名——`resolve` 已经这么做，
+`lib/resolve.js` 里也加了 `host.endsWith('wechat2rss.xlab.app') → wechat` 的识别，
+否则这些源会被误判成 `blog`。
+
+## wewe-rss 自部署（2026-09-14 实测证死，不要再试）
 
 原理：扫码登录微信读书，借微信读书的公众号通道拉文章，输出 atom/rss/json；MIT 协议。
-风险：仓库 2026-03-20 已归档、最后 release 停在 2024-12，无人维护，微信读书接口一变即死；部署教程明写「添加频率过高容易被封控，等 24 小时解封」。
-适合：先零成本试水十个号；坏了再上主路。导入方式与主路第 4 步相同。
+
+**死因不是「上游归档」，而是「抓取能力全在一个已经物理消失的闭源单点上」。**
+wewe-rss 自己不碰微信读书，`apps/server/src/configuration.ts` 里写死
+`PLATFORM_URL = https://weread.111965.xyz`，只调它的 4 个接口：
+`/api/v2/login/platform`（出二维码）、`/api/v2/login/platform/:id`（等扫码）、
+`/api/v2/platform/wxs2mp`（文章链接反查号）、`/api/v2/platform/mps/:mpId/articles`（拉文章）。
+这个转发服务**闭源**，作者只开源了外壳（issue #11 原话：「token 是从这个服务生成的，只做请求转发」）。
+而它跑在 Deno Deploy Classic 上，该平台 **2026-07-20 整体下线**：
+
+- 4 个 Cloudflare edge（`104.21.47.228`、`172.67.173.210`、`172.64.80.1`、`104.18.32.7`）全部 `error code: 502`，
+  说明源站没了，不是 DNS 污染；issue #223 教的「绑 hosts」和「换镜像域名」两条都试过，都 502。
+- 镜像域名 `weread.965111.xyz` 返回 `DEPLOYMENT_NOT_FOUND`，正文明写
+  「Deno Deploy Classic was sunset on July 20, 2026」。这是不可逆的。
+- 微信读书官方 API 替代不了：`weread.qq.com/api/v2/login/platform` 和 `/web/login/getqrcode` 都是 404，
+  这些路径只存在于作者的转发服务上。
+- 微信读书**确有**官方 Agent API（`POST https://i.weread.qq.com/api/agent/gateway`，Bearer `wrk-` key，
+  经 `GET /api/skills/apikeyGet` 获取），实测端点是活的（无 token 返回 `errcode -2010`，假 token 返回 `-2013`）。
+  但只有 18 个接口，全是书/笔记/划线/书评/书架维度，**没有任何公众号能力**。
+
+所有 fork 沿用同一个 `PLATFORM_URL` 默认值，没有一个绕开转发服务
+（`johamwon/we2rss`，19★，只加了账号失效告警）。上游 issue #463（2026-03-24「好像都失效了」）至今 open。
+
+**部署过程留档**（万一将来转发服务复活，按 v2.6.1 源码记）：
+三处要修才能起来——① `pnpm-workspace.yaml`：pnpm 11 不再读 package.json 的 `pnpm` 字段，
+`allowBuilds` 占位符要改成 `true`（`@nestjs/core`、`@prisma/client`、`@prisma/engines`、`esbuild`、`prisma`），
+并加 `verifyDepsBeforeRun: false`；② `start.sh`：`DATABASE_URL` 用绝对路径，prisma 把相对 sqlite 路径按 schema 目录解析；
+③ `prisma migrate deploy` 报空 "Schema engine error"（引擎二进制问题，未查清），绕过办法是直接建表：
+`sqlite3 data/wewe-rss.db < .../20240301104100_init/migration.sql` 再 `< .../20241214172323_has_history/migration.sql`。
+起来之后 `/` 200、`/feeds` 返回 `[]`、`/feeds/all.atom` 出合法 Atom。
+另外**`/feeds/*` 不需要鉴权**（`AUTH_CODE` 只管 `/trpc`），
+所以「quiet-river 能不能拉带鉴权的 feed」这个顾虑不存在，`lib/refresh.js` 不用改。
+卡死在最后一步：`platform.createLoginUrl` → `Request failed with status code 502`。
 
 ## 不推荐的四条路
 

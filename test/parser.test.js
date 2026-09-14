@@ -204,6 +204,11 @@ test('平台识别：hostname 与路径决定归属', () => {
     'https://zhuanlan.zhihu.com/p/123': 'zhihu',
     'https://www.xiaohongshu.com/user/profile/abc': 'xiaohongshu',
     'https://mp.weixin.qq.com/s?__biz=x': 'wechat',
+    // wechat2rss 这类第三方服务把公众号转成 RSS，内容源仍是公众号，不能判成 blog
+    'https://wechat2rss.xlab.app/feed/51e92aad2728acdd1fda7314be32b16639353001.xml': 'wechat',
+    // 按点边界匹配：同后缀的仿冒域名不能被认成可信来源
+    'https://evil-wechat2rss.xlab.app/feed/abc.xml': 'blog',
+    'https://wechat2rss.xlab.app.evil.example/feed/abc.xml': 'blog',
     'https://weibo.com/u/123': 'weibo',
     'https://x.com/edchi': 'twitter',
     'https://bsky.app/profile/handle.bsky.social': 'bluesky',

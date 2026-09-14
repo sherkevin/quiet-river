@@ -107,16 +107,17 @@
     {
       "id": "bbe259c4f084",
       "name": "机器之心",
-      "url": "",
+      "url": "https://wechat2rss.xlab.app/feed/51e92aad2728acdd1fda7314be32b16639353001.xml",
       "platform": "wechat",
-      "platformLabel": "公众号",
+      "platformLabel": "微信公众号",
       "tier": 3,
       "tags": [
         "生成式推荐"
       ],
-      "feeds": [],
-      "addedAt": "2026-09-11T04:41:13.640Z",
-      "manual": true
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/51e92aad2728acdd1fda7314be32b16639353001.xml"
+      ],
+      "addedAt": "2026-09-11T04:41:13.640Z"
     },
     {
       "id": "8dfc18670b69",
@@ -916,16 +917,17 @@
     {
       "id": "d39dd69b141d",
       "name": "得物技术",
-      "url": "",
-      "platform": "blog",
-      "platformLabel": "公众号",
+      "url": "https://wechat2rss.xlab.app/feed/f3a42bd249ec6e8834ae761d8d0f85a949950944.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
       "tier": 3,
       "tags": [
         "推荐系统"
       ],
-      "feeds": [],
-      "addedAt": "2026-09-11T12:08:32.755Z",
-      "manual": true
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/f3a42bd249ec6e8834ae761d8d0f85a949950944.xml"
+      ],
+      "addedAt": "2026-09-11T12:08:32.755Z"
     },
     {
       "id": "d40f6cc79d60",
@@ -3114,6 +3116,118 @@
         "itemCount": 27,
         "latest": 1785919531000
       }
+    },
+    {
+      "id": "8f12ee92b86c",
+      "name": "字节跳动技术团队",
+      "url": "https://wechat2rss.xlab.app/feed/4025ea55575daf8bfd8227e68b28d9638b073267.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/4025ea55575daf8bfd8227e68b28d9638b073267.xml"
+      ],
+      "addedAt": "2026-09-14T05:14:09.912Z"
+    },
+    {
+      "id": "6c91c0460e48",
+      "name": "阿里技术",
+      "url": "https://wechat2rss.xlab.app/feed/6e1f9b775f7a5841ac1a94310f0478b45a02ec01.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/6e1f9b775f7a5841ac1a94310f0478b45a02ec01.xml"
+      ],
+      "addedAt": "2026-09-14T05:14:12.791Z"
+    },
+    {
+      "id": "2246ebcf8e62",
+      "name": "爱奇艺技术产品团队",
+      "url": "https://wechat2rss.xlab.app/feed/16a4ec12a83a52e1f6e941bce030a4d64ee26c47.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "搜广推",
+        "推荐系统"
+      ],
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/16a4ec12a83a52e1f6e941bce030a4d64ee26c47.xml"
+      ],
+      "addedAt": "2026-09-14T05:14:15.596Z"
+    },
+    {
+      "id": "2a772ffabb82",
+      "name": "千问AI平台",
+      "url": "https://wechat2rss.xlab.app/feed/c74ed6db00cfbf16f2a048a165b4453f982681f0.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "Agent",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/c74ed6db00cfbf16f2a048a165b4453f982681f0.xml"
+      ],
+      "addedAt": "2026-09-14T05:14:18.791Z"
+    },
+    {
+      "id": "72ce0ec2d0f7",
+      "name": "哔哩哔哩技术",
+      "url": "https://wechat2rss.xlab.app/feed/434235d4815fdb8447ff3127fc053ceb8b3aada6.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "多模态",
+        "CV"
+      ],
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/434235d4815fdb8447ff3127fc053ceb8b3aada6.xml"
+      ],
+      "addedAt": "2026-09-14T05:14:22.185Z"
+    },
+    {
+      "id": "ec2cdf121780",
+      "name": "小米技术",
+      "url": "https://wechat2rss.xlab.app/feed/20bc9c3251b3c4f73d3b53aa1f1ab853d05d4cbc.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "大模型Infra",
+        "NLP"
+      ],
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/20bc9c3251b3c4f73d3b53aa1f1ab853d05d4cbc.xml"
+      ],
+      "addedAt": "2026-09-14T05:14:25.217Z"
+    },
+    {
+      "id": "7540fc4cdeee",
+      "name": "夕小瑶科技说",
+      "url": "https://wechat2rss.xlab.app/feed/a1cd365aa14ed7d64cabfc8aa086da40ecaba34d.xml",
+      "platform": "wechat",
+      "platformLabel": "微信公众号",
+      "tier": 3,
+      "tags": [
+        "NLP",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://wechat2rss.xlab.app/feed/a1cd365aa14ed7d64cabfc8aa086da40ecaba34d.xml"
+      ],
+      "addedAt": "2026-09-14T05:14:27.931Z"
     }
   ],
   "itemTags": {
