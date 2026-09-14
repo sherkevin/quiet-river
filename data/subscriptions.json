@@ -54,22 +54,18 @@
     {
       "id": "a29d3955217e",
       "name": "arXiv · cs.IR",
-      "url": "https://arxiv.org/list/cs.IR/recent",
+      "url": "https://rss.arxiv.org/rss/cs.IR",
       "platform": "arxiv",
       "platformLabel": "arXiv",
       "tier": 1,
       "tags": [
-        "信息检索"
+        "信息检索",
+        "推荐系统"
       ],
-      "feeds": [],
-      "addedAt": "2026-09-10T16:02:21.046Z",
-      "adapter": {
-        "platform": "arxiv",
-        "id": "cs.IR",
-        "itemCount": 20,
-        "latest": 1788972206000
-      },
-      "disabled": true
+      "feeds": [
+        "https://rss.arxiv.org/rss/cs.IR"
+      ],
+      "addedAt": "2026-09-10T16:02:21.046Z"
     },
     {
       "id": "468d1308a19d",
@@ -3397,7 +3393,7 @@
       "platformLabel": "微信公众号",
       "tier": 3,
       "tags": [
-        "推荐系统",
+        "CV",
         "大模型Infra"
       ],
       "feeds": [
@@ -3413,8 +3409,8 @@
       "platformLabel": "微信公众号",
       "tier": 3,
       "tags": [
-        "搜广推",
-        "推荐系统"
+        "Agent",
+        "大模型Infra"
       ],
       "feeds": [
         "https://wechat2rss.bestblogs.dev/feed/b5d5237d609fe96d74ae9d0241ffa8daad2f147b.xml"
@@ -3429,8 +3425,8 @@
       "platformLabel": "微信公众号",
       "tier": 3,
       "tags": [
-        "搜广推",
-        "推荐系统"
+        "大模型Infra",
+        "Agent"
       ],
       "feeds": [
         "https://wechat2rss.bestblogs.dev/feed/84c072f8d34d1690f2783d7dda6013cf6d892b7f.xml"
@@ -3781,7 +3777,7 @@
       "tier": 3,
       "tags": [
         "数据分析",
-        "CV"
+        "Agent"
       ],
       "feeds": [
         "https://wechat2rss.bestblogs.dev/feed/c1a09e8847fbaea14eaa89db218d783fe176c5a6.xml"
@@ -3819,22 +3815,6 @@
         "https://wechat2rss.bestblogs.dev/feed/666d6e30c773dd35ecc593866bab680db95b27f2.xml"
       ],
       "addedAt": "2026-09-14T07:52:30.254Z"
-    },
-    {
-      "id": "6b8171d3dbd4",
-      "name": "阿里研究院",
-      "url": "https://wechat2rss.bestblogs.dev/feed/e2f1190c120f7f3d74b630bfcfe9e58296bd535c.xml",
-      "platform": "wechat",
-      "platformLabel": "微信公众号",
-      "tier": 3,
-      "tags": [
-        "数据分析",
-        "金融量化"
-      ],
-      "feeds": [
-        "https://wechat2rss.bestblogs.dev/feed/e2f1190c120f7f3d74b630bfcfe9e58296bd535c.xml"
-      ],
-      "addedAt": "2026-09-14T07:52:35.550Z"
     },
     {
       "id": "9a2aeb602038",
@@ -3885,22 +3865,6 @@
       "addedAt": "2026-09-14T07:52:52.499Z"
     },
     {
-      "id": "29853b4b6fa2",
-      "name": "神经现实",
-      "url": "https://wechat2rss.bestblogs.dev/feed/66c8815235aa2853fb61e2f08d5bd930b4156cef.xml",
-      "platform": "wechat",
-      "platformLabel": "微信公众号",
-      "tier": 3,
-      "tags": [
-        "深度学习",
-        "数理物理"
-      ],
-      "feeds": [
-        "https://wechat2rss.bestblogs.dev/feed/66c8815235aa2853fb61e2f08d5bd930b4156cef.xml"
-      ],
-      "addedAt": "2026-09-14T07:52:57.845Z"
-    },
-    {
       "id": "820a53f0f4e7",
       "name": "中金点睛",
       "url": "https://wechat2rss.bestblogs.dev/feed/5d4eef298108dd63ce77f40257436e0585bab425.xml",
@@ -3915,54 +3879,6 @@
         "https://wechat2rss.bestblogs.dev/feed/5d4eef298108dd63ce77f40257436e0585bab425.xml"
       ],
       "addedAt": "2026-09-14T07:53:02.441Z"
-    },
-    {
-      "id": "5ea8b554b0c7",
-      "name": "香帅的金融江湖",
-      "url": "https://wechat2rss.bestblogs.dev/feed/14cb1167539ceb3e3b235e1fb01e478056244e23.xml",
-      "platform": "wechat",
-      "platformLabel": "微信公众号",
-      "tier": 3,
-      "tags": [
-        "金融量化",
-        "数据分析"
-      ],
-      "feeds": [
-        "https://wechat2rss.bestblogs.dev/feed/14cb1167539ceb3e3b235e1fb01e478056244e23.xml"
-      ],
-      "addedAt": "2026-09-14T07:53:07.370Z"
-    },
-    {
-      "id": "8e25ca0cfc92",
-      "name": "格兰投研",
-      "url": "https://wechat2rss.bestblogs.dev/feed/fdb968fa04c741aee954dc36c25d3dee8063ecee.xml",
-      "platform": "wechat",
-      "platformLabel": "微信公众号",
-      "tier": 3,
-      "tags": [
-        "金融量化",
-        "数据分析"
-      ],
-      "feeds": [
-        "https://wechat2rss.bestblogs.dev/feed/fdb968fa04c741aee954dc36c25d3dee8063ecee.xml"
-      ],
-      "addedAt": "2026-09-14T07:53:10.902Z"
-    },
-    {
-      "id": "520f89782bb9",
-      "name": "饭统戴老板",
-      "url": "https://wechat2rss.bestblogs.dev/feed/5f4c620560bd63023df9fb7d330aeee524e41676.xml",
-      "platform": "wechat",
-      "platformLabel": "微信公众号",
-      "tier": 3,
-      "tags": [
-        "金融量化",
-        "数据分析"
-      ],
-      "feeds": [
-        "https://wechat2rss.bestblogs.dev/feed/5f4c620560bd63023df9fb7d330aeee524e41676.xml"
-      ],
-      "addedAt": "2026-09-14T07:53:14.527Z"
     },
     {
       "id": "2ce2fda2aed4",
@@ -4045,22 +3961,6 @@
       "addedAt": "2026-09-14T07:53:31.095Z"
     },
     {
-      "id": "ee090e076366",
-      "name": "Junyang Lin（X @JustinLin610）",
-      "url": "https://x.com/JustinLin610",
-      "platform": "twitter",
-      "platformLabel": "X / Twitter",
-      "tier": 3,
-      "tags": [
-        "大模型Infra",
-        "强化学习"
-      ],
-      "feeds": [
-        "https://api.xgo.ing/rss/user/082097117b4543e9a741cd2580f936d3"
-      ],
-      "addedAt": "2026-09-14T07:53:36.335Z"
-    },
-    {
       "id": "49eb7e0738c5",
       "name": "Qwen（X @Alibaba_Qwen）",
       "url": "https://x.com/Alibaba_Qwen",
@@ -4084,8 +3984,7 @@
       "platformLabel": "X / Twitter",
       "tier": 3,
       "tags": [
-        "深度学习",
-        "数理物理"
+        "深度学习"
       ],
       "feeds": [
         "https://api.xgo.ing/rss/user/cb6169815e2e447e8e6148a4af3f9686"
@@ -4355,8 +4254,8 @@
       "platformLabel": "X / Twitter",
       "tier": 3,
       "tags": [
-        "生成式推荐",
-        "多模态"
+        "多模态",
+        "深度学习"
       ],
       "feeds": [
         "https://api.xgo.ing/rss/user/341f7b9f8d9b477e8bb200caa7f32c6e"
@@ -4410,86 +4309,6 @@
         "https://api.xgo.ing/rss/user/7d19a619a1cc4a9896129211269d2c85"
       ],
       "addedAt": "2026-09-14T07:55:10.975Z"
-    },
-    {
-      "id": "0ea19a2169ba",
-      "name": "Paul Graham（X @paulg）",
-      "url": "https://x.com/paulg",
-      "platform": "twitter",
-      "platformLabel": "X / Twitter",
-      "tier": 3,
-      "tags": [
-        "数据分析",
-        "金融量化"
-      ],
-      "feeds": [
-        "https://api.xgo.ing/rss/user/900549ddadf04e839d3f7a17ebaba3fc"
-      ],
-      "addedAt": "2026-09-14T07:55:13.875Z"
-    },
-    {
-      "id": "884e730fcfc6",
-      "name": "Naval（X @naval）",
-      "url": "https://x.com/naval",
-      "platform": "twitter",
-      "platformLabel": "X / Twitter",
-      "tier": 3,
-      "tags": [
-        "金融量化",
-        "数据分析"
-      ],
-      "feeds": [
-        "https://api.xgo.ing/rss/user/b43bc203409e4c5a9c3ae86fe1ac00c9"
-      ],
-      "addedAt": "2026-09-14T07:55:17.398Z"
-    },
-    {
-      "id": "c2a6c4a6f2ad",
-      "name": "Ray Dalio（X @RayDalio）",
-      "url": "https://x.com/RayDalio",
-      "platform": "twitter",
-      "platformLabel": "X / Twitter",
-      "tier": 3,
-      "tags": [
-        "金融量化",
-        "数据分析"
-      ],
-      "feeds": [
-        "https://api.xgo.ing/rss/user/4838204097ed422eac24ad48e68dc3ff"
-      ],
-      "addedAt": "2026-09-14T07:55:20.268Z"
-    },
-    {
-      "id": "78a7e9957596",
-      "name": "AI Will（X @FinanceYF5）",
-      "url": "https://x.com/FinanceYF5",
-      "platform": "twitter",
-      "platformLabel": "X / Twitter",
-      "tier": 3,
-      "tags": [
-        "金融量化",
-        "数据分析"
-      ],
-      "feeds": [
-        "https://api.xgo.ing/rss/user/aa74321087f9405a872fd9a76b743bf8"
-      ],
-      "addedAt": "2026-09-14T07:55:23.072Z"
-    },
-    {
-      "id": "2c87d94b7c53",
-      "name": "Gary Marcus（X @GaryMarcus）",
-      "url": "https://x.com/GaryMarcus",
-      "platform": "twitter",
-      "platformLabel": "X / Twitter",
-      "tier": 3,
-      "tags": [
-        "深度学习",
-        "NLP"
-      ],
-      "feeds": [
-        "https://api.xgo.ing/rss/user/35a38c5646d946fb894d8c30c1d9629e"
-      ],
-      "addedAt": "2026-09-14T07:55:27.081Z"
     },
     {
       "id": "8e6a3b863c00",
@@ -4637,6 +4456,103 @@
         "https://simonwillison.net/atom/everything/"
       ],
       "addedAt": "2026-09-14T08:11:44.226Z"
+    },
+    {
+      "id": "d0cb9a9cb2ce",
+      "name": "Lilian Weng（博客）",
+      "url": "https://lilianweng.github.io/index.xml",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "推荐系统",
+        "强化学习",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://lilianweng.github.io/index.xml"
+      ],
+      "addedAt": "2026-09-14T08:51:39.122Z"
+    },
+    {
+      "id": "c1fe6aa298b8",
+      "name": "Sebastian Raschka（博客）",
+      "url": "https://magazine.sebastianraschka.com/feed",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "深度学习"
+      ],
+      "feeds": [
+        "https://magazine.sebastianraschka.com/feed"
+      ],
+      "addedAt": "2026-09-14T08:51:40.787Z"
+    },
+    {
+      "id": "56a3ebf32137",
+      "name": "Interconnects（Nathan Lambert）",
+      "url": "https://www.interconnects.ai/feed",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "强化学习",
+        "大模型Infra"
+      ],
+      "feeds": [
+        "https://www.interconnects.ai/feed"
+      ],
+      "addedAt": "2026-09-14T08:51:42.207Z"
+    },
+    {
+      "id": "357cc775ea1f",
+      "name": "Andrej Karpathy（博客）",
+      "url": "https://karpathy.bearblog.dev/feed/",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "深度学习"
+      ],
+      "feeds": [
+        "https://karpathy.bearblog.dev/feed/"
+      ],
+      "addedAt": "2026-09-14T08:51:43.981Z"
+    },
+    {
+      "id": "7afe8dad0360",
+      "name": "Chip Huyen（博客）",
+      "url": "https://huyenchip.com/feed.xml",
+      "platform": "blog",
+      "platformLabel": "博客",
+      "tier": 1,
+      "tags": [
+        "大模型Infra",
+        "Agent"
+      ],
+      "feeds": [
+        "https://huyenchip.com/feed.xml"
+      ],
+      "addedAt": "2026-09-14T08:51:46.227Z"
+    },
+    {
+      "id": "00e7c0ac7221",
+      "name": "arXiv · q-fin（量化金融）",
+      "url": "https://rss.arxiv.org/rss/q-fin",
+      "platform": "arxiv",
+      "platformLabel": "arXiv",
+      "tier": 1,
+      "tags": [
+        "金融量化",
+        "数学"
+      ],
+      "feeds": [
+        "https://rss.arxiv.org/rss/q-fin"
+      ],
+      "addedAt": "2026-09-14T14:42:06.491Z"
     }
   ],
   "itemTags": {

@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { parseXML, child, children, descendant, textOf, attr } = require('../lib/xml');
 const { parseFeed, looksLikeFeed, stripHTML } = require('../lib/feeds');
 const { detectPlatform, relayPlatform } = require('../lib/resolve');
+const { applyResolvedFeed } = require('../lib/store');
 
 test('XML: CDATA 内容按原样保留，不再解一次实体', () => {
   const doc = parseXML('<rss><channel><item><title><![CDATA[A &amp; B &lt;C&gt;]]></title></item></channel></rss>');
@@ -242,4 +243,48 @@ test('转发服务地址的平台归类：POST 直接给 feed 时也要认出来
   assert.equal(relayPlatform('https://wechat2rss.bestblogs.dev/feed/abc.xml').platform, 'wechat');
   assert.equal(relayPlatform('https://blog.cloudflare.com/rss'), null);
   assert.equal(relayPlatform('不是链接'), null);
+});
+
+test('改 feed 地址：新地址不命中适配器时，旧适配器必须被清掉', () => {
+  // lib/refresh.js 两条路径都是「有 sub.adapter 就走 adapter」。所以
+  // 把一个适配器源（arXiv cs.IR）改成普通 RSS 地址却留着 adapter，
+  // 刷新时仍打旧的 arXiv API，改地址等于没改——页面上毫无变化。
+  const sub = {
+    id: 'a1', name: 'arXiv · cs.IR', url: 'https://arxiv.org/list/cs.IR/recent',
+    platform: 'arxiv', platformLabel: 'arXiv', tier: 1,
+    feeds: [], adapter: { platform: 'arxiv', id: 'cs.IR' }, manual: true,
+  };
+  const result = {
+    ok: true, platform: 'arxiv', platformLabel: 'arXiv', tier: 1,
+    homepage: '', adapter: null,
+    feeds: [{ url: 'https://rss.arxiv.org/rss/cs.IR', ok: true }],
+  };
+  const out = applyResolvedFeed(sub, result, 'https://rss.arxiv.org/rss/cs.IR');
+  assert.equal(out.adapter, undefined, '旧适配器要清掉，否则刷新仍走 arXiv API');
+  assert.deepEqual(out.feeds, ['https://rss.arxiv.org/rss/cs.IR']);
+  assert.equal(out.manual, undefined, '拿到可抓的 feed 之后不再是手动源');
+});
+
+test('改 feed 地址：新地址命中适配器时换上，转发地址的主页不被覆盖', () => {
+  // 反向用例：命中适配器要换上，否则普通 feed 源改不成适配器源。
+  const sub = { id: 'b2', name: 'X', url: 'https://x.com/karpathy', platform: 'blog', platformLabel: '自定义', tier: 1, feeds: ['https://x.com/karpathy'] };
+  const hit = {
+    ok: true, platform: 'arxiv', platformLabel: 'arXiv', tier: 1,
+    adapter: { platform: 'arxiv', id: 'cs.IR' }, feeds: [],
+  };
+  const out = applyResolvedFeed(sub, hit, 'https://arxiv.org/list/cs.IR/recent');
+  assert.deepEqual(out.adapter, { platform: 'arxiv', id: 'cs.IR' });
+  // 有 adapter 时不覆盖 platform：适配器源自己带着归类
+  assert.equal(out.platform, 'blog');
+
+  // 转发地址：url 存作者主页，不是 api.xgo.ing，否则「去主页」跳错地方
+  const relaySub = { id: 'c3', name: 'X', url: 'https://x.com/karpathy', platform: 'twitter', platformLabel: 'X / Twitter', tier: 3, feeds: [] };
+  const relayRes = {
+    ok: true, platform: 'twitter', platformLabel: 'X / Twitter', tier: 3,
+    homepage: 'https://x.com/karpathy', adapter: null,
+    feeds: [{ url: 'https://api.xgo.ing/rss/user/deadbeef', ok: true }],
+  };
+  const r = applyResolvedFeed(relaySub, relayRes, 'https://api.xgo.ing/rss/user/deadbeef');
+  assert.equal(r.url, 'https://x.com/karpathy', '主页链接保持作者主页');
+  assert.deepEqual(r.feeds, ['https://api.xgo.ing/rss/user/deadbeef'], '转发地址进 feeds');
 });

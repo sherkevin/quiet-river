@@ -263,19 +263,7 @@ async function handleApi(req, res, pathname) {
           if (!okFeeds.length && !result.adapter) {
             return sendJson(res, 422, { error: result.blocked || result.note || '这个地址抓不到 feed' });
           }
-          // 转发服务的地址只进 feeds，主页链接仍是作者主页——和 POST 一致，
-          // 否则在编辑弹窗里补一次 feed 地址，「去主页」就跳去 api.xgo.ing 了。
-          sub.url = result.homepage || raw;
-          sub.feeds = okFeeds;
-          if (result.adapter) sub.adapter = result.adapter;
-          // feed 地址换了平台，归类跟着走，别让公众号源显示成「博客」
-          if (result.platform && result.platform !== 'unknown' && !sub.adapter) {
-            sub.platform = result.platform;
-            sub.platformLabel = result.platformLabel;
-            sub.tier = result.tier;
-          }
-          // 拿到可抓的 feed 之后它就不再是「只登记名字」的手动源了
-          delete sub.manual;
+          store.applyResolvedFeed(sub, result, raw);
         }
       }
       await store.saveConfig(config);

@@ -72,6 +72,95 @@ function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/**
+ * 渲染卡片摘要里的 LaTeX（$...$ / $$...$$）与代码反引号。
+ *
+ * 摘要在抓取层就已经剥成纯文本了（lib/feeds.js 的 stripHTML），所以这里不是
+ * 「渲染 Markdown 文档」，是把剥文本时漏下来的两类原样标记收回来：
+ * 数学公式渲染成字形（科学空间这类源整段都在 $...$ 里），`code` 换成等宽字体。
+ *
+ * 只做内联，不做块级/表格：7165 条摘要里 $...$ 16 条、heading 23 条、
+ * 列表 65 条、MD 表格 0 条——全量上 Markdown 渲染器收益接近零，
+ * 反而要把换行、强调这些噪声排版出来。
+ *
+ * 边界故意保守：
+ * - `$100`、美元价格这类不配对的 $ 不渲染；只有 \$...\$（含跨行）成对才算。
+ * - 分隔符内部必须含 LaTeX 命令（反斜杠）或上下标（^ _）才认是公式，
+ *   否则「$abc$」这种纯变量对不值得替换字体。
+ * - KaTeX 渲染失败时保留原文，不炸卡片。
+ */
+function renderSummaryMath(root) {
+  if (!root || typeof katex === 'undefined') return;
+  // 在纯文本节点上工作：splitText 会改 DOM，所以先把命中的节点收集起来再动。
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  const re = /\$\$([\s\S]+?)\$\$|\$([^\n$]+?)\$/;
+  let node;
+  while ((node = walker.nextNode())) {
+    if (re.test(node.nodeValue)) hits.push(node);
+  }
+  for (const textNode of hits) {
+    const text = textNode.nodeValue;
+    let m;
+    let last = 0;
+    const frag = document.createDocumentFragment();
+    let replacedAny = false;
+    re.lastIndex = 0;
+    while ((m = re.exec(text))) {
+      const display = m[1] !== undefined;
+      const tex = (m[1] !== undefined ? m[1] : m[2]).trim();
+      // 只把「像公式」的段落交给 KaTeX：必须含命令（\frac）或上下标（x_i^2）。
+      if (!/\\[A-Za-z]|[\^_]/.test(tex)) continue;
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const span = document.createElement('span');
+      span.className = display ? 'math math-display' : 'math';
+      try {
+        katex.render(tex, span, { throwOnError: false, displayMode: display });
+        replacedAny = true;
+      } catch {
+        span.textContent = m[0];
+      }
+      frag.appendChild(span);
+      last = m.index + m[0].length;
+    }
+    if (!replacedAny) continue;
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    textNode.replaceWith(frag);
+  }
+  // `code` 反引号 → <code>。在公式渲染之后跑，避开 KaTeX 产出的内部节点。
+  const codeRe = /`([^`\n]+)`/g;
+  const codeHits = [];
+  const walker2 = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    // KaTeX 渲染产物的 class 带 katex；别把里面的文本再拆一次。
+    acceptNode(n) {
+      return n.parentElement && n.parentElement.closest('.katex') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  while ((node = walker2.nextNode())) {
+    if (codeRe.test(node.nodeValue)) codeHits.push(node);
+  }
+  for (const textNode of codeHits) {
+    const text = textNode.nodeValue;
+    codeRe.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    let m;
+    let any = false;
+    while ((m = codeRe.exec(text))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const code = document.createElement('code');
+      code.className = 'md-code';
+      code.textContent = m[1];
+      frag.appendChild(code);
+      last = m.index + m[0].length;
+      any = true;
+    }
+    if (!any) continue;
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    textNode.replaceWith(frag);
+  }
+}
+
 /* ---------- data ---------- */
 
 async function api(path, options = {}) {
@@ -207,7 +296,8 @@ function renderCounts() {
   if (state.viewSources) {
     const list = memo('sources', sourceCards);
     const off = list.filter((s) => s.disabled).length;
-    $('#counts').textContent = `${scope} ${list.length} 个博主${off ? `（${off} 个已关闭）` : ''}`;
+    const q = queryActive() ? ` 搜「${state.query.trim()}」` : '';
+    $('#counts').textContent = `${scope}${q} ${list.length} 个博主${off ? `（${off} 个已关闭）` : ''}`;
     return;
   }
   if (queryActive()) {
@@ -370,13 +460,35 @@ function renderTagbar() {
 
   // Union of your author-level tags and the article-level categories the
   // feeds carry, so a tag can be as fine-grained as the platform allows.
+  // The number on a chip is the size of the list you get after clicking it:
+  // articles in the article view, bloggers in the blogger view. Showing an
+  // article count next to a list of blogger cards reads as a bug.
   const counts = new Map();
-  for (const sub of state.data.subscriptions) {
-    if (sub.disabled) continue;
-    for (const t of sub.tags || []) if (!counts.has(t)) counts.set(t, 0);
-  }
-  for (const it of state.data.items) {
-    for (const t of new Set(itemTags(it).map(String))) counts.set(t, (counts.get(t) || 0) + 1);
+  if (state.viewSources) {
+    const tagsBySub = new Map();
+    for (const it of state.data.items) {
+      let set = tagsBySub.get(it.subId);
+      if (!set) {
+        set = new Set();
+        tagsBySub.set(it.subId, set);
+      }
+      for (const t of itemTags(it)) set.add(String(t));
+    }
+    for (const sub of state.data.subscriptions) {
+      // Disabled bloggers still get a (greyed) card in this list, so they
+      // count here; the article view has no cards for them at all.
+      const tags = new Set((sub.tags || []).map(String));
+      for (const t of tagsBySub.get(sub.id) || []) tags.add(t);
+      for (const t of tags) counts.set(t, (counts.get(t) || 0) + 1);
+    }
+  } else {
+    for (const sub of state.data.subscriptions) {
+      if (sub.disabled) continue;
+      for (const t of sub.tags || []) if (!counts.has(t)) counts.set(t, 0);
+    }
+    for (const it of state.data.items) {
+      for (const t of new Set(itemTags(it).map(String))) counts.set(t, (counts.get(t) || 0) + 1);
+    }
   }
   const tags = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hans-CN'))
@@ -483,6 +595,10 @@ function cardNode({ sub, items, latest, single }) {
       if (item) openTagEditor(item);
     };
   }
+  // 摘要里可能残留 $...$ 公式或 `code`，剥成纯文本后这两类标记仍在；
+  // 渲染掉，免得满屏 \theta 和 \frac 源文。
+  const sumEl = $('.card-sum', li);
+  if (sumEl && !sumEl.classList.contains('none')) renderSummaryMath(sumEl);
   return li;
 }
 
@@ -503,7 +619,15 @@ function sourceCards() {
         const byArticle = itemsOf(s).some((it) => matchesTag(it, state.activeTag));
         if (!byAuthor && !byArticle) return false;
       }
-      if (q && !s.name.toLowerCase().includes(q)) return false;
+      // The search box promises "题目或作者". In the blogger view the author is
+      // the person behind the cards, so match their articles' author field too;
+      // name-only matching makes "Gino Zhang" miss the blogger named Gino Notes.
+      if (q && !s.name.toLowerCase().includes(q)) {
+        const byAuthor = state.data.items.some(
+          (it) => it.subId === s.id && (it.author || '').toLowerCase().includes(q),
+        );
+        if (!byAuthor) return false;
+      }
       return true;
     })
     .sort((a, b) => (itemsOf(b)[0]?.published || 0) - (itemsOf(a)[0]?.published || 0) || a.name.localeCompare(b.name, 'zh-Hans-CN'));
@@ -565,7 +689,11 @@ function renderList() {
     const subs = memo('sources', sourceCards);
     if (!subs.length) {
       empty.hidden = false;
-      empty.textContent = state.activeTag ? `没有打「${state.activeTag}」tag 的博主。` : '还没有博主，点右上角添加。';
+      empty.textContent = queryActive()
+        ? `没有匹配「${state.query.trim()}」的博主。搜的是博主名和其文章的作者名。`
+        : state.activeTag
+          ? `没有打「${state.activeTag}」tag 的博主。`
+          : '还没有博主，点右上角添加。';
       return;
     }
     empty.hidden = true;

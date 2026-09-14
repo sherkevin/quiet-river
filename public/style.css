@@ -376,9 +376,10 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0.6rem 1.25rem 3rem; }
 #river {
   list-style: none; margin: 0; padding: 0;
   display: grid;
-  /* 18px 字号下卡片里的标题与摘要都变宽了，15.5rem 会挤成两行标题加一行摘要。
-     18.5rem 在 62rem 容器里给三列，宽屏给四列，卡片不至于瘦长。 */
-  grid-template-columns: repeat(auto-fill, minmax(18.5rem, 1fr));
+  /* 双列：62rem 容器里每列约 29rem，卡片放得下完整标题加四行摘要。
+     min(26rem, 100%) 是窄屏兜底——26rem 的最小列宽在手机上装不下，
+     没有它会横向溢出，有了它回落到单列。 */
+  grid-template-columns: repeat(auto-fill, minmax(min(26rem, 100%), 1fr));
   gap: 0.8rem;
 }
 
@@ -602,6 +603,19 @@ a.card-title:hover { color: var(--accent); }
   flex: 1 1 auto;
 }
 .card-sum.none { color: var(--ink-3); }
+
+/* KaTeX 行内公式与代码。卡片摘要本身就有 -webkit-line-clamp，块级公式
+   只在 clamp 之内占位；行内公式跟随正文字号。 */
+.card-sum .math-display { display: block; margin: 0.35em 0; overflow-x: auto; overflow-y: hidden; }
+.card-sum .katex { font-size: 0.95em; }
+.card-sum .md-code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  background: color-mix(in srgb, var(--ink-3) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink-3) 18%, transparent);
+  border-radius: 3px;
+  padding: 0 0.25em;
+}
 
 .card-foot {
   display: flex;
