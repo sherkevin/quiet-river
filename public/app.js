@@ -73,55 +73,48 @@ function esc(value) {
 }
 
 /**
- * 渲染卡片摘要里的 LaTeX（$...$ / $$...$$）与代码反引号。
+ * 渲染卡片摘要里的 LaTeX 与代码反引号。分段判据在 public/math-seg.js 的
+ * mathSegments 里（纯函数，test/mathseg.test.js 单测），这里只负责把段交给
+ * KaTeX 并替换 DOM 文本节点。
  *
  * 摘要在抓取层就已经剥成纯文本了（lib/feeds.js 的 stripHTML），所以这里不是
- * 「渲染 Markdown 文档」，是把剥文本时漏下来的两类原样标记收回来：
- * 数学公式渲染成字形（科学空间这类源整段都在 $...$ 里），`code` 换成等宽字体。
+ * 「渲染 Markdown 文档」，是把剥文本时漏下来的数学标记收回来渲染成字形，
+ * `code` 换成等宽字体。数学标记有三种形态：带 $ 分隔符的、知乎与科学空间那种
+ * 没有 $ 的裸命令段、以及整篇 LaTeX 文档 preamble（这种放弃渲染）。
  *
- * 只做内联，不做块级/表格：7165 条摘要里 $...$ 16 条、heading 23 条、
- * 列表 65 条、MD 表格 0 条——全量上 Markdown 渲染器收益接近零，
+ * 只做内联与完整环境块，不做 Markdown 的 heading/列表/表格：7084 条摘要里
+ * heading 23 条、列表 65 条、MD 表格 0 条，全量上 Markdown 渲染器收益接近零，
  * 反而要把换行、强调这些噪声排版出来。
- *
- * 边界故意保守：
- * - `$100`、美元价格这类不配对的 $ 不渲染；只有 \$...\$（含跨行）成对才算。
- * - 分隔符内部必须含 LaTeX 命令（反斜杠）或上下标（^ _）才认是公式，
- *   否则「$abc$」这种纯变量对不值得替换字体。
- * - KaTeX 渲染失败时保留原文，不炸卡片。
  */
 function renderSummaryMath(root) {
   if (!root || typeof katex === 'undefined') return;
-  // 在纯文本节点上工作：splitText 会改 DOM，所以先把命中的节点收集起来再动。
+  // 在纯文本节点上工作：替换会改 DOM，所以先把命中的节点收集起来再动。
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const hits = [];
-  const re = /\$\$([\s\S]+?)\$\$|\$([^\n$]+?)\$/;
   let node;
   while ((node = walker.nextNode())) {
-    if (re.test(node.nodeValue)) hits.push(node);
+    if (mathSegments(node.nodeValue).length) hits.push(node);
   }
   for (const textNode of hits) {
     const text = textNode.nodeValue;
-    let m;
-    let last = 0;
     const frag = document.createDocumentFragment();
+    let last = 0;
     let replacedAny = false;
-    re.lastIndex = 0;
-    while ((m = re.exec(text))) {
-      const display = m[1] !== undefined;
-      const tex = (m[1] !== undefined ? m[1] : m[2]).trim();
-      // 只把「像公式」的段落交给 KaTeX：必须含命令（\frac）或上下标（x_i^2）。
-      if (!/\\[A-Za-z]|[\^_]/.test(tex)) continue;
-      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-      const span = document.createElement('span');
-      span.className = display ? 'math math-display' : 'math';
-      try {
-        katex.render(tex, span, { throwOnError: false, displayMode: display });
+    for (const seg of mathSegments(text)) {
+      if (seg.start > last) frag.appendChild(document.createTextNode(text.slice(last, seg.start)));
+      // 走 math-seg.js 的修复式渲染：实体还原、补未闭合环境、砍截半命令，
+      // 三轮都失败返回 null，这里原样保留文本——不把半截公式画成红色报错字形。
+      const html = renderMathHtml(katex, seg.tex, seg.display);
+      if (html === null) {
+        frag.appendChild(document.createTextNode(seg.tex));
+      } else {
+        const span = document.createElement('span');
+        span.className = seg.display ? 'math math-display' : 'math';
+        span.innerHTML = html;
+        frag.appendChild(span);
         replacedAny = true;
-      } catch {
-        span.textContent = m[0];
       }
-      frag.appendChild(span);
-      last = m.index + m[0].length;
+      last = seg.end;
     }
     if (!replacedAny) continue;
     if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));

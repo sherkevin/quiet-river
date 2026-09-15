@@ -4197,7 +4197,8 @@
       "feeds": [
         "https://api.xgo.ing/rss/user/97f1484ae48c430fbbf3438099743674"
       ],
-      "addedAt": "2026-09-14T07:54:39.355Z"
+      "addedAt": "2026-09-14T07:54:39.355Z",
+      "disabled": true
     },
     {
       "id": "ebb434e15d12",
@@ -4213,7 +4214,8 @@
       "feeds": [
         "https://api.xgo.ing/rss/user/831fac36aa0a49a9af79f35dc1c9b5d9"
       ],
-      "addedAt": "2026-09-14T07:54:44.160Z"
+      "addedAt": "2026-09-14T07:54:44.160Z",
+      "disabled": true
     },
     {
       "id": "3d0890e4cb16",
