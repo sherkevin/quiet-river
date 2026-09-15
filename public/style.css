@@ -335,6 +335,48 @@ button { font-family: inherit; }
 .tag .n { opacity: 0.55; font-variant-numeric: tabular-nums; font-size: 0.7rem; }
 .tagbar .tagbar-empty { color: var(--ink-3); font-size: 0.75rem; padding: 0.2rem 0; }
 
+/* ---------- source bar + 分组标题 ---------- */
+
+/* 来源条复用 tagbar 的形状，只把间距收紧一点：博主视图里吸顶区已经有 tagbar，
+   两条并排再各给 0.7rem 下内距就太占屏幕了。 */
+.sourcebar {
+  padding-top: 0;
+  padding-bottom: 0.6rem;
+  border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent);
+  margin-top: -0.2rem;
+}
+
+/* 「按来源分组」是个开关不是筛选项，用虚线边和方角跟筛选项区分开，
+   免得看起来像又一个平台。 */
+.tag.group-toggle {
+  border-style: dashed;
+  border-radius: 4px;
+}
+
+/* 分组标题是 #river 网格里的一个 li，必须跨满整行，否则会占掉一个卡片格。 */
+.source-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line-2);
+  list-style: none;
+}
+.source-head:first-child { margin-top: 0; }
+.source-head-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+}
+.source-head .n {
+  font-size: 0.7rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- problems ---------- */
 
 .problems { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }

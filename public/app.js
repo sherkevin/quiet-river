@@ -7,6 +7,7 @@ const READ_KEY = 'quiet-river:read';
 const SORT_KEY = 'quiet-river:sort';
 const THEME_KEY = 'quiet-river:theme';
 const PAGE_SIZE_KEY = 'quiet-river:pageSize';
+const GROUP_SRC_KEY = 'quiet-river:groupSources';
 
 // 每页条数。库里已经有 4588 条，全量塞进 DOM 的话一次 render 要建四千多个节点，
 // 搜索时每敲一个字重建一遍会明显卡。分页之后一次只建一页。
@@ -26,6 +27,11 @@ const state = {
   viewAdd: false,
   viewSources: false,
   viewSubId: null,
+  // 来源（平台）筛选：只作用于博主视图。多选是 OR——一个博主只属于一个来源，
+  // 用 AND 的话选两个就永远是空列表。
+  activeSources: [],
+  // 博主视图里是否按来源分段显示。默认开，关掉就是原来那条按时间排的平铺列表。
+  groupSources: localStorage.getItem(GROUP_SRC_KEY) !== '0',
   sortMode: ['time', 'title', 'author'].includes(localStorage.getItem(SORT_KEY)) ? localStorage.getItem(SORT_KEY) : 'time',
   page: 1,
   pageSize: PAGE_SIZES.includes(storedPageSize) ? storedPageSize : 40,
@@ -547,6 +553,82 @@ function renderTagbar() {
   }
 }
 
+/* ---------- source bar: 博主按来源（平台）分类 ---------- */
+
+function toggleSource(platform) {
+  const i = state.activeSources.indexOf(platform);
+  if (i === -1) state.activeSources.push(platform);
+  else state.activeSources.splice(i, 1);
+  state.page = 1;
+  render();
+}
+
+function setGroupSources(on) {
+  state.groupSources = on;
+  localStorage.setItem(GROUP_SRC_KEY, on ? '1' : '0');
+  state.page = 1;
+  render();
+}
+
+// 来源条只在博主视图出现：文章视图里来源信息已经在每张卡的署名行上，再放一排
+// chip 只会把吸顶区撑高。chip 上的数字是「当前 tag/搜索筛选下该来源有几个博主」，
+// 不含来源自己的选择，和 tagbar 的计数口径一致。
+function renderSourcebar() {
+  const bar = $('#sourcebar');
+  bar.innerHTML = '';
+  if (!state.viewSources || currentViewSub()) {
+    bar.hidden = true;
+    return;
+  }
+  const counts = memo('scopeSources', scopeSources);
+  bar.hidden = false;
+
+  // 「分组」开关：关掉就是一整条按时间排的列表，不做来源分段。
+  const groupBtn = document.createElement('button');
+  groupBtn.className = 'tag group-toggle';
+  groupBtn.type = 'button';
+  groupBtn.title = state.groupSources
+    ? '现在按来源分段显示，点一下改成一条按时间排的列表'
+    : '现在是一条按时间排的列表，点一下按来源分段显示';
+  groupBtn.setAttribute('aria-pressed', String(state.groupSources));
+  groupBtn.textContent = '按来源分组';
+  groupBtn.onclick = () => setGroupSources(!state.groupSources);
+  bar.appendChild(groupBtn);
+
+  const all = document.createElement('button');
+  all.className = 'tag';
+  all.type = 'button';
+  all.title = '显示全部来源的博主';
+  all.setAttribute('aria-pressed', String(!state.activeSources.length));
+  all.textContent = '全部来源';
+  all.onclick = () => {
+    state.activeSources = [];
+    state.page = 1;
+    render();
+  };
+  bar.appendChild(all);
+
+  if (!counts.length) {
+    const hint = document.createElement('span');
+    hint.className = 'tagbar-empty';
+    hint.textContent = '当前筛选下没有博主';
+    bar.appendChild(hint);
+    return;
+  }
+
+  const wanted = new Set(state.activeSources);
+  for (const { platform, label, count } of counts) {
+    const btn = document.createElement('button');
+    btn.className = 'tag';
+    btn.type = 'button';
+    btn.title = `只看来自${label}的博主`;
+    btn.setAttribute('aria-pressed', String(wanted.has(platform)));
+    btn.innerHTML = `${esc(label)}<span class="n">${count}</span>`;
+    btn.onclick = () => toggleSource(platform);
+    bar.appendChild(btn);
+  }
+}
+
 function cardNode({ sub, items, latest, single }) {
   const li = document.createElement('li');
   li.className = 'card';
@@ -643,33 +725,55 @@ function authorCards(sub) {
     .sort(compareCards);
 }
 
-// 博主页：每个博主一张卡。tag 筛选同时认作者级 tag 与其文章带的 tag；多选时
-// 每个选中的 tag 都要在「作者 tag ∪ 文章 tag」里命中（AND）。
-function sourceCards() {
+// 博主是否命中当前的 tag / 搜索筛选。来源筛选不在这里——它单独一层，这样来源条
+// 上的计数能忽略自己那一维的选择（和 tagbar 的计数同一个口径），数字回答的是
+// 「选上这个来源之后大概还剩多少个博主」。
+function subMatchesScope(s) {
   const q = state.query.trim().toLowerCase();
   const wants = state.activeTags.map((t) => String(t).toLowerCase());
-  return state.data.subscriptions
-    .filter((s) => {
-      if (wants.length) {
-        const authorTags = (s.tags || []).map((t) => String(t).toLowerCase());
-        const ok = wants.every((w) => {
-          if (authorTags.includes(w)) return true;
-          return itemsOf(s).some((it) => itemTags(it).some((t) => eqTag(t, w)));
-        });
-        if (!ok) return false;
-      }
-      // The search box promises "题目或作者". In the blogger view the author is
-      // the person behind the cards, so match their articles' author field too;
-      // name-only matching makes "Gino Zhang" miss the blogger named Gino Notes.
-      if (q && !s.name.toLowerCase().includes(q)) {
-        const byAuthor = state.data.items.some(
-          (it) => it.subId === s.id && (it.author || '').toLowerCase().includes(q),
-        );
-        if (!byAuthor) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => (itemsOf(b)[0]?.published || 0) - (itemsOf(a)[0]?.published || 0) || a.name.localeCompare(b.name, 'zh-Hans-CN'));
+  if (wants.length) {
+    const authorTags = (s.tags || []).map((t) => String(t).toLowerCase());
+    const ok = wants.every((w) => {
+      if (authorTags.includes(w)) return true;
+      return itemsOf(s).some((it) => itemTags(it).some((t) => eqTag(t, w)));
+    });
+    if (!ok) return false;
+  }
+  // The search box promises "题目或作者". In the blogger view the author is
+  // the person behind the cards, so match their articles' author field too;
+  // name-only matching makes "Gino Zhang" miss the blogger named Gino Notes.
+  if (q && !s.name.toLowerCase().includes(q)) {
+    const byAuthor = state.data.items.some(
+      (it) => it.subId === s.id && (it.author || '').toLowerCase().includes(q),
+    );
+    if (!byAuthor) return false;
+  }
+  return true;
+}
+
+const byLatestThenName = (a, b) =>
+  (itemsOf(b)[0]?.published || 0) - (itemsOf(a)[0]?.published || 0) ||
+  a.name.localeCompare(b.name, 'zh-Hans-CN');
+
+// 博主页：每个博主一张卡。tag 筛选同时认作者级 tag 与其文章带的 tag；多选时
+// 每个选中的 tag 都要在「作者 tag ∪ 文章 tag」里命中（AND）。来源筛选是多选 OR。
+function sourceCards() {
+  const wanted = new Set(state.activeSources);
+  const inScope = state.data.subscriptions.filter(subMatchesScope);
+  const picked = wanted.size
+    ? inScope.filter((s) => wanted.has(platformKey(s)))
+    : inScope;
+  const sorted = [...picked].sort(byLatestThenName);
+  // 分组时按来源聚块：组间沿用 groupBySource 的顺序（博主多的在前），组内保持
+  // 上面排好的时间序。不分组就是原来那条平铺的时间序列表。
+  if (!state.groupSources) return sorted;
+  return groupBySource(sorted).flatMap((g) => g.subs);
+}
+
+// 当前筛选下还剩哪些来源、各多少个博主。顺序与 groupBySource 一致，所以来源条
+// 上的 chip 顺序和列表里的分组顺序对得上。
+function scopeSources() {
+  return sourceCounts(state.data.subscriptions.filter(subMatchesScope));
 }
 
 function sourceNode(sub) {
@@ -714,6 +818,36 @@ function sourceNode(sub) {
   return li;
 }
 
+// 把当前页的博主卡拼成节点序列：分组开着时，在来源切换处插一个跨整行的标题。
+// 分页是切在排好序的扁平数组上的，所以一页里可能同时出现两个来源、也可能一个
+// 来源被切成两页——标题按「和上一张卡的来源不同」来判，两边都不会漏。
+function sourceNodes(slice) {
+  if (!state.groupSources) return slice.map((s) => sourceNode(s));
+  const nodes = [];
+  let prevPlatform = null;
+  // 标题上的名字与数字都取自 scopeSources，和来源条上的 chip 同源。不在这里重算
+  // label——groupBySource 对没登记的平台走的是「清单里多数派写法」，这里另写一套
+  // 简化版会出现标题叫 A、筛选条叫 B 的分裂。
+  const totals = new Map(memo('scopeSources', scopeSources).map((c) => [c.platform, c.count]));
+  const labels = new Map(memo('scopeSources', scopeSources).map((c) => [c.platform, c.label]));
+  for (const sub of slice) {
+    const platform = platformKey(sub);
+    if (platform !== prevPlatform) {
+      const head = document.createElement('li');
+      head.className = 'source-head';
+      head.setAttribute('role', 'presentation');
+      const total = totals.get(platform);
+      head.innerHTML =
+        `<span class="source-head-label">${esc(labels.get(platform) || sub.platformLabel || platform)}</span>` +
+        `<span class="n">${total ?? ''}</span>`;
+      nodes.push(head);
+      prevPlatform = platform;
+    }
+    nodes.push(sourceNode(sub));
+  }
+  return nodes;
+}
+
 // renderCards 是旧名，现在叫 renderList：它一次只渲染当前页，并在底部画分页器。
 // memo 在 renderList 开头由调用方（render / 搜索 / 翻页）保证已 reset。
 function renderList() {
@@ -737,7 +871,7 @@ function renderList() {
     }
     empty.hidden = true;
     const info = paginate(subs);
-    for (const s of info.slice) list.appendChild(sourceNode(s));
+    for (const node of sourceNodes(info.slice)) list.appendChild(node);
     renderPager(info);
     return;
   }
@@ -823,6 +957,7 @@ function render() {
   if (state.viewAdd) {
     addPage.hidden = false;
     $('.tagbar').hidden = true;
+    $('#sourcebar').hidden = true;
     $('main').hidden = true;
     $('.problems').hidden = true;
     $('#counts').textContent = '添加博主';
@@ -851,6 +986,7 @@ function render() {
   }
   renderCounts();
   renderTagbar();
+  renderSourcebar();
   renderList();
   renderProblems();
   renderFooter();
