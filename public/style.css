@@ -638,6 +638,13 @@ a.card-title:hover { color: var(--accent); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .chip:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+/* 卡片上的 tag chip 命中当前多选时高亮，和 tagbar 的选中态同一套色 */
+.chip.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
 
 .chip-add { border-style: dashed; color: var(--ink-3); }
 .chip-add:hover { color: var(--accent); border-color: var(--accent); }

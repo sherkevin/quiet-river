@@ -15,7 +15,11 @@ const storedPageSize = Number(localStorage.getItem(PAGE_SIZE_KEY));
 
 const state = {
   data: null,
-  activeTag: null,
+  // tag 筛选是多选，AND 关系：选中的每个 tag 文章都得有。
+  activeTags: [],
+  // 「未读」筛选：只看 readSet 里没有的文章。蓝点（未读标记）本身是全局的，
+  // 存在 localStorage，点过一篇它在任何视图都不再出现。
+  unreadOnly: false,
   query: '',
   editingId: null,
   autoTimer: null,
@@ -190,16 +194,20 @@ function itemTags(it) {
 
 const uniq = (arr) => [...new Set(arr.map(String))];
 
-function matchesTag(it, tag) {
-  const want = String(tag).toLowerCase();
-  return itemTags(it).some((t) => String(t).toLowerCase() === want);
+const eqTag = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+// 多选 AND：选中的每个 tag 都要在文章上（文章级人工 tag、平台分类、博主继承
+// 的 tag 三路并集里找）。一个都没选时恒真。
+function matchesTags(it) {
+  return state.activeTags.every((tag) => itemTags(it).some((t) => eqTag(t, tag)));
 }
 
 function itemsOf(sub) {
   const q = state.query.trim().toLowerCase();
   return state.data.items.filter((it) => {
     if (it.subId !== sub.id) return false;
-    if (state.activeTag && !matchesTag(it, state.activeTag)) return false;
+    if (state.unreadOnly && readSet.has(it.id)) return false;
+    if (!matchesTags(it)) return false;
     if (!q) return true;
     return (
       it.title.toLowerCase().includes(q) ||
@@ -259,7 +267,6 @@ function articleCards() {
   const out = [];
   for (const sub of state.data.subscriptions) {
     for (const it of itemsOf(sub)) {
-      if (state.activeTag && !matchesTag(it, state.activeTag)) continue;
       if (
         q &&
         !(
@@ -278,7 +285,7 @@ function articleCards() {
 }
 
 function renderCounts() {
-  const scope = state.activeTag ? `「${state.activeTag}」` : '全部';
+  const scope = scopeLabel();
   const viewSub = currentViewSub();
   if (viewSub) {
     $('#counts').textContent = viewSub.disabled
@@ -432,11 +439,26 @@ function renderPager(info) {
 
 // 换 tag / 换搜索词 / 换排序都是在换「在看哪一批卡片」，页码要回到 1，
 // 否则会停在一个新列表可能根本没有的页上，看起来像空白。
-// 所有筛选入口都走 setTag，省得每处都记得重置页码。
-function setTag(tag) {
-  state.activeTag = tag;
+// 所有筛选入口都走这里，省得每处都记得重置页码。
+function toggleTag(tag) {
+  const i = state.activeTags.findIndex((t) => eqTag(t, tag));
+  if (i === -1) state.activeTags.push(tag);
+  else state.activeTags.splice(i, 1);
   state.page = 1;
   render();
+}
+
+function setUnread(on) {
+  state.unreadOnly = on;
+  state.page = 1;
+  render();
+}
+
+function scopeLabel() {
+  const parts = [];
+  if (state.activeTags.length) parts.push(`「${state.activeTags.join(' + ')}」`);
+  if (state.unreadOnly) parts.push('未读');
+  return parts.length ? parts.join(' · ') : '全部';
 }
 
 function renderTagbar() {
@@ -446,20 +468,38 @@ function renderTagbar() {
   const all = document.createElement('button');
   all.className = 'tag';
   all.type = 'button';
-  all.setAttribute('aria-pressed', String(!state.activeTag));
+  const nothingSelected = !state.activeTags.length && !state.unreadOnly;
+  all.setAttribute('aria-pressed', String(nothingSelected));
   all.textContent = '全部';
-  all.onclick = () => setTag(null);
+  all.onclick = () => {
+    state.activeTags = [];
+    setUnread(false);
+  };
   bar.appendChild(all);
+
+  // 「未读」：只看没点开的文章。数字是当前其余筛选下还剩多少篇没读。
+  const unreadBtn = document.createElement('button');
+  unreadBtn.className = 'tag';
+  unreadBtn.type = 'button';
+  unreadBtn.setAttribute('aria-pressed', String(state.unreadOnly));
+  const unreadCount = state.data.items.filter(
+    (it) => !readSet.has(it.id) && !state.data.subscriptions.find((s) => s.id === it.subId)?.disabled,
+  ).length;
+  unreadBtn.innerHTML = `未读<span class="n">${unreadCount}</span>`;
+  unreadBtn.onclick = () => setUnread(!state.unreadOnly);
+  bar.appendChild(unreadBtn);
 
   // Union of your author-level tags and the article-level categories the
   // feeds carry, so a tag can be as fine-grained as the platform allows.
-  // The number on a chip is the size of the list you get after clicking it:
-  // articles in the article view, bloggers in the blogger view. Showing an
-  // article count next to a list of blogger cards reads as a bug.
+  // The number on a chip counts what that tag matches under the current
+  // 未读/搜索 scope, ignoring the tag selection itself — so it answers
+  // "adding this tag leaves me with roughly how many".
+  const inScope = (it) => !(state.unreadOnly && readSet.has(it.id));
   const counts = new Map();
   if (state.viewSources) {
     const tagsBySub = new Map();
     for (const it of state.data.items) {
+      if (!inScope(it)) continue;
       let set = tagsBySub.get(it.subId);
       if (!set) {
         set = new Set();
@@ -480,6 +520,7 @@ function renderTagbar() {
       for (const t of sub.tags || []) if (!counts.has(t)) counts.set(t, 0);
     }
     for (const it of state.data.items) {
+      if (!inScope(it)) continue;
       for (const t of new Set(itemTags(it).map(String))) counts.set(t, (counts.get(t) || 0) + 1);
     }
   }
@@ -498,11 +539,10 @@ function renderTagbar() {
     const btn = document.createElement('button');
     btn.className = 'tag';
     btn.type = 'button';
-    btn.setAttribute('aria-pressed', String(state.activeTag === tag));
+    const on = state.activeTags.some((t) => eqTag(t, tag));
+    btn.setAttribute('aria-pressed', String(on));
     btn.innerHTML = `${esc(tag)}<span class="n">${n}</span>`;
-    btn.onclick = () => {
-      setTag(state.activeTag === tag ? null : tag);
-    };
+    btn.onclick = () => toggleTag(tag);
     bar.appendChild(btn);
   }
 }
@@ -520,7 +560,7 @@ function cardNode({ sub, items, latest, single }) {
   const chipSource = latest ? (own.length ? own : latest.tags || []) : sub.tags || [];
   const chips = [...new Set(chipSource.map(String))]
     .slice(0, 4)
-    .map((t) => `<button class="chip" type="button" data-tag="${esc(t)}">${esc(t)}</button>`)
+    .map((t) => `<button class="chip${state.activeTags.some((a) => eqTag(a, t)) ? ' on' : ''}" type="button" data-tag="${esc(t)}">${esc(t)}</button>`)
     .join('');
 
   const when = latest
@@ -561,7 +601,7 @@ function cardNode({ sub, items, latest, single }) {
   for (const chip of $$('.chip:not(.chip-add)', li)) {
     chip.onclick = (e) => {
       e.preventDefault();
-      setTag(chip.dataset.tag);
+      toggleTag(chip.dataset.tag);
     };
   }
   const link = $('.card-title[data-item]', li);
@@ -570,6 +610,8 @@ function cardNode({ sub, items, latest, single }) {
       readSet.add(link.dataset.item);
       saveRead();
       li.querySelector('.badge')?.remove();
+      // 未读筛选下点开就不再是未读：当场把卡片移出列表，不用等下一次 render。
+      if (state.unreadOnly) render();
     };
     link.addEventListener('click', markRead);
     // Clicking anywhere on the card body behaves like clicking the title.
@@ -601,16 +643,20 @@ function authorCards(sub) {
     .sort(compareCards);
 }
 
-// 博主页：每个博主一张卡。tag 筛选同时认作者级 tag 与其文章带的 tag。
+// 博主页：每个博主一张卡。tag 筛选同时认作者级 tag 与其文章带的 tag；多选时
+// 每个选中的 tag 都要在「作者 tag ∪ 文章 tag」里命中（AND）。
 function sourceCards() {
   const q = state.query.trim().toLowerCase();
-  const want = state.activeTag ? String(state.activeTag).toLowerCase() : null;
+  const wants = state.activeTags.map((t) => String(t).toLowerCase());
   return state.data.subscriptions
     .filter((s) => {
-      if (want) {
-        const byAuthor = (s.tags || []).some((t) => String(t).toLowerCase() === want);
-        const byArticle = itemsOf(s).some((it) => matchesTag(it, state.activeTag));
-        if (!byAuthor && !byArticle) return false;
+      if (wants.length) {
+        const authorTags = (s.tags || []).map((t) => String(t).toLowerCase());
+        const ok = wants.every((w) => {
+          if (authorTags.includes(w)) return true;
+          return itemsOf(s).some((it) => itemTags(it).some((t) => eqTag(t, w)));
+        });
+        if (!ok) return false;
       }
       // The search box promises "题目或作者". In the blogger view the author is
       // the person behind the cards, so match their articles' author field too;
@@ -633,7 +679,7 @@ function sourceNode(sub) {
   li.className = `card source-card${sub.disabled ? ' off' : ''}`;
   const host = sub.url ? String(sub.url).replace(/^https?:\/\//, '').replace(/\/.*$/, '') : '';
   const tags = (sub.tags || [])
-    .map((t) => `<button class="chip" type="button" data-tag="${esc(t)}">${esc(t)}</button>`)
+    .map((t) => `<button class="chip${state.activeTags.some((a) => eqTag(a, t)) ? ' on' : ''}" type="button" data-tag="${esc(t)}">${esc(t)}</button>`)
     .join('');
   const when = latest
     ? `<span class="card-when" title="${esc(absTime(latest.published))}">${esc(relTime(latest.published))}</span>`
@@ -657,7 +703,7 @@ function sourceNode(sub) {
   for (const chip of $$('.chip', li)) {
     chip.onclick = (e) => {
       e.preventDefault();
-      setTag(chip.dataset.tag);
+      toggleTag(chip.dataset.tag);
     };
   }
   $('.toggle', li).onclick = (e) => {
@@ -684,8 +730,8 @@ function renderList() {
       empty.hidden = false;
       empty.textContent = queryActive()
         ? `没有匹配「${state.query.trim()}」的博主。搜的是博主名和其文章的作者名。`
-        : state.activeTag
-          ? `没有打「${state.activeTag}」tag 的博主。`
+        : state.activeTags.length
+          ? `没有同时带「${state.activeTags.join(' + ')}」tag 的博主。`
           : '还没有博主，点右上角添加。';
       return;
     }
@@ -707,6 +753,10 @@ function renderList() {
       } else {
         empty.textContent = `「${viewSub.name}」还没有抓到内容。`;
       }
+    } else if (state.unreadOnly) {
+      empty.textContent = '没有未读的文章——这个筛选下的都点开过了。';
+    } else if (state.activeTags.length) {
+      empty.textContent = `没有同时带「${state.activeTags.join(' + ')}」tag 的文章。多选是 AND：每个选中的 tag 都得有。`;
     } else if (queryActive()) {
       empty.textContent = `没有匹配「${state.query.trim()}」的文章。搜的是题目和作者名。`;
     } else if (!state.data.subscriptions.length) {
