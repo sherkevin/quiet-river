@@ -39,6 +39,12 @@ const state = {
 
 let readSet = new Set(JSON.parse(localStorage.getItem(READ_KEY) || 'null') || []);
 
+// 只读快照模式：GitHub Pages 上的那份是静态生成物，没有后端，写操作无处可去。
+// 快照页在 app.js 之前加载的 snapshot.js 里把 window.QR_READONLY 置真；本地服务
+// 不设这个变量，行为与原来完全一致。禁用写操作靠这一处开关，不靠 DOM 拦截——
+// 列表每次 render 都重建节点，capture 期拦截迟早漏一个。
+const QR_READONLY = Boolean(window.QR_READONLY);
+
 function saveRead() {
   localStorage.setItem(READ_KEY, JSON.stringify([...readSet].slice(-6000)));
 }
@@ -167,6 +173,12 @@ function renderSummaryMath(root) {
 /* ---------- data ---------- */
 
 async function api(path, options = {}) {
+  // 静态快照没有后端：写操作在这里就拦住，给出能行动的提示，而不是让 fetch
+  // 打到 Pages 上吃一个 404/405 再翻译成「HTTP 404」。
+  const method = String(options.method || 'GET').toUpperCase();
+  if (QR_READONLY && method !== 'GET') {
+    throw new Error('静态快照只读：这个操作要在跑了 node server.js 的本机服务上做');
+  }
   const res = await fetch(path, {
     headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
     ...options,
@@ -185,7 +197,14 @@ async function api(path, options = {}) {
 }
 
 async function loadState() {
-  state.data = await api('/api/state');
+  if (QR_READONLY) {
+    // 快照站的数据是生成时写死的 state.json，与 index.html 同目录。
+    const res = await fetch('./state.json');
+    if (!res.ok) throw new Error(`快照加载失败（HTTP ${res.status}）`);
+    state.data = await res.json();
+  } else {
+    state.data = await api('/api/state');
+  }
   render();
 }
 
@@ -235,7 +254,8 @@ function applyHash() {
   // 否则点「返回全部」再点同一个博主，会丢掉正在看的页。
   if (subId !== state.viewSubId || viewSources !== state.viewSources) state.page = 1;
   state.viewSubId = subId;
-  state.viewAdd = location.hash === '#/add';
+  // 快照没有后端，添加页提交必失败，直接不认这个 hash。
+  state.viewAdd = location.hash === '#/add' && !QR_READONLY;
   state.viewSources = viewSources;
 }
 
@@ -674,7 +694,7 @@ function cardNode({ sub, items, latest, single }) {
     </div>
     ${body}
     <div class="card-foot">
-      <span class="card-tags">${chips}${latest ? `<button class="chip chip-add" type="button" data-tagitem="${esc(latest.id)}" title="给这篇打 tag">+</button>` : ''}</span>
+      <span class="card-tags">${chips}${latest && !QR_READONLY ? `<button class="chip chip-add" type="button" data-tagitem="${esc(latest.id)}" title="给这篇打 tag">+</button>` : ''}</span>
       <span class="spacer"></span>
       ${!single && items.length > 1 ? `<span class="card-more" title="该博主在此筛选下还有 ${items.length - 1} 条">+${items.length - 1}</span>` : ''}
     </div>
@@ -801,7 +821,9 @@ function sourceNode(sub) {
     <p class="card-sum none">${where} · ${sub.disabled ? '已关闭，文章不展示' : `${items.length} 条`}</p>
     <div class="card-foot">
       <span class="card-tags">${tags}</span>
-      <button class="toggle" type="button" aria-pressed="${String(!sub.disabled)}">${sub.disabled ? '已关闭' : '展示中'}</button>
+      ${QR_READONLY
+        ? `<span class="toggle static${sub.disabled ? ' off-state' : ''}">${sub.disabled ? '已关闭' : '展示中'}</span>`
+        : `<button class="toggle" type="button" aria-pressed="${String(!sub.disabled)}">${sub.disabled ? '已关闭' : '展示中'}</button>`}
     </div>
   `;
   for (const chip of $$('.chip', li)) {
@@ -937,6 +959,22 @@ function renderFooter() {
   } else {
     gh.hidden = true;
   }
+  // 静态快照的页脚：说清这是哪一刻的快照、写操作去哪做。导出 OPML 改指生成时
+  // 写好的静态文件，/api/export 在 Pages 上不存在。
+  const note = $('#foot-snapshot');
+  if (note) {
+    note.hidden = !QR_READONLY;
+    if (QR_READONLY) {
+      // 生成时刻由快照页的 snapshot.js 注入（window.QR_SNAPSHOT_AT），和「上次抓取」
+      // 是两个时间：前者是这份静态文件出炉的时刻，后者是内容抓到的时刻。
+      const genAt = window.QR_SNAPSHOT_AT || 0;
+      note.textContent = genAt
+        ? `静态快照 · 生成于 ${absTime(genAt)} · 内容抓到 ${absTime(at || genAt)} · 只读，添加与抓取在本机服务上做`
+        : '静态快照 · 只读，添加与抓取在本机服务上做';
+    }
+  }
+  const exportLink = $('#foot-export');
+  if (exportLink && QR_READONLY) exportLink.href = './subscriptions.opml';
 }
 
 function syncThemeSegs() {
@@ -948,6 +986,12 @@ function syncThemeSegs() {
 
 function render() {
   resetMemo();
+  // 只读快照：写操作按钮直接不显示。留着灰掉的按钮会让人点了才被告知不行，
+  // 不如一开始就只给能用的东西。页脚会说明这是快照、写操作去哪做。
+  for (const id of ['btn-refresh', 'btn-add', 'btn-settings', 'btn-toggle-author', 'btn-tags-author', 'btn-edit-author']) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = QR_READONLY;
+  }
   for (const btn of $$('.viewnav .seg')) {
     btn.setAttribute('aria-pressed', String((btn.dataset.view === 'sources') === state.viewSources));
   }
@@ -1494,14 +1538,15 @@ function bind() {
   applyHash();
   try {
     await loadState();
-    scheduleAuto();
+    // 快照没有后端也没有定时器要排：内容就是生成那一刻的，不会也不该自己变。
+    if (!QR_READONLY) scheduleAuto();
     if (!state.data.subscriptions.length) {
       location.hash = '#/add';
     } else if (!new URLSearchParams(location.search).has('noauto')) {
-      maybeAutoRefresh();
+      if (!QR_READONLY) maybeAutoRefresh();
     }
   } catch (err) {
-    $('#counts').textContent = '连不上后端';
+    $('#counts').textContent = QR_READONLY ? '快照加载失败' : '连不上后端';
     toast(`加载失败：${err.message}`, 6000);
   }
 })();

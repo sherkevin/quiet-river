@@ -141,6 +141,24 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7890 node server.js
 
 `NODE_USE_ENV_PROXY=1` 是 Node 24+ 让内置 fetch 读取代理环境变量的开关。不加这个变量，内置 fetch 会无视 `HTTPS_PROXY`。
 
+## 在别的设备上看这条河
+
+服务默认只听 `127.0.0.1`，所以手机在同一个 Wi-Fi 下也打不开。三种走法，按你想要的「活」的程度选：
+
+**同一局域网：把监听地址放开。** 服务跑在 `HOST=0.0.0.0 node server.js`，手机访问 `http://<这台机器的局域网 IP>:4321`。注意这等于把河对局域网里所有设备开放，它没有账号体系，谁打开都能看、都能改（添加、删除、打 tag 都是写操作）。家里 Wi-Fi 可以接受，公共网络不要这么跑。
+
+**不在同一局域网：内网穿透。** 服务保持只听回环，用一条隧道把端口递出去，例如 `ssh -R 80:127.0.0.1:4321 你的公网机` 或 tailscale / frp。好处是河仍然是活的（能刷新、能添加），且只有拿到隧道地址的人能进；坏处是要有一台能常驻的机器或一个隧道账号。
+
+**GitHub Pages：只读静态快照，谁都能看。** Pages 只托管静态文件，跑不了 `node server.js`，也拿不到你的登录态，所以这里的形态是「某一刻的河」：
+
+```
+node tools/make-pages.js --out pages-out   # 生成快照站：state.json + 静态 OPML + 只读开关
+```
+
+生成器复用 `tools/make-seed.js` 的脱敏闸（每源截 20 条、摘要截断、命中 `tools/scan-leaks.js` 模式表的串换占位符），生成后再用扫描器扫一遍产物，不干净就退出非零。把 `pages-out/` 推到仓库的 `gh-pages` 分支、在仓库设置里把 Pages 源指到该分支即可。快照站复用同一套前端：`app.js` 检测到 `window.QR_READONLY` 就改读同目录的 `state.json`，并隐藏刷新、添加、设置、开关这些写操作——页脚会写明这是哪一刻的快照、写操作去哪做。
+
+`tools/make-pages.js` 与 `tools/publish.sh`、`tools/scan-leaks.js` 一样是**本机工具，不进公开仓**：它依赖的脱敏模式表写明了「这台机器上哪些串不能外流」，发布出去等于公开一份索引。
+
 ## 它刻意不做的事
 
 - **不做推荐排序**。时间倒序是唯一排序。没有「热门」「相似」「可能感兴趣」。
@@ -213,7 +231,7 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7890 node server.js
 ## 开发
 
 ```
-node --test          # 38 个测试：XML 边界、三种 feed 格式、平台识别与转发归类、适配器匹配、改 feed 地址的回归、__NEXT_DATA__ 提取、摘要数学分段与截断修复、博主 tag 继承
+node --test          # 54 个测试：XML 边界、三种 feed 格式、平台识别与转发归类、适配器匹配、改 feed 地址的回归、__NEXT_DATA__ 提取、摘要数学分段与截断修复、博主 tag 继承、来源分组
 PORT=8080 node server.js
 ```
 

@@ -8,6 +8,7 @@ const store = require('./lib/store');
 const { resolve, verifyFeed, relayPlatform } = require('./lib/resolve');
 const { refreshAll, refreshOne, refreshAdapter } = require('./lib/refresh');
 const { adapterPlatforms } = require('./lib/adapters');
+const { toOpml } = require('./lib/opml');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PORT = Number(process.env.PORT || 4321);
@@ -349,28 +350,6 @@ async function handleApi(req, res, pathname) {
   }
 
   return sendJson(res, 404, { error: `没有这个接口：${method} ${pathname}` });
-}
-
-function escapeXml(value) {
-  return String(value ?? '').replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
-}
-
-function toOpml(config) {
-  const lines = [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<opml version="2.0">',
-    '  <head><title>quiet-river subscriptions</title></head>',
-    '  <body>',
-  ];
-  for (const sub of config.subscriptions) {
-    for (const feed of sub.feeds || []) {
-      lines.push(
-        `    <outline type="rss" text="${escapeXml(sub.name)}" title="${escapeXml(sub.name)}" xmlUrl="${escapeXml(feed)}" htmlUrl="${escapeXml(sub.url)}" category="${escapeXml((sub.tags || []).join(','))}" />`
-      );
-    }
-  }
-  lines.push('  </body>', '</opml>', '');
-  return lines.join('\n');
 }
 
 const server = http.createServer(async (req, res) => {

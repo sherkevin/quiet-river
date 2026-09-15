@@ -735,6 +735,16 @@ a.card-title:hover { color: var(--accent); }
   background: currentColor;
 }
 .toggle:hover { color: var(--accent); border-color: var(--accent); }
+.toggle.static { cursor: default; }
+.toggle.static:hover { color: inherit; border-color: var(--line); }
+/* 只读快照里开关是 span，没有 aria-pressed；关闭态样式用 .off-state 顶上，
+   和按钮态同一套色，别让人以为快照站的关闭态长得不一样。 */
+.toggle.static.off-state {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-soft);
+}
+.toggle.static.off-state::before { background: none; box-shadow: inset 0 0 0 1px currentColor; }
 .toggle[aria-pressed="false"] {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
