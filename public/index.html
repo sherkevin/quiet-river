@@ -63,6 +63,7 @@
       <span class="author-meta" id="author-meta"></span>
       <span class="spacer"></span>
       <button class="btn" id="btn-toggle-author" type="button">关闭展示</button>
+      <button class="btn" id="btn-tags-author" type="button">管理 tag</button>
       <button class="btn" id="btn-edit-author" type="button">编辑</button>
     </div>
   </div>
@@ -143,10 +144,6 @@
       <input id="edit-name" type="text" autocomplete="off" spellcheck="false">
     </div>
     <div class="field">
-      <label for="edit-tags">tag</label>
-      <input id="edit-tags" type="text" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="field">
       <label for="edit-feed">feed 地址（手动登记的公众号在这里补 RSS 地址，补上后开始抓取；清空则回到手动登记）</label>
       <input id="edit-feed" type="url" placeholder="https://…/feed.xml" autocomplete="off" spellcheck="false">
     </div>
@@ -167,7 +164,7 @@
 <div class="modal" id="modal-tag" hidden>
   <div class="modal-card">
     <div class="modal-head">
-      <h2>给这篇打 tag</h2>
+      <h2 id="tag-title">给这篇打 tag</h2>
       <button class="modal-close" data-close="modal-tag" aria-label="关闭">×</button>
     </div>
     <p class="tag-target" id="tag-target"></p>

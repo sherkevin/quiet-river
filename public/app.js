@@ -806,8 +806,11 @@ function render() {
   renderFooter();
 }
 
-/* ---------- manual per-article tags ---------- */
+/* ---------- manual tags: per-article and per-blogger ---------- */
 
+// tagEdit = { kind: 'item' | 'sub', id, selected:Set }。两种模式共用一个选择弹窗：
+// 文章级存 config.itemTags[itemId]，博主级存 subscription.tags——后者的 tag 会
+// 继承给它名下每篇文章（store.buildRiver 把 sub.tags 并进条目的 tags 字段）。
 let tagEdit = null;
 
 function knownTags() {
@@ -818,8 +821,20 @@ function knownTags() {
 }
 
 function openTagEditor(item) {
-  tagEdit = { id: item.id, selected: new Set(item.manualTags || []) };
+  tagEdit = { kind: 'item', id: item.id, selected: new Set(item.manualTags || []) };
+  $('#tag-title').textContent = '给这篇打 tag';
   $('#tag-target').textContent = item.title;
+  $('#tag-new').value = '';
+  renderTagPick();
+  openModal('modal-tag');
+  setTimeout(() => $('#tag-new').focus(), 30);
+}
+
+// 博主页的「管理 tag」：改的是博主自己的 tag，他名下每篇文章都会继承。
+function openSubTagEditor(sub) {
+  tagEdit = { kind: 'sub', id: sub.id, selected: new Set(sub.tags || []) };
+  $('#tag-title').textContent = '管理博主的 tag';
+  $('#tag-target').textContent = `${sub.name} · 选中的 tag 会加到他名下每篇文章上`;
   $('#tag-new').value = '';
   renderTagPick();
   openModal('modal-tag');
@@ -862,10 +877,18 @@ async function saveTagEdit() {
   if (!tagEdit) return;
   const tags = [...tagEdit.selected];
   try {
-    await api(`/api/items/${tagEdit.id}/tags`, { method: 'PATCH', body: { tags } });
+    if (tagEdit.kind === 'sub') {
+      await api(`/api/subscriptions/${tagEdit.id}`, { method: 'PATCH', body: { tags } });
+    } else {
+      await api(`/api/items/${tagEdit.id}/tags`, { method: 'PATCH', body: { tags } });
+    }
     closeModal('modal-tag');
     await loadState();
-    toast(tags.length ? `已打 tag：${tags.join('、')}` : '已清除这篇的人工 tag');
+    if (tagEdit.kind === 'sub') {
+      toast(tags.length ? `已更新博主 tag：${tags.join('、')}` : '已清空这个博主的 tag');
+    } else {
+      toast(tags.length ? `已打 tag：${tags.join('、')}` : '已清除这篇的人工 tag');
+    }
   } catch (err) {
     toast(err.message, 5000);
   }
@@ -1077,7 +1100,6 @@ function openEdit(subId) {
   state.editFeedOriginal = (sub.feeds || [])[0] || '';
   $('#edit-title').textContent = `编辑 · ${sub.name}`;
   $('#edit-name').value = sub.name;
-  $('#edit-tags').value = (sub.tags || []).join(', ');
   $('#edit-feed').value = state.editFeedOriginal;
   const feedLines = sub.adapter
     ? `<li>适配器：${esc(sub.adapter.platform)} / ${esc(sub.adapter.id)}</li>`
@@ -1089,7 +1111,7 @@ function openEdit(subId) {
 async function saveEdit() {
   if (!state.editingId) return;
   const feedInput = $('#edit-feed').value.trim();
-  const body = { name: $('#edit-name').value.trim(), tags: $('#edit-tags').value };
+  const body = { name: $('#edit-name').value.trim() };
   if (feedInput !== state.editFeedOriginal) body.feedUrl = feedInput;
   try {
     await api(`/api/subscriptions/${state.editingId}`, {
@@ -1244,6 +1266,10 @@ function bind() {
   }
 
   $('#btn-edit-author').onclick = () => { if (state.viewSubId) openEdit(state.viewSubId); };
+  $('#btn-tags-author').onclick = () => {
+    const sub = currentViewSub();
+    if (sub) openSubTagEditor(sub);
+  };
   $('#btn-toggle-author').onclick = () => { if (state.viewSubId) toggleSub(state.viewSubId); };
   window.addEventListener('hashchange', () => { applyHash(); render(); });
 
