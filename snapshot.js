@@ -1,0 +1,2 @@
+window.QR_READONLY = true;
+window.QR_SNAPSHOT_AT = 1789488620692;
