@@ -12,7 +12,13 @@ const { toOpml } = require('./lib/opml');
 const access = require('./lib/access');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const PORT = Number(process.env.PORT || 4321);
+// PORT 可以是逗号分隔的多个端口：不同网络对端口的放行策略互相矛盾
+// （办公网代理只放 80、运营商网对未备案 80 丢包但放非标准端口），
+// 同时监听让每种网络各取能通的那个。单端口写法保持兼容。
+const PORTS = String(process.env.PORT || '4321')
+  .split(',')
+  .map((p) => Number(p.trim()))
+  .filter((p) => Number.isInteger(p) && p > 0 && p < 65536);
 const HOST = process.env.HOST || '127.0.0.1';
 const MAX_BODY = 256 * 1024;
 
@@ -353,7 +359,7 @@ async function handleApi(req, res, pathname) {
   return sendJson(res, 404, { error: `没有这个接口：${method} ${pathname}` });
 }
 
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(url.pathname);
 
@@ -375,7 +381,7 @@ const server = http.createServer(async (req, res) => {
   } catch (err) {
     sendJson(res, 500, { error: String(err.message || err) });
   }
-});
+}
 
 /* ---------- 服务端自动刷新 ----------
  * 自动刷新定时器原先住在网页里（app.js 的 setInterval）：关掉页面河就停流，
@@ -415,10 +421,25 @@ async function scheduleServerAuto() {
   await scheduleServerAuto();
   const bootConfig = await store.loadConfig();
   const bootMinutes = Number(bootConfig.settings?.refreshMinutes || 0);
-  server.listen(PORT, HOST, () => {
+  // 每个端口一个 server 实例，共用同一个 handler；某个端口被占用只警告
+  // 不致命，其余端口照常服务（systemd 的 Restart 不会因此反复拉起）。
+  let booted = 0;
+  for (const port of PORTS) {
+    const s = http.createServer(handleRequest);
+    s.on('error', (err) => {
+      process.stderr.write(`监听 ${HOST}:${port} 失败：${err.message}\n`);
+    });
+    s.listen(port, HOST, () => {
+      booted += 1;
+      if (booted === 1) printBanner();
+      else process.stdout.write(`  追加监听  http://${HOST}:${port}\n`);
+    });
+  }
+
+  function printBanner() {
     const lines = [
       '',
-      `  quiet-river  →  http://${HOST}:${PORT}`,
+      `  quiet-river  →  ${PORTS.map((p) => `http://${HOST}:${p}`).join('  ')}`,
       `  配置文件  ${store.CONFIG_PATH}`,
       `  抓取缓存  ${store.CACHE_PATH}`,
     ];
@@ -435,7 +456,7 @@ async function scheduleServerAuto() {
     );
     lines.push('');
     process.stdout.write(`${lines.join('\n')}\n`);
-  });
+  }
 })().catch((err) => {
   process.stderr.write(`启动失败：${err.stack || err}\n`);
   process.exit(1);
