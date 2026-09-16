@@ -1,0 +1,33 @@
+name: probe
+
+# 公网可达性探针：从 GitHub runner（干净的境外出口）curl 我们的部署地址。
+# 为什么需要它：本机办公网有透明代理与安全策略，观测到的 200/000 都不可信；
+# ECS 上 curl 自己的公网 IP 走 hairpin，同样不可信。runner 是第三方真实出口。
+# 用法：gh workflow run probe -f direct=http://<ip>:<port> -f tunnel=https://<x>.trycloudflare.com
+on:
+  workflow_dispatch:
+    inputs:
+      direct:
+        description: 直连地址（含端口）
+        required: false
+        default: ""
+      tunnel:
+        description: 隧道地址
+        required: false
+        default: ""
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: direct
+        if: inputs.direct != ''
+        run: |
+          curl -s -m 20 -o /dev/null -w "direct  ${{ inputs.direct }} -> %{http_code} err=%{errormsg} time=%{time_total}s\n" "${{ inputs.direct }}/api/state" || true
+      - name: tunnel
+        if: inputs.tunnel != ''
+        run: |
+          curl -s -m 25 -o /dev/null -w "tunnel  ${{ inputs.tunnel }} -> %{http_code} err=%{errormsg} time=%{time_total}s\n" "${{ inputs.tunnel }}/api/state" || true
+      - name: control
+        run: |
+          curl -s -m 15 -o /dev/null -w "control https://example.com -> %{http_code}\n" https://example.com || true
