@@ -45,6 +45,14 @@ let readSet = new Set(JSON.parse(localStorage.getItem(READ_KEY) || 'null') || []
 // 列表每次 render 都重建节点，capture 期拦截迟早漏一个。
 const QR_READONLY = Boolean(window.QR_READONLY);
 
+// 活中继模式：网页托管在别处（例如 GitHub Pages），数据经中继回源到后端。
+// 中继 origin 由生成时注入的 live.js 提供（window.QR_LIVE_BASE）；跨域带不了
+// cookie，口令存 localStorage、用请求头 x-qr-token 送。这个模式下河是活的：
+// 能刷新、能添加、能改 tag，与本机服务同权。
+const QR_LIVE = Boolean(window.QR_LIVE_BASE);
+const QR_LIVE_BASE = String(window.QR_LIVE_BASE || '').replace(/\/+$/, '');
+const QR_TOKEN_KEY = 'quiet-river:token';
+
 function saveRead() {
   localStorage.setItem(READ_KEY, JSON.stringify([...readSet].slice(-6000)));
 }
@@ -179,9 +187,15 @@ async function api(path, options = {}) {
   if (QR_READONLY && method !== 'GET') {
     throw new Error('静态快照只读：这个操作要在跑了 node server.js 的本机服务上做');
   }
-  const res = await fetch(path, {
-    headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+  const headers = Object.assign({}, options.headers);
+  if (options.body) headers['Content-Type'] = 'application/json';
+  if (QR_LIVE) {
+    const tk = localStorage.getItem(QR_TOKEN_KEY);
+    if (tk) headers['X-Qr-Token'] = tk;
+  }
+  const res = await fetch(QR_LIVE ? QR_LIVE_BASE + path : path, {
     ...options,
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const text = await res.text();
@@ -191,9 +205,19 @@ async function api(path, options = {}) {
     const err = new Error(payload?.error || `HTTP ${res.status}`);
     err.status = res.status;
     err.payload = payload;
+    if (res.status === 401 && QR_LIVE) askToken();
     throw err;
   }
   return payload;
+}
+
+// 活中继下没有 cookie 可用，401 时弹口令输入框；口令存 localStorage。
+function askToken() {
+  const modal = $('#modal-token');
+  if (!modal || !modal.hidden) return;
+  openModal('modal-token');
+  const input = $('#token-input');
+  if (input) setTimeout(() => input.focus(), 0);
 }
 
 async function loadState() {
@@ -963,7 +987,7 @@ function renderFooter() {
   // 写好的静态文件，/api/export 在 Pages 上不存在。
   const note = $('#foot-snapshot');
   if (note) {
-    note.hidden = !QR_READONLY;
+    note.hidden = !(QR_READONLY || QR_LIVE);
     if (QR_READONLY) {
       // 生成时刻由快照页的 snapshot.js 注入（window.QR_SNAPSHOT_AT），和「上次抓取」
       // 是两个时间：前者是这份静态文件出炉的时刻，后者是内容抓到的时刻。
@@ -971,10 +995,13 @@ function renderFooter() {
       note.textContent = genAt
         ? `静态快照 · 生成于 ${absTime(genAt)} · 内容抓到 ${absTime(at || genAt)} · 只读，添加与抓取在本机服务上做`
         : '静态快照 · 只读，添加与抓取在本机服务上做';
+    } else if (QR_LIVE) {
+      note.textContent = '活中继 · 数据经中继实时取自服务器 · 口令只存在本浏览器';
     }
   }
   const exportLink = $('#foot-export');
   if (exportLink && QR_READONLY) exportLink.href = './subscriptions.opml';
+  else if (exportLink && QR_LIVE) exportLink.dataset.liveExport = '1';
 }
 
 function syncThemeSegs() {
@@ -1468,6 +1495,51 @@ function bind() {
     applyHash();
     render();
   });
+
+  // 活中继下导出 OPML 不能走整页跳转：口令在请求头里，跳转带不上。
+  // 改成 fetch 成 blob 触发下载，口令不进地址栏与浏览历史。
+  document.addEventListener('click', async (e) => {
+    const link = e.target.closest('[data-live-export]');
+    if (!link) return;
+    e.preventDefault();
+    try {
+      const tk = localStorage.getItem(QR_TOKEN_KEY) || '';
+      const res = await fetch(QR_LIVE_BASE + '/api/export', { headers: { 'X-Qr-Token': tk } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'quiet-river.opml';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (err) {
+      toast(`导出失败：${err.message}`, 6000);
+    }
+  });
+
+  // 活中继口令弹窗：口令存 localStorage，存完立刻重试加载。
+  const tokenForm = $('#token-form');
+  if (tokenForm) {
+    tokenForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const input = $('#token-input');
+      const value = String(input.value || '').trim();
+      if (!value) return;
+      localStorage.setItem(QR_TOKEN_KEY, value);
+      closeModal('modal-token');
+      input.value = '';
+      try {
+        await loadState();
+        toast('口令已保存', 2400);
+      } catch (err) {
+        localStorage.removeItem(QR_TOKEN_KEY);
+        toast(`口令不对：${err.message}`, 6000);
+        askToken();
+      }
+    };
+  }
 
   $('#btn-add').onclick = () => { location.hash = '#/add'; };
   $('#btn-add-submit').onclick = submitAdd;

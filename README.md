@@ -167,7 +167,18 @@ QR_ECS_INSTANCE=i-xxxx tools/deploy-ecs.sh               # 之后：只更新代
 - 大陆地域的 ECS 用 80/443 对外提供网页服务需要 ICP 备案。未备案时公网直连 80 的实测表现是**超时丢包**（手机 `ERR_TIMED_OUT`），不是可见的拦截页；而办公网代理出口却能拿到 200，两种观测互相矛盾。反过来办公网代理又不放非标准端口。所以脚本默认**同时监听 80 与 4321**（`PORT` 支持逗号列表，`QR_ECS_PORT` 可改）：每种网络各取能通的那个，某个端口被拦只影响那条路径。
 - 还有一层兜底：在 ECS 上跑 cloudflared 隧道（`systemd` unit 名 `qr-tunnel`，把 127.0.0.1:4321 递到 `*.trycloudflare.com` 的 HTTPS 地址）。它走 Cloudflare 边缘的 443，不碰备案问题，任何网络都能开；代价是 quick tunnel 的地址在服务重启后会变。直连 IP 与隧道地址二选一，或都留着。
 
-**GitHub Pages：只读静态快照，谁都能看。** Pages 只托管静态文件，跑不了 `node server.js`，也拿不到你的登录态，所以这里的形态是「某一刻的河」：
+**GitHub Pages：两种形态，共用一套前端。** Pages 只托管静态文件，跑不了 `node server.js`，也拿不到你的登录态，所以网页与数据必须分家。分家有两条路：
+
+*活中继（当前线上形态）：网页在 Pages，数据实时回源。* 浏览器打开 Pages 链接后，`app.js` 看到注入的 `window.QR_LIVE_BASE`，就把所有 `/api/*` 请求发往中继 origin，口令放请求头 `x-qr-token`（跨域带不了 cookie，口令存浏览器 localStorage，第一次打开弹框输一次）。中继是阿里云函数计算上的一个小 Node 函数（`tools/relay-fc/index.js`），把请求原样转给跑着 `node server.js` 的后端。这条河是**全活**的：能刷新、能添加、能改 tag。生成与部署：
+
+```bash
+node tools/make-live-pages.js --live https://<你的中继地址> --out pages-out
+# 把 pages-out/ 推到仓库 gh-pages 分支；中继用 tools/deploy-relay.sh 部署
+```
+
+中继的三个硬约束（都在 `tools/relay-fc/index.js` 注释里）：FC 网关自己会注入一整套 CORS 头，所以后端那套 `access-control-*` 必须在中继里丢掉，否则重复头让浏览器拒绝所有跨域请求；FC 默认域给每个响应加 `Content-Disposition: attachment`，所以**中继地址不能当网页直接打开**（会变成下载文件），网页入口永远是 Pages 链接；FC 默认域禁止任何 3xx 重定向，登录跳转降级成 meta refresh。
+
+*只读快照：某一刻的河，谁都能看。* 不依赖任何后端：
 
 ```
 node tools/make-pages.js --out pages-out   # 生成快照站：state.json + 静态 OPML + 只读开关
@@ -175,7 +186,7 @@ node tools/make-pages.js --out pages-out   # 生成快照站：state.json + 静�
 
 生成器复用 `tools/make-seed.js` 的脱敏闸（每源截 20 条、摘要截断、命中 `tools/scan-leaks.js` 模式表的串换占位符），生成后再用扫描器扫一遍产物，不干净就退出非零。把 `pages-out/` 推到仓库的 `gh-pages` 分支、在仓库设置里把 Pages 源指到该分支即可。快照站复用同一套前端：`app.js` 检测到 `window.QR_READONLY` 就改读同目录的 `state.json`，并隐藏刷新、添加、设置、开关这些写操作——页脚会写明这是哪一刻的快照、写操作去哪做。
 
-`tools/make-pages.js` 与 `tools/publish.sh`、`tools/scan-leaks.js` 一样是**本机工具，不进公开仓**：它依赖的脱敏模式表写明了「这台机器上哪些串不能外流」，发布出去等于公开一份索引。
+`tools/make-pages.js`（快照生成器）与 `tools/publish.sh`、`tools/scan-leaks.js` 一样是**本机工具，不进公开仓**：它依赖的脱敏模式表写明了「这台机器上哪些串不能外流」，发布出去等于公开一份索引。活中继生成器 `tools/make-live-pages.js` 不含任何数据、不碰脱敏表，所以**在公开仓里**，别人 clone 后能自己生成活站；中继代码 `tools/relay-fc/` 与部署脚本 `tools/deploy-relay.sh` 同样在公开仓。
 
 ## 它刻意不做的事
 

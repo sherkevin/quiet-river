@@ -24,6 +24,10 @@ node_modules/
 *.log
 .DS_Store
 
+# Codex 桌面端把上一轮的渲染结果落在这里，里面会原样带着对话中出现过的口令、
+# AccessKey 这类东西。会话产物不是项目文件，且泄露代价高，一律不进仓库。
+.codex-renders/
+
 # make-pages.js 的默认输出目录：快照站是生成物，不进仓库（发布走 gh-pages 分支）
 pages-out/
 

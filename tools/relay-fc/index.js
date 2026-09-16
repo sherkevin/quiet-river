@@ -37,6 +37,10 @@ function relay(event) {
         const out = {};
         for (const [k, v] of Object.entries(up.headers)) {
           if (k === 'transfer-encoding' || k === 'connection' || k === 'keep-alive') continue;
+          // FC 网关自己会按请求的 Origin 注入一整套 CORS 头。后端也发了一套，
+          // 两套叠在一起浏览器直接判定非法（Access-Control-Allow-Origin 出现
+          // 两次即失败），所以这里丢掉后端那份，只留网关的。
+          if (k.startsWith('access-control-')) continue;
           out[k] = v;
         }
         // FC 网关把数组值序列化成 JSON 串（Set-Cookie: ["..."]），浏览器不认；
