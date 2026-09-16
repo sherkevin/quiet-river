@@ -182,6 +182,29 @@ test('POST /login：urlencoded 表单口令换 cookie，并跳回 back', async (
   assert.equal(evil2.headers.Location, '/');
 });
 
+test('口令首尾的换行与空格被容忍（复制粘贴的常见污染）', async (t) => {
+  t.after(() => {
+    delete process.env.QR_ACCESS_TOKEN;
+  });
+  process.env.QR_ACCESS_TOKEN = 'sekret';
+  const { Readable } = require('node:stream');
+  const req = (body, ctype) => {
+    const r = Readable.from([Buffer.from(body, 'utf8')]);
+    r.headers = { 'content-type': ctype };
+    r.method = 'POST';
+    return r;
+  };
+  for (const dirty of ['token=sekret%0A', 'token=%20sekret%20%0A', 'token=sekret%0D%0A']) {
+    const res = makeRes();
+    await handleLogin(req(dirty, 'application/x-www-form-urlencoded'), res, new URL('http://x/login'));
+    assert.equal(res.statusCode, 302, `该放行：${dirty}`);
+  }
+  // ?token= 路径同样容忍
+  const q = makeRes();
+  assert.equal(guard({ headers: {} }, q, new URL('http://x/?token=sekret%0A'), sendJsonStub), false);
+  assert.equal(q.statusCode, 302);
+});
+
 test('GET /login 直接给登录页；未启用口令时 /login 回首页', async (t) => {
   t.after(() => {
     delete process.env.QR_ACCESS_TOKEN;

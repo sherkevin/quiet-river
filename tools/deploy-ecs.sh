@@ -43,13 +43,19 @@ APP="$STAGE/quiet-river"
 REGION_ARGS=()
 [ -n "$REGION" ] && REGION_ARGS=(-r "$REGION")
 
-run() { "$WB" exec -i "$INSTANCE" "${REGION_ARGS[@]}" --timeout "${2:-60}" -c "$1" | sed 's/^/    /'; }
+# macOS 自带 bash 3.2 在 set -u 下展开空数组会报 unbound variable，用 + 守卫。
+run() { "$WB" exec -i "$INSTANCE" ${REGION_ARGS[@]+"${REGION_ARGS[@]}"} --timeout "${2:-60}" -c "$1" | sed 's/^/    /'; }
 
 echo "==> 打包（只带公开件）"
 mkdir -p "$APP/lib" "$APP/public" "$APP/data"
 cp "$SRC/server.js" "$SRC/seed.js" "$SRC/package.json" "$APP/"
-cp "$SRC"/lib/*.js "$APP/lib/"
-# 私有适配器永不离开本机：显式排除，双保险。
+# 私有适配器永不离开本机：拷贝时就跳过，再自检一次双保险。
+for f in "$SRC"/lib/*.js; do
+  case "$(basename "$f")" in
+    adapters.private.js) continue ;;
+  esac
+  cp "$f" "$APP/lib/"
+done
 if [ -e "$APP/lib/adapters.private.js" ]; then
   echo "!! 打包件里出现了 adapters.private.js，中止" >&2; exit 1
 fi
@@ -68,7 +74,7 @@ if [ "$PROVISION" = "--provision" ]; then
 fi
 
 echo "==> 上传并解包"
-"$WB" upload "$STAGE/deploy.tar.gz" /tmp/ -i "$INSTANCE" "${REGION_ARGS[@]}" -f >/dev/null
+"$WB" upload "$STAGE/deploy.tar.gz" /tmp/ -i "$INSTANCE" ${REGION_ARGS[@]+"${REGION_ARGS[@]}"} -f >/dev/null
 # tar 里带 quiet-river/ 前缀，解到 /opt 即原地覆盖代码；data/cache.json 不在包里，
 # 所以远端已抓的缓存不会被部署冲掉。subscriptions.json 会被覆盖——它是配置本体，
 # 以仓库为准是有意为之。
@@ -107,6 +113,6 @@ else
   run 'systemctl restart quiet-river && sleep 2 && systemctl is-active quiet-river' 60
 fi
 
-run "curl -s -o /dev/null -w '本机自检 /api/state -> %{http_code}（应为 401）\n' http://127.0.0.1/api/state" 30
+run "curl -s -o /dev/null -w '本机自检 /api/state -> %{http_code}（应为 401）\n' http://127.0.0.1:$PORT/api/state" 30
 echo "==> 完成。公网地址：http://<实例公网IP>/"
 echo "    口令在远端 /etc/quiet-river/env；浏览器打开首页输入一次即可。"
