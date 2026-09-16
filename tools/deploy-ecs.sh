@@ -27,7 +27,10 @@ set -euo pipefail
 
 INSTANCE="${QR_ECS_INSTANCE:?需要 QR_ECS_INSTANCE，例如 i-2ze30n28dhdca91zvge0}"
 REGION="${QR_ECS_REGION:-}"
-PORT="${QR_ECS_PORT:-80}"
+# 默认 4321 而不是 80：大陆地域 ECS 的 80/443 受 ICP 备案约束，未备案时公网直连
+# 的典型表现是超时丢包（手机端 ERR_TIMED_OUT），而非可见的拦截页。非标准端口
+# 实测可通。真要上 80，先完成备案或确认拦截不存在。
+PORT="${QR_ECS_PORT:-4321}"
 PROVISION="${1:-}"
 
 WB="$(command -v workbench || echo "$HOME/.local/bin/workbench")"
