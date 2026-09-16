@@ -9,6 +9,7 @@ const { resolve, verifyFeed, relayPlatform } = require('./lib/resolve');
 const { refreshAll, refreshOne, refreshAdapter } = require('./lib/refresh');
 const { adapterPlatforms } = require('./lib/adapters');
 const { toOpml } = require('./lib/opml');
+const access = require('./lib/access');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PORT = Number(process.env.PORT || 4321);
@@ -357,6 +358,11 @@ const server = http.createServer(async (req, res) => {
   const pathname = decodeURIComponent(url.pathname);
 
   try {
+    if (pathname === '/login') {
+      await access.handleLogin(req, res, url);
+      return;
+    }
+    if (!access.guard(req, res, url, sendJson)) return;
     if (pathname.startsWith('/api/')) {
       await handleApi(req, res, pathname);
       return;
@@ -421,6 +427,11 @@ async function scheduleServerAuto() {
       bootMinutes
         ? `  自动刷新  每 ${bootMinutes} 分钟（服务端，页面关着也抓）`
         : '  自动刷新  已关闭（设置里填分钟数开启）',
+    );
+    lines.push(
+      access.readAccessToken()
+        ? '  访问口令  已启用（打开 /?token=<口令> 登录后存成 cookie）'
+        : '  访问口令  未设（暴露到回环之外前务必设 QR_ACCESS_TOKEN）',
     );
     lines.push('');
     process.stdout.write(`${lines.join('\n')}\n`);

@@ -149,6 +149,23 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:7890 node server.js
 
 **不在同一局域网：内网穿透。** 服务保持只听回环，用一条隧道把端口递出去，例如 `ssh -R 80:127.0.0.1:4321 你的公网机` 或 tailscale / frp。好处是河仍然是活的（能刷新、能添加），且只有拿到隧道地址的人能进；坏处是要有一台能常驻的机器或一个隧道账号。
 
+**公网：部署到一台自己的服务器。** 想要手机在任何网络下都打开同一条活的河，最稳的是把服务本身放到一台有公网 IP 的机器上（本项目实测阿里云 ECS 2C2G 足够）。一条命令完成：
+
+```
+QR_ECS_INSTANCE=i-xxxx tools/deploy-ecs.sh --provision   # 首次：装 Node、建专用用户、systemd unit、生成口令
+QR_ECS_INSTANCE=i-xxxx tools/deploy-ecs.sh               # 之后：只更新代码并重启
+```
+
+脚本走阿里云 workbench CLI（免 SSH 密钥直连 ECS：`curl -fsSL https://workbench-cli.oss-cn-hangzhou.aliyuncs.com/install.sh | bash -s -- -d ~/.local/bin`，再 `workbench config` 填 AccessKey，AK 只落在 `~/.workbench/config.json`，0600）。它只带公开件——私有适配器、`secrets/`、全量缓存一律留在原机，与 `tools/publish.sh` 同一套白名单思路。
+
+部署后的形态与边界：
+
+- 服务以专用用户 `qr` 跑，`systemd` 托管（开机自启、崩溃拉起），监听 80 端口靠 `CAP_NET_BIND_SERVICE` 而不是 root。
+- **公网暴露前必须有访问口令**（`lib/access.js`）：这个应用没有账号体系，谁连上都能改。口令在远端 `/etc/quiet-river/env`（0600），浏览器打开首页输入一次存成一年期 cookie；`?token=` 方式也保留，用完即 302 掉。
+- 抓取出口变成服务器的 IP。需要登录态的源（知乎、小红书）在服务器上**没有**凭证与私有适配器，它们停在随包带去的快照时刻并进问题栏，旧内容保留（`mergeIntoCache` 的既有行为）；匿名源全部是活的。要全活，把 `docs/deploy-parity.md` 的三步在服务器上补一遍——但先想清楚：机房 IP 段更容易触发平台风控。
+- 安全组/防火墙要真的放通你用的端口。阿里云 ECS 默认安全组常常只开 22/3389，80 不开时表现是「TCP 握手成功但响应为空」，极易误判成服务没起。
+- 大陆地域的 ECS 用 80/443 对外提供网页服务需要 ICP 备案，未备案可能被阿里云在边缘拦截。规避办法是换一个非标准端口（脚本支持 `QR_ECS_PORT`），或完成备案。
+
 **GitHub Pages：只读静态快照，谁都能看。** Pages 只托管静态文件，跑不了 `node server.js`，也拿不到你的登录态，所以这里的形态是「某一刻的河」：
 
 ```
@@ -231,7 +248,7 @@ node tools/make-pages.js --out pages-out   # 生成快照站：state.json + 静�
 ## 开发
 
 ```
-node --test          # 54 个测试：XML 边界、三种 feed 格式、平台识别与转发归类、适配器匹配、改 feed 地址的回归、__NEXT_DATA__ 提取、摘要数学分段与截断修复、博主 tag 继承、来源分组
+node --test          # 65 个测试：XML 边界、三种 feed 格式、平台识别与转发归类、适配器匹配、改 feed 地址的回归、__NEXT_DATA__ 提取、摘要数学分段与截断修复、博主 tag 继承、来源分组、访问口令闸（含登录页与 /login 表单）
 PORT=8080 node server.js
 ```
 
