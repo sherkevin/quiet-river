@@ -134,6 +134,26 @@
   </div>
 </div>
 
+<!-- 活中继口令：网页托管在别处时带不了 cookie，口令存本浏览器 localStorage -->
+<div class="modal" id="modal-token" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>访问口令</h2>
+      <button class="modal-close" data-close="modal-token" aria-label="关闭">×</button>
+    </div>
+    <form id="token-form">
+      <div class="field">
+        <label for="token-input">这条河设了访问口令，输入后只存在本浏览器</label>
+        <input type="password" id="token-input" autocomplete="current-password">
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-primary" type="submit">进入</button>
+        <button class="btn" type="button" data-close="modal-token">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- 编辑订阅 -->
 <div class="modal" id="modal-edit" hidden>
   <div class="modal-card">
@@ -194,7 +214,7 @@
 <script src="./vendor/katex/katex.min.js"></script>
 <script src="./math-seg.js"></script>
 <script src="./source-group.js"></script>
-<script src="./snapshot.js"></script>
+<script src="./live.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>
