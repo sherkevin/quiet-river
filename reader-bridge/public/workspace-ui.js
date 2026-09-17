@@ -89,7 +89,7 @@ function renderArticleCard(entry){
   a.querySelector('.unread-dot').hidden=entry.status!=='unread';
   const tagBox=a.querySelector('.article-tags');drawArticleTags(tagBox,entry.tags||[]);
   a.querySelector('[data-action=tags]').onclick=()=>editTags(a,entry.tags||[],async tags=>{
-    const result=await api('/entries/'+entry.id+'/tags',{tags});entry.tags=result.tags;drawArticleTags(tagBox,result.tags);await loadState();toast('文章标签已保存');
+    const result=await api('/entries/'+entry.id+'/tags',{tags});entry.tags=result.tags;drawArticleTags(tagBox,result.tags);await loadState();if(['latest','unread','recommend'].includes(view))await renderList(false);toast('文章标签已保存');
   },'编辑文章标签（只影响这篇文章）');
   for(const link of a.querySelectorAll('[data-original]')){
     try{const url=new URL(entry.url);if(!['http:','https:'].includes(url.protocol))throw new Error();link.href=url.href;}

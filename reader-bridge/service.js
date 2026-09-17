@@ -237,6 +237,7 @@ class ReaderService {
     }
     this.db.run("UPDATE entries SET archive_state='IMPORTING' WHERE id=?",id);
     try {
+      const fetchedAt=Date.now();
       const entry=await this.mf.call(`/v1/entries/${id}`);let html=String(entry.content||'');
       const source=this.db.sources().find(s=>s.id===row.source_id);
       const channel=this.db.channels().find(c=>c.id===row.channel_id);
@@ -246,7 +247,7 @@ class ReaderService {
           const candidate=String(fetched?.content||'');
           if(stripHTML(candidate).length>stripHTML(html).length){
             html=candidate;await this.mf.call(`/v1/entries/${id}`,'PUT',{content:html});
-            this.project({...entry,content:html},channel);
+            this.project({...entry,content:html},channel,fetchedAt);
           }
         }catch{this.db.audit('fulltext',id,'Native extraction unavailable; existing content retained');}
       }
