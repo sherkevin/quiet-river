@@ -12,6 +12,7 @@ const {authorIdentity}=require('./sources');
 const {normalizeTags}=require('./tags');
 const {historyPage}=require('./reading-history');
 const {request,ApiClient}=require('./network');
+const {createReaderWebSession}=require('./reader-web-session');
 
 function secureEqual(a,b){return typeof a==='string'&&typeof b==='string'&&crypto.timingSafeEqual(Buffer.from(hash(a)),Buffer.from(hash(b)));}
 function cookies(header){const out={};for(const s of String(header||'').split(';')){const i=s.indexOf('=');if(i<0)continue;try{out[s.slice(0,i).trim()]=decodeURIComponent(s.slice(i+1).trim());}catch{}}return out;}
@@ -23,7 +24,8 @@ function validPreferences(p){
   for(const key of ['tags','authors'])for(const [k,v] of Object.entries(p[key]||{})){if(k.length>150||!Number.isFinite(Number(v)))throw new Error('invalid preference');clean[key][k]=Math.max(-3,Math.min(3,Number(v)));}
   return clean;
 }
-function createApp(service,config){
+function createApp(service,config,clients={}){
+  const readerWebSession=clients.createReaderWebSession||createReaderWebSession;
   if(!config.accessToken)throw new Error('QR_ACCESS_TOKEN is required; anonymous mode is not supported');
   const loginAttempts=new Map();
   return http.createServer(async(req,res)=>{
@@ -65,6 +67,26 @@ function createApp(service,config){
       if(!authorized)return reply(res,401,{error:'请先输入现有 Quiet River 访问口令'});
       if(req.method==='POST'&&req.headers['x-qr-action']!=='1')return reply(res,403,{error:'缺少写入请求标识'});
       const p=u.pathname;
+      const readerLaunch=/^\/desk\/reader\/(\d+)$/.exec(p);
+      if(readerLaunch&&req.method==='GET'){
+        const state=await service.readerStatus(Number(readerLaunch[1]));
+        if(state.state==='ORIGINAL_ONLY'||state.state==='ERROR'||!state.bookmarkId){
+          const original=safeURL(state.originalUrl);if(!original)return reply(res,409,{error:'该文章暂无可用阅读入口'});
+          res.writeHead(302,{Location:original,'Cache-Control':'no-store'});return res.end();
+        }
+        res.setHeader('Set-Cookie',await readerWebSession(config));
+        res.writeHead(302,{Location:'/reader/'+encodeURIComponent(state.bookmarkId),'Cache-Control':'no-store'});return res.end();
+      }
+      const bookmarkLaunch=/^\/desk\/bookmark\/([A-Za-z0-9_-]{1,128})$/.exec(p);
+      if(bookmarkLaunch&&req.method==='GET'){
+        res.setHeader('Set-Cookie',await readerWebSession(config));
+        res.writeHead(302,{Location:'/reader/'+encodeURIComponent(bookmarkLaunch[1]),'Cache-Control':'no-store'});return res.end();
+      }
+      if(p==='/desk/reader-home'&&req.method==='GET'){
+        const target=u.searchParams.get('target')==='highlights'?'highlights':'bookmarks';
+        res.setHeader('Set-Cookie',await readerWebSession(config));
+        res.writeHead(302,{Location:'/dashboard/'+target,'Cache-Control':'no-store'});return res.end();
+      }
       if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),tags:service.tagCatalog(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
       if(p==='/desk/api/entries'&&req.method==='GET'){
         const offset=Math.max(0,Number(u.searchParams.get('offset'))||0), limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit'))||30));

@@ -237,7 +237,7 @@ class ReaderService {
     else if(crawl==='failure')state='ERROR';
     else state='QUEUED';
     this.db.run('UPDATE entries SET archive_state=? WHERE id=?',state,id);
-    return {...base,state,bookmarkId:row.bookmark_id,path:`/dashboard/preview/${row.bookmark_id}`,canHighlight:state==='READY'};
+    return {...base,state,bookmarkId:row.bookmark_id,path:`/desk/reader/${id}`,canHighlight:state==='READY'};
   }
   async archive(id) {
     if(this.archiving.has(id))return this.archiving.get(id);
@@ -279,7 +279,7 @@ class ReaderService {
       if(!bookmark?.id)throw new Error('reader missing bookmark ID');
       // Keep the imported version immutable once a reader can annotate it.
       this.db.run("UPDATE entries SET bookmark_id=?,archive_hash=?,archive_state='QUEUED' WHERE id=?",bookmark.id,hash(html),id);
-      return {bookmarkId:bookmark.id,path:`/dashboard/preview/${bookmark.id}`,state:'QUEUED'};
+      return {bookmarkId:bookmark.id,path:`/desk/reader/${id}`,state:'QUEUED'};
     }catch(e){this.db.run("UPDATE entries SET archive_state='ERROR' WHERE id=?",id);throw e;}
   }
   async highlights(cursor='') {

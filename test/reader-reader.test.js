@@ -4,6 +4,7 @@ const assert=require('node:assert/strict');
 const {Database}=require('../reader-bridge/database');
 const {ReaderService}=require('../reader-bridge/service');
 const {createApp}=require('../reader-bridge/server');
+const {createReaderWebSession,safeBase}=require('../reader-bridge/reader-web-session');
 const source={id:'reader-source',name:'Reader source',platform:'blog',url:'https://example.com',tags:['Agent'],feeds:['https://example.com/feed']};
 const channel={id:'reader-channel',source_id:source.id,transport:'public',url:'https://example.com/feed',group_key:'example.com',enabled:true,interval_ms:1800000,min_gap_ms:0,feed_id:1};
 function setup(t,{content='',crawlStatus='success'}={}){
@@ -25,7 +26,7 @@ test('reader status becomes READY only after Karakeep reports successful content
   db.run("UPDATE entries SET bookmark_id='bookmark-1',archive_state='QUEUED' WHERE id=1");
   const result=await service.readerStatus(1);
   assert.equal(result.state,'READY');assert.equal(result.canHighlight,true);
-  assert.equal(result.path,'/dashboard/preview/bookmark-1');
+  assert.equal(result.path,'/desk/reader/1');
 });
 test('reader status reports failed crawl without claiming highlight capability',async t=>{
   const {db,service}=setup(t,{content:'<p>Readable body</p>',crawlStatus:'failure'});
@@ -46,7 +47,7 @@ test('workspace reader UI polls archive readiness and disables metadata-only rea
   const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
   assert.match(ui,/api\('\/entries\/'\+entry\.id\+'\/archive'\)/);
   assert.match(ui,/readerButtonState/);assert.match(ui,/button\.disabled=true/);assert.match(ui,/ORIGINAL_ONLY/);
-  assert.match(ui,/\/api\/auth\/session/);assert.match(ui,/signin\?callbackUrl=/);assert.match(ui,/readerDestination/);
+  assert.doesNotMatch(ui,/readerDestination|signin\?callbackUrl|\/api\/auth\/session/);
 });
 
 test('content upgrade re-enables reader after original-only fallback',t=>{
@@ -69,4 +70,38 @@ test('restricted metadata-only articles stay original-only until content is supp
   db.putSource(restricted,[c]);service.project({id:2,title:'Note',url:'https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01',author:'XHS',published_at:null,content:'',status:'unread'},c);
   const item=service.list({sourceId:restricted.id}).items[0];
   assert.equal(item.content_state,'META');assert.equal(item.readerMode,'original');
+});
+test('reader web session exchanges credentials only with loopback Karakeep and returns session cookie',async()=>{
+  const calls=[];
+  const response=(status,data,cookies=[])=>({status,ok:status>=200&&status<300,headers:{getSetCookie:()=>cookies},json:async()=>data});
+  const fetchImpl=async(url,options={})=>{
+    calls.push({url,options});
+    if(url.endsWith('/api/auth/csrf'))return response(200,{csrfToken:'csrf-fixture'},['__Host-next-auth.csrf-token=csrf-cookie; Path=/; HttpOnly; Secure']);
+    if(url.endsWith('/api/auth/callback/credentials'))return response(200,{},['__Secure-next-auth.session-token=opaque-session; Path=/; Domain=127.0.0.1; HttpOnly; Secure; SameSite=Lax']);
+    if(url.endsWith('/api/auth/session'))return response(200,{user:{email:'reader@quiet-river.local'}});
+    throw new Error('unexpected request');
+  };
+  const cookies=await createReaderWebSession({karakeep:'http://127.0.0.1:3062',accessToken:'fixture-secret'},fetchImpl);
+  assert.equal(calls.length,3);assert.equal(cookies.length,1);assert.match(cookies[0],/^__Secure-next-auth\.session-token=opaque-session/);
+  assert.doesNotMatch(cookies[0],/Domain=/i);assert.doesNotMatch(cookies[0],/fixture-secret/);
+  assert.equal(new URLSearchParams(String(calls[1].options.body)).get('password'),'fixture-secret');
+  assert.throws(()=>safeBase('https://reader.example.com'),/loopback/);
+});
+test('reader launch is QR-authenticated, keeps unread state and redirects through fixed Karakeep routes',async t=>{
+  const {db,service}=setup(t,{content:'<p>Readable</p>',crawlStatus:'success'});
+  db.run("UPDATE entries SET bookmark_id='bookmark-1',archive_state='QUEUED' WHERE id=1");let exchanges=0;
+  const app=createApp(service,{accessToken:'reader-test',karakeep:'http://127.0.0.1:3062'},{createReaderWebSession:async()=>{
+    exchanges++;return ['__Secure-next-auth.session-token=opaque; Path=/; HttpOnly; Secure; SameSite=Lax'];
+  }});
+  await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+  const base='http://127.0.0.1:'+app.address().port,auth={'X-Qr-Token':'reader-test'};
+  assert.equal((await fetch(base+'/desk/reader/1',{redirect:'manual'})).status,401);assert.equal(exchanges,0);
+  let response=await fetch(base+'/desk/reader/1',{headers:auth,redirect:'manual'});
+  assert.equal(response.status,302);assert.equal(response.headers.get('location'),'/reader/bookmark-1');
+  assert.match(response.headers.get('set-cookie')||'',/__Secure-next-auth\.session-token=opaque/);
+  assert.equal(db.get('SELECT status FROM entries WHERE id=1').status,'unread');
+  response=await fetch(base+'/desk/reader-home?target=https://evil.example',{headers:auth,redirect:'manual'});
+  assert.equal(response.headers.get('location'),'/dashboard/bookmarks');
+  response=await fetch(base+'/desk/bookmark/bookmark-1',{headers:auth,redirect:'manual'});
+  assert.equal(response.headers.get('location'),'/reader/bookmark-1');
 });
