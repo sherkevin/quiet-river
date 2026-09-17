@@ -47,7 +47,7 @@ class Database {
   run(sql,...args){return this.db.prepare(sql).run(...args);}
   setting(key,fallback){const r=this.get('SELECT value FROM settings WHERE key=?',key);return r?json(r.value,fallback):fallback;}
   set(key,value){this.run('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',key,JSON.stringify(value));}
-  sources(){return this.all('SELECT * FROM sources').map(s=>({...json(s.payload,{}),visible:!!s.visible,enabled:!!s.enabled}));}
+  sources(){return require('./article-metadata').applyBloggerTags(this,this.all('SELECT * FROM sources').map(s=>({...json(s.payload,{}),visible:!!s.visible,enabled:!!s.enabled})));}
   channels(){return this.all('SELECT * FROM channels').map(c=>({...json(c.payload,{}),...c,payload:undefined}));}
   audit(action,target,result){this.run('INSERT INTO audit(created_at,action,target,result) VALUES(?,?,?,?)',Date.now(),action,String(target),String(result).slice(0,500));}
   alert(key,title,message){this.run('INSERT OR IGNORE INTO outbox(id,created_at,payload) VALUES(?,?,?)',key,Date.now(),JSON.stringify({title,message}));}

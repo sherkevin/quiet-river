@@ -3,21 +3,26 @@ const fs = require('node:fs');
 const {hash,json,opmlFor,channelsFor,parseFullFeed,rankEntries,buildArchive,stripHTML,safeURL,classifyError,articleKey} = require('./core');
 const {ApiClient,request} = require('./network');
 const {fetchNativeMetadata}=require('./native-metadata');
+const {normalizeTags,containsAllTags,requestedTags}=require('./tags');
+const meta=require('./article-metadata');
+const reading=require('./reading-history');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
   constructor(db,config,clients={}) {
-    this.db=db;this.config=config;this.stopping=false;this.working=false;this.archiving=new Map();
+    this.db=db;this.config=config;this.stopping=false;this.working=false;this.archiving=new Map();this.readWrites=new Map();
     this.mf=clients.mf || new ApiClient(config.miniflux,{ 'X-Auth-Token':config.minifluxToken });
     this.kk=clients.kk || new ApiClient(config.karakeep,{Authorization:`Bearer ${config.karakeepToken || ''}`});
     this.internalFetch=clients.internalFetch || request;
     this.fetchNative=clients.fetchNative || fetchNativeMetadata;
+    meta.ensureSnapshots(db);
   }
   async importManifest(manifest,options={}) {
     if(!Array.isArray(manifest.subscriptions))throw new Error('manifest missing subscriptions array');
     const ids=new Set();
     for(const s of manifest.subscriptions){
       if(!s.id||!s.name||ids.has(s.id))throw new Error('invalid or duplicate source ID');ids.add(s.id);
+      normalizeTags(s.tags||[]);
       if(s.content_policy!==undefined&&!['feed_full','fetch_public_html','adapter_full','metadata_only'].includes(s.content_policy))throw new Error('invalid content policy');
     }
     // Complete validation before the first persistent write.
@@ -48,8 +53,9 @@ class ReaderService {
       await this.mf.call(`/v1/feeds/${feed.id}`,'PUT',patch);
     }
   }
-  refresh({sourceId,tag,platform,kind='manual'}={}) {
-    const sources=this.db.sources().filter(s=>s.enabled&&(!sourceId||s.id===sourceId)&&(!platform||s.platform===platform)&&(!tag||(s.tags||[]).includes(tag)));
+  refresh({sourceId,tag,tags,platform,kind='manual'}={}) {
+    const selected=requestedTags(tags,tag);
+    const sources=this.db.sources().filter(s=>s.enabled&&(!sourceId||s.id===sourceId)&&(!platform||s.platform===platform)&&containsAllTags(s.tags,selected));
     const ids=new Set(sources.map(s=>s.id));
     const run=this.db.createRun(this.db.channels().filter(c=>ids.has(c.source_id)),kind);
     this.pump().catch(e=>this.db.audit('pump','error',e.message));
@@ -114,18 +120,21 @@ class ReaderService {
   async syncFeed(c) {
     let offset=0,added=0;
     while(true) {
+      const fetchedAt=Date.now();
       const page=await this.mf.call(`/v1/feeds/${c.feed_id}/entries?limit=100&offset=${offset}&order=id&direction=asc`);
       const entries=page.entries||[];
-      for(const e of entries)added+=this.project(e,c);
+      for(const e of entries)added+=this.project(e,c,fetchedAt);
       offset+=entries.length;
       if(entries.length<100||offset>=page.total)break;
     }
     return added;
   }
-  project(e,c) {
+  project(e,c,fetchedAt=Date.now()) {
     const old=this.db.get('SELECT * FROM entries WHERE id=?',e.id);
     const imported=this.db.get('SELECT * FROM imports WHERE entry_id=? AND published_at_source IS NOT NULL',e.id);
     const raw=String(e.content||''), text=stripHTML(raw), now=Date.now();
+    const local=meta.localReadState(this.db,e.id);
+    const readStatus=local&&local.changedAt>=fetchedAt?local.status:(e.status||'unread');
     const published=imported?imported.original_published_at:(Date.parse(e.published_at)||null);
     const dateSource=imported?imported.published_at_source:(published?'miniflux_unverified':'unknown');
     const state=text?(imported?.content_state||'TEXT'):'META';
@@ -142,7 +151,9 @@ class ReaderService {
       content_state=excluded.content_state,content_hash=excluded.content_hash,synced_at=excluded.synced_at,
       content_origin=excluded.content_origin,published_at_source=excluded.published_at_source`,
       e.id,c.id,c.source_id,values.url,values.title,values.author,values.summary,published,
-      old?.discovered_at||now,changed?now:old.changed_at,e.status||'unread',state,contentHash,now,origin,dateSource);
+      old?.discovered_at||now,changed?now:old.changed_at,readStatus,state,contentHash,now,origin,dateSource);
+    const blogger=this.db.sources().find(s=>s.id===c.source_id);
+    meta.inheritArticleTags(this.db,e.id,blogger?.tags||[]);
     return old?0:1;
   }
   async refreshAdapter(c) {
@@ -197,19 +208,17 @@ class ReaderService {
       id,retainContent?row.content_hash:contentHash,published??row?.original_published_at??null,
       published?'upstream':(row?.published_at_source||'unknown'),
       retainContent?(row.content_state||'TEXT'):itemState,'adapter_feed',c.id,external);
-    this.project(await this.mf.call(`/v1/entries/${id}`),c);
+    const fetchedAt=Date.now();
+    this.project(await this.mf.call(`/v1/entries/${id}`),c,fetchedAt);
     return created;
   }
-  list({mode='latest',sourceId,platform,tag,unread=false,limit=30,offset=0,asOf=Date.now()}={}) {
-    const sources=this.db.sources(), byId=new Map(sources.map(s=>[s.id,s]));
-    let entries=this.db.all('SELECT * FROM entries ORDER BY published_at DESC,id DESC').filter(e=>{
-      const s=byId.get(e.source_id);return e.discovered_at<=asOf&&s?.visible&&(mode!=='recommend'||s.enabled)&&(!sourceId||s.id===sourceId)&&(!platform||s.platform===platform)&&(!tag||s.tags.includes(tag))&&(!unread||e.status==='unread');
-    });
-    const fb=Object.fromEntries(this.db.all('SELECT * FROM feedback').map(f=>[f.entry_id,f.value]));
-    if(mode==='recommend')entries=rankEntries(entries,sources,this.db.setting('preferences',{}),fb,asOf);
-    return {asOf,total:entries.length,items:entries.slice(offset,offset+limit).map(e=>({...e,source:byId.get(e.source_id).name,platform:byId.get(e.source_id).platform,tags:byId.get(e.source_id).tags,feedback:fb[e.id]||0})),offset,limit};
-  }
-  async markRead(id,status){if(!['read','unread'].includes(status)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid read state or entry');await this.mf.call('/v1/entries','PUT',{entry_ids:[id],status});this.db.run('UPDATE entries SET status=? WHERE id=?',status,id);}
+  list(options={}) {return require('./article-actions').list(this,options);}
+  tagCatalog() {return require('./article-actions').tagCatalog(this);}
+  setBloggerTags(id,tags) {return require('./article-actions').setBloggerTags(this,id,tags);}
+  setArticleTags(id,tags) {return require('./article-actions').setArticleTags(this,id,tags);}
+  markRead(id,status) {return require('./article-actions').markRead(this,id,status);}
+  openArticle(id,eventId,target) {return require('./article-actions').openArticle(this,id,eventId,target);}
+  backend() {return require('./article-actions').backend(this);}
   feedback(id,value){if(![-1,0,1].includes(value)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid feedback');this.db.run('INSERT INTO feedback VALUES(?,?,?) ON CONFLICT(entry_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',id,value,Date.now());}
   async archive(id) {
     if(this.archiving.has(id))return this.archiving.get(id);

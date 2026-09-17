@@ -114,5 +114,5 @@ test('source-first landing preserves notes navigation but makes Latest the initi
  const app=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/app.js'),'utf8');
  assert.match(html,/id="platform-filter"/);assert.match(html,/data-view="notes"/);
  assert.match(app,/await switchView\('latest'\);refresh\(\)/);
- assert.match(app,/<a class="primary" data-original/);
+ assert.match(fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8'),/<a class="primary" data-original/);
 });

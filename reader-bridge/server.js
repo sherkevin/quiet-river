@@ -8,6 +8,8 @@ const {Database}=require('./database');
 const {ReaderService}=require('./service');
 const {safeURL,hash,json}=require('./core');
 const {authorIdentity}=require('./sources');
+const {normalizeTags}=require('./tags');
+const {historyPage}=require('./reading-history');
 const {request,ApiClient}=require('./network');
 
 function secureEqual(a,b){return typeof a==='string'&&typeof b==='string'&&crypto.timingSafeEqual(Buffer.from(hash(a)),Buffer.from(hash(b)));}
@@ -44,32 +46,39 @@ function createApp(service,config){
         res.setHeader('Set-Cookie',`qr_token=${encodeURIComponent(config.accessToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
         return reply(res,200,{ok:true});
       }
-      const isStatic=['/desk','/desk/','/desk/app.js','/desk/style.css'].includes(u.pathname);
+      const isStatic=['/desk','/desk/','/desk/app.js','/desk/workspace-ui.js','/desk/style.css'].includes(u.pathname);
       const token=String(req.headers['x-qr-token']||cookies(req.headers.cookie).qr_token||'');
       const authorized=secureEqual(token,config.accessToken);
       if(isStatic&&req.method==='GET'){
-        const name=u.pathname.endsWith('.js')?'app.js':u.pathname.endsWith('.css')?'style.css':'index.html';
+        const name=u.pathname.endsWith('/workspace-ui.js')?'workspace-ui.js':u.pathname.endsWith('.js')?'app.js':u.pathname.endsWith('.css')?'style.css':'index.html';
         const content=fs.readFileSync(path.join(__dirname,'public',name));
         res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});return res.end(content);
       }
       if(!authorized)return reply(res,401,{error:'请先输入现有 Quiet River 访问口令'});
       if(req.method==='POST'&&req.headers['x-qr-action']!=='1')return reply(res,403,{error:'缺少写入请求标识'});
       const p=u.pathname;
-      if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
+      if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),tags:service.tagCatalog(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
       if(p==='/desk/api/entries'&&req.method==='GET'){
         const offset=Math.max(0,Number(u.searchParams.get('offset'))||0), limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit'))||30));
-        return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,platform:u.searchParams.get('platform')||undefined,tag:u.searchParams.get('tag')||undefined,unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
+        return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,platform:u.searchParams.get('platform')||undefined,tags:u.searchParams.has('tag')?u.searchParams.getAll('tag'):[],order:u.searchParams.get('order')||'desc',unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
       }
       if(p==='/desk/api/refresh'&&req.method==='POST')return reply(res,202,service.refresh(await bodyJSON(req)));
       const run=/^\/desk\/api\/runs\/([a-f0-9]+)$/.exec(p);
       if(run&&req.method==='GET'){const result=service.db.runStatus(run[1]);return reply(res,result?200:404,result||{error:'任务不存在'});}
-      const entry=/^\/desk\/api\/entries\/(\d+)\/(read|feedback|archive)$/.exec(p);
+      const entry=/^\/desk\/api\/entries\/(\d+)\/(read|open|tags|feedback|archive)$/.exec(p);
       if(entry&&req.method==='POST'){
         const data=await bodyJSON(req),id=Number(entry[1]);
+        if(entry[2]==='open')return reply(res,200,await service.openArticle(id,data.eventId,data.target));
+        if(entry[2]==='tags')return reply(res,200,service.setArticleTags(id,data.tags));
         if(entry[2]==='read')await service.markRead(id,data.status);
         if(entry[2]==='feedback')service.feedback(id,Number(data.value));
         if(entry[2]==='archive')return reply(res,200,await service.archive(id));
         return reply(res,200,{ok:true});
+      }
+      if(p==='/desk/api/backend'&&req.method==='GET')return reply(res,200,service.backend());
+      if(p==='/desk/api/history'&&req.method==='GET'){
+        const before=Number(u.searchParams.get('before'))||Number.MAX_SAFE_INTEGER;
+        return reply(res,200,historyPage(service.db,{before,limit:Math.min(100,Math.max(1,Number(u.searchParams.get('limit'))||30))}));
       }
       if(p==='/desk/api/notes'&&req.method==='GET')return reply(res,200,await service.highlights(u.searchParams.get('cursor')||''));
       if(p==='/desk/api/bookmarks'&&req.method==='GET')return reply(res,200,await service.notes(u.searchParams.get('cursor')||''));
@@ -83,7 +92,7 @@ function createApp(service,config){
       if(p==='/desk/api/sources'&&req.method==='POST'){
         const b=await bodyJSON(req), url=safeURL(b.url),feed=safeURL(b.feedUrl);
         if(!String(b.name||'').trim()||(!url&&!feed))return reply(res,400,{error:'需要来源名称以及主页或 Feed 地址'});
-        const source={id:crypto.randomBytes(8).toString('hex'),name:String(b.name).slice(0,150),url:url||feed,platform:String(b.platform||'blog').slice(0,40),tags:Array.isArray(b.tags)?b.tags.map(String).filter(x=>x.length<100):[],feeds:feed?[feed]:[],manual:!feed};
+        const source={id:crypto.randomBytes(8).toString('hex'),name:String(b.name).slice(0,150),url:url||feed,platform:String(b.platform||'blog').slice(0,40),tags:normalizeTags(b.tags===undefined?[]:b.tags),feeds:feed?[feed]:[],manual:!feed};
         const identity=authorIdentity(source.url);
         if(identity){source.platform=identity.platform;source.adapter=identity;source.manual=false;}
         await service.importManifest({subscriptions:[source]});return reply(res,201,{source});
@@ -110,7 +119,7 @@ function createApp(service,config){
         const b=await bodyJSON(req),s=service.db.sources().find(s=>s.id===sourceMatch[1]);if(!s)return reply(res,404,{error:'来源不存在'});
         if(b.visible!==undefined)service.db.run('UPDATE sources SET visible=? WHERE id=?',b.visible?1:0,s.id);
         if(b.enabled!==undefined)service.db.run('UPDATE sources SET enabled=? WHERE id=?',b.enabled?1:0,s.id);
-        if(b.tags!==undefined){if(!Array.isArray(b.tags))throw new Error('tags must be an array');s.tags=b.tags.map(String).filter(x=>x.length<100);service.db.run('UPDATE sources SET payload=? WHERE id=?',JSON.stringify(s),s.id);}
+        if(b.tags!==undefined)service.setBloggerTags(s.id,b.tags);
         return reply(res,200,{ok:true});
       }
       if(p==='/desk/api/sources/export'&&req.method==='GET'){
@@ -126,9 +135,11 @@ function createApp(service,config){
       }
       if(p==='/desk/api/digests'&&req.method==='GET')return reply(res,200,service.db.all('SELECT day,created_at,revision FROM digests ORDER BY day DESC LIMIT 100'));
       const day=/^\/desk\/api\/digests\/(\d{4}-\d{2}-\d{2})$/.exec(p);
-      if(day&&req.method==='GET'){const d=service.db.get('SELECT payload FROM digests WHERE day=?',day[1]);return reply(res,d?200:404,d?json(d.payload,{}):{error:'日报尚未生成'});}
+      if(day&&req.method==='GET'){const d=service.db.get('SELECT payload FROM digests WHERE day=?',day[1]);if(!d)return reply(res,404,{error:'日报尚未生成'});const digest=json(d.payload,{});
+        digest.items=(digest.items||[]).map(item=>{const entry=service.db.get('SELECT status FROM entries WHERE id=?',item.id);const snapshot=require('./article-metadata').tagSnapshot(service.db,item.id);return {...item,status:entry?.status||item.status,tags:snapshot?.tags||item.tags};});
+        return reply(res,200,digest);}
       return reply(res,404,{error:'接口不存在'});
-    }catch(e){service.db.audit('request',u?.pathname||'invalid',classifyErrorSafe(e));return reply(res,502,{error:'操作未完成：'+classifyErrorSafe(e)});}
+    }catch(e){service.db.audit('request',u?.pathname||'invalid',classifyErrorSafe(e));return reply(res,[400,404,409].includes(e.status)?e.status:502,{error:'操作未完成：'+classifyErrorSafe(e)});}
   });
 }
 function classifyErrorSafe(e){return /not configured/.test(e.message)?'阅读服务或采集通道尚未完成配置':/invalid|missing|must|too large/.test(e.message)?'请求参数不符合接口要求':'后端调用失败或超时；原有数据已保留';}
@@ -148,7 +159,7 @@ async function main(){
   for(const event of ['SIGTERM','SIGINT'])process.on(event,async()=>{
     if(closing)return;closing=true;service.stop();app.close();
     const deadline=Date.now()+125000;
-    while((service.working||service.archiving.size)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
+    while((service.working||service.archiving.size||service.readWrites.size)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
     app.closeAllConnections();db.close();process.exit(0);
   });
 }

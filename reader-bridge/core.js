@@ -124,7 +124,7 @@ function rankEntries(entries, sources, preferences = {}, feedback = {}, now = Da
   const words = String(preferences.keywords || '').toLowerCase().split(/[,，\n]+/).map(s => s.trim()).filter(Boolean);
   const scored = entries.map(entry => {
     const s = src.get(entry.source_id) || {};
-    const tags = s.tags || [];
+    const tags = Array.isArray(entry.tags) ? entry.tags : (s.tags || []);
     const tagWeights = tags.map(t => Number(weights[t] || 0));
     const positive = Math.max(0, ...tagWeights);
     const negative = Math.min(0, ...tagWeights);
