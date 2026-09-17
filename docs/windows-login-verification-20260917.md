@@ -1,0 +1,44 @@
+# Windows 登录确认后的诊断与验证（2026-09-17）
+
+用户确认 Shervin 已登录知乎与小红书，本轮只验证少量只读任务。
+不导出 Cookie，不读取账号口令，不改变扩展权限，不扩展关注名单。
+
+## 已观察到的结果
+
+- `collector.cjs --doctor` 再次通过：OpenCLI 扩展和受限 ECS SSH 可用。
+- 16:49（+08:00）领取一个小红书通道，最终回传 UPSTREAM_ERROR、0 条入库。
+- 此次输出没有进入非零退出的 OpenCLI 错误分支，失败发生在 JSON/链接规范化阶段。
+- 已安装 OpenCLI 1.8.7 的 `clis/xiaohongshu/user-helpers.js` 构造路径：
+  `/user/profile/<author-id>/<note-id>`，并可携带原始访问查询参数。
+- 当前 Windows normalizer 和 ECS validateItems 只接受 explore/discovery 两类路径。
+- 脱敏离线夹具已复现：两个现有校验器都会拒绝上述实际支持的链接结构。
+- 一次整合两端校验器的写入请求被工具安全检查阻止，未执行；不尝试绕过该检查。
+- `tools/windows/original-link.cjs` 是已通过独立测试的候选校验器，尚未接入实际流程。
+
+## 知乎导航诊断
+
+- 默认 whoami 会话返回 Navigation rejected，未返回账号状态，也未确认凭证失效。
+- 已核实 Shervin Chrome 版本为153.0.8010.36。
+- 在独立 example.com 诊断会话中，创建页、读标题、再次导航、关闭均成功。
+- 因此不能断定整个浏览器导航都坏了，也不能直接把错误归因于用户没登录。
+- 同一 whoami 使用官方 `--site-session ephemeral` 后退出0，返回结构化账号状态。
+- 账号字段值未输出到日志或聊天；不把字段存在单独当作作者列表已经同步成功。
+- 本批启用独立会话选项；保留 trace off，不开启网络抓包，不修改登录/权限机制。
+
+## 外部资料与推断边界
+
+OpenCLI 官方 Browser Bridge 文档介绍独立会话和用户浏览器会话复用：
+https://opencli.info/docs/guide/browser-bridge.html
+
+官方仓库 issue #2487 报告 Chromium152 的 debugger detach/navigation 竞态：
+https://github.com/jackwener/OpenCLI/issues/2487
+相关 PR #2499、#2501 截至本次查询均为 closed 且未合并，不能当作已发布修复。
+上游复现环境与本机不完全一致；这里只作为线索，本轮没有应用那些未合并补丁。
+
+## 当前修复边界
+
+真正修改的运行行为仅为 Windows 采集命令使用独立临时会话。
+小红书两端链接校验修复仍待接入；候选模块通过测试不等于线上能够接受该链接。
+保留平台组冷却，没有反复刷新115个知乎作者，没有将导航拒绝当作成功更新。
+单次成功返回也只验证当前列表窗口，不证明历史补抓和长期完整覆盖。
+后续追加真实运行版本和少量文章入库结果，不能凭本节提前声称完成。

@@ -47,7 +47,7 @@ function collect(job){
   if(!['zhihu','xiaohongshu'].includes(job.platform)||!/^[-\w]+$/.test(job.authorId))throw new Error('Invalid job identity');
   const command=job.platform==='xiaohongshu'?'user':job.kind==='answers'?'user-answers':job.kind==='articles'?'user-articles':null;
   if(!command)throw new Error('Unsupported read-only command');
-  const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(Math.min(20,job.limit||20)),'-f','json','--trace','off'];
+  const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(Math.min(20,job.limit||20)),'-f','json','--trace','off','--site-session','ephemeral'];
   const r=spawnSync(process.execPath,argv,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,
     env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
   if(r.error||r.status!==0){const diagnostic=/Navigation rejected/i.test(r.stderr||'')?'navigation_rejected':'upstream_rejected';log('OpenCLI check failed: '+diagnostic);return {leaseId:job.leaseId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),items:[]};}
