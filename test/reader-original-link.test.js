@@ -52,3 +52,24 @@ test('Zhihu-only launcher keeps bounded work and does not start the other platfo
  assert.match(script,/--platform zhihu --max-jobs 20/);
  assert.ok(!script.includes('--watch'));assert.ok(!script.includes('xiaohongshu'));
 });
+test('Windows normalizer accepts installed OpenCLI profile-note rows and preserves the opening URL',()=>{
+ const {normalize}=require('../tools/windows/normalize.cjs');
+ const opening=profile+'?xsec_source=pc_user&fixture=one';
+ const rows=normalize(job,[{id:note,title:'Fixture note',url:opening,unrelated:'discard'}]);
+ assert.equal(rows[0].link,opening);assert.equal(rows[0].published,null);
+ assert.equal(rows[0].unrelated,undefined);
+});
+test('Windows normalizer rejects note identity mismatch and supports blank note titles',()=>{
+ const {normalize}=require('../tools/windows/normalize.cjs');
+ assert.throws(()=>normalize(job,[{id:'ffffffffffffffffffffffff',title:'Wrong',url:profile}]),/identity mismatch/);
+ const row=normalize(job,[{id:note,title:'',url:profile}])[0];
+ assert.equal(row.title,'小红书笔记');
+});
+test('ECS validator accepts profile-note links only for the assigned author and keeps stable identity',()=>{
+ const {validateItems}=require('../reader-bridge/desktop-collector');
+ const channel={platform:'xiaohongshu',label:'notes',authorId:author};
+ const a=validateItems(channel,[{title:'A',link:profile+'?fixture=one',published:null,summary:''}])[0];
+ const b=validateItems(channel,[{title:'A',link:profile+'?fixture=two',published:null,summary:''}])[0];
+ assert.equal(a.guid,b.guid);assert.notEqual(a.link,b.link);
+ assert.throws(()=>validateItems({...channel,authorId:'ffffffffffffffffffffffff'},[{title:'A',link:profile}]),/does not match/);
+});

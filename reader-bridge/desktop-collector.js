@@ -1,22 +1,20 @@
 'use strict';
 const crypto=require('node:crypto');
-const {channelsFor,escapeHTML,safeURL}=require('./core');
+const {channelsFor,escapeHTML}=require('./core');
+const {originalLink}=require('../tools/windows/original-link.cjs');
 const PLATFORMS=new Set(['zhihu','xiaohongshu']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
 function fail(message,status=400){throw Object.assign(new Error(message),{status});}
 function validateItems(channel,items){
   if(!Array.isArray(items)||items.length>50)fail('invalid collector item list');
   return items.map(item=>{
-    const url=safeURL(item.link);if(!url)fail('invalid original URL');const u=new URL(url);
-    const match=channel.platform==='zhihu'
-      ? (channel.label==='answers'&&u.hostname==='www.zhihu.com'&&/^\/question\/\d+\/answer\/\d+$/.test(u.pathname)||channel.label==='articles'&&u.hostname==='zhuanlan.zhihu.com'&&/^\/p\/\d+$/.test(u.pathname))
-      : (u.hostname==='www.xiaohongshu.com'&&/^\/(explore|discovery\/item)\/[a-f\d]{24}$/i.test(u.pathname));
-    if(!match||url.length>4096)fail('collector original URL does not match platform');
+    let original;try{original=originalLink({platform:channel.platform,kind:channel.label,authorId:channel.authorId},item.link);}
+    catch{fail('collector original URL does not match platform');}
     if(typeof item.title!=='string'||!item.title.trim()||item.title.length>1000)fail('invalid title');
     const published=item.published==null?null:Number(item.published);
     if(published!==null&&(!Number.isSafeInteger(published)||published<946684800000||published>Date.now()+300000))fail('invalid publication date');
     const summary=typeof item.summary==='string'?item.summary.slice(0,1500):'';
-    return {guid:u.origin+u.pathname,link:url,title:item.title.trim(),published,
+    return {guid:original.guid,link:original.link,title:item.title.trim(),published,
       content:summary?'<p>'+escapeHTML(summary)+'</p>':'',content_state:summary?'PARTIAL':'META'};
   });
 }
@@ -93,7 +91,7 @@ class DesktopCollector {
     const source=this.db.sources().find(s=>s.id===c?.source_id);
     if(!source?.enabled||c?.transport!=='desktop'||!c.enabled)fail('source no longer enabled',409);
     if(!['OK',...STATES].includes(input.status))fail('invalid collector status');
-    const items=input.status==='OK'?validateItems({...c,platform:source.platform},input.items):[];
+    const items=input.status==='OK'?validateItems({...c,platform:source.platform,authorId:source.adapter.id},input.items):[];
     this.db.run("UPDATE collector_leases SET state='APPLYING',digest=? WHERE id=?",digest,lease.id);
     let added=0;
     for(const item of items)added+=await this.s.importItem(c,item);

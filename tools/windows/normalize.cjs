@@ -1,20 +1,18 @@
 'use strict';
+const {originalLink}=require('./original-link.cjs');
 function normalize(job,rows){
   if(!Array.isArray(rows)||rows.length>50)throw new Error('Invalid OpenCLI list');
   return rows.map(row=>{
-    const u=new URL(row.url);
-    const valid=job.platform==='zhihu'
-      ? (job.kind==='answers'&&u.hostname==='www.zhihu.com'&&/^\/question\/\d+\/answer\/\d+$/.test(u.pathname)||job.kind==='articles'&&u.hostname==='zhuanlan.zhihu.com'&&/^\/p\/\d+$/.test(u.pathname))
-      : u.hostname==='www.xiaohongshu.com'&&/^\/(explore|discovery\/item)\/[a-f\d]{24}$/i.test(u.pathname);
-    if(!valid||u.protocol!=='https:'||u.username||u.password)throw new Error('Original link mismatch');
-    const title=String(row.question||row.title||'').trim();
+    const original=originalLink(job,row.url);
+    if(job.platform==='xiaohongshu'&&row.id&&String(row.id).toLowerCase()!==original.noteId)throw new Error('Original link identity mismatch');
+    const title=String(row.question||row.title||(job.platform==='xiaohongshu'?'小红书笔记':'')).trim();
     if(!title)throw new Error('Missing article title');
     // The installed Xiaohongshu list has no publication field. Do not decode IDs into dates.
     let published=null;
     if(job.platform==='zhihu'&&row.created){
       const n=Number(row.created);if(Number.isFinite(n))published=n>100000000000?Math.floor(n):Math.floor(n*1000);
     }
-    return {title:title.slice(0,1000),link:u.href,published,summary:''};
+    return {title:title.slice(0,1000),link:original.link,published,summary:''};
   });
 }
 function statusFor(code,text){
