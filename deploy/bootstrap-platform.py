@@ -47,7 +47,7 @@ def main():
     mf = ROOT/'miniflux.env'
     if not mf.exists():
         secure_write(mf, '\n'.join([
-            'DATABASE_URL=postgres://qr_miniflux:'+settings['database_password']+'@localhost/qr_miniflux?host=/var/run/postgresql&sslmode=disable',
+            'DATABASE_URL=host=/var/run/postgresql dbname=qr_miniflux user=qr_miniflux password='+settings['database_password']+' sslmode=disable',
             'LISTEN_ADDR=0.0.0.0:8080','RUN_MIGRATIONS=1','CREATE_ADMIN=1','ADMIN_USERNAME=reader',
             'ADMIN_PASSWORD='+settings['miniflux_password'],'FETCHER_ALLOW_PRIVATE_NETWORKS=false',
             'DISABLE_SCHEDULER_SERVICE=true','WORKER_POOL_SIZE=1','POLLING_LIMIT_PER_HOST=1',
