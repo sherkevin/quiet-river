@@ -46,3 +46,9 @@ test('production collector requests isolated sessions without enabling network t
  const script=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
  assert.match(script,/'--trace','off','--site-session','ephemeral'/);
 });
+test('Zhihu-only launcher keeps bounded work and does not start the other platform',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const script=fs.readFileSync(path.join(__dirname,'../tools/windows/Sync-Zhihu.cmd'),'utf8');
+ assert.match(script,/--platform zhihu --max-jobs 20/);
+ assert.ok(!script.includes('--watch'));assert.ok(!script.includes('xiaohongshu'));
+});
