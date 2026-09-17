@@ -61,6 +61,34 @@ git check-ignore -v secrets/   # 必须打印忽略规则
 
 已知局限：该通道只返回标题、封面、赞数，**没有昵称**，所以添加新的小红书博主时要自己填名字。
 
+**坑：服务进程的 PATH 不等于你终端的 PATH。** 这个 CLI 工具通常装在 `/opt/homebrew/bin`
+（Apple Silicon Homebrew）或 `/usr/local/bin`，你在终端手敲能跑通，但 launchd/systemd 给
+服务进程的 PATH 是精简的（实测 Mac 上 launchd 给的是 `/usr/bin:/bin:/usr/sbin:/sbin`），
+不含那两个目录，于是适配器 `execFile` 这个工具时报 `ENOENT`。更隐蔽的是第二层：这个 CLI
+自己是个 node 脚本，shebang 还要靠 PATH 找 `node`，所以就算用绝对路径找到了它，它内部还会
+报 `env: node: No such file or directory`。
+
+适配器自己处理了这两层（绝对路径解析 + 给子进程补上当前 node 所在目录），所以第 1 步拷过来的
+文件在标准安装位置下不用你管。**如果你拷的是旧版本、或者 CLI 装在非标准位置，就要出手**：
+问题栏会明确报「找不到 <工具名> 可执行文件（PATH=...）」，这时设一个环境变量 `QR_OPENCLI_BIN`
+指向它的绝对路径即可。这个变量由服务进程读取，所以要设在服务托管的配置里而不是 shell 里：
+launchd 在 plist 加 `EnvironmentVariables` 字典，systemd 在 unit 加 `Environment=` 或写进
+`EnvironmentFile` 指的那个文件。判别方法：在终端跑 `which <工具名>` 看它到底在哪，再对照报错
+里打出来的 PATH 缺了哪个目录。
+
+这个坑只发生在**装了私有适配器的那台机器**上。ECS 那份刻意不带 `adapters.private.js`（见第 1 步），
+所以当前不会触发——它报的是「未知适配器 xiaohongshu」，那是另一回事（缺文件，不是缺路径）。
+但你若哪天真把适配器装上 ECS，这一条同样要查。两边的默认 PATH 实测不一样，这正是要分清的地方：
+
+| 服务托管 | 给服务进程的 PATH（实测） |
+|---|---|
+| launchd（Mac） | `/usr/bin:/bin:/usr/sbin:/sbin` |
+| systemd（Ubuntu 24.04 ECS） | `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/snap/bin` |
+
+systemd 那份含 `/usr/local/bin`，所以 `npm i -g` 装的东西在 ECS 上能直接找到，launchd 那份连
+Homebrew 目录都没有。判别方法两边一样：报错里会打出当时的 PATH，对照 `which <工具名>` 的结果看
+缺了哪个目录。
+
 ## 第 4 步（B站）：RSSHub，不是 cookie 但对齐必需
 
 仓库自带设置 `rsshubBase=http://127.0.0.1:1200`（随 `data/subscriptions.json` 发布），所以新机器只需要真的把一个 RSSHub 跑在 1200 端口：clone → `pnpm install` → `pnpm build` → 带 `CHROMIUM_EXECUTABLE_PATH` 启动。四个实测坑（Node 版本、pnpm 10 配置迁移、先 build、chromium 硬依赖）全部写在 README 的「添加博主」第 2 档段落，照做即可。
