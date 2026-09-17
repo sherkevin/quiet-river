@@ -1,0 +1,23 @@
+[Unit]
+Description=Quiet River personal reading bridge
+After=network-online.target docker.service postgresql.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=qr
+Group=qr
+WorkingDirectory=/opt/quiet-river-platform/current
+EnvironmentFile=/etc/quiet-river-platform/bridge.env
+ExecStart=/usr/local/bin/qr-node reader-bridge/server.js
+Restart=on-failure
+RestartSec=8
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/quiet-river-platform/bridge
+UMask=0077
+MemoryHigh=160M
+MemoryMax=256M
+[Install]
+WantedBy=multi-user.target

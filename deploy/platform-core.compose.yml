@@ -1,0 +1,18 @@
+name: quiet-river-platform
+services:
+  miniflux:
+    image: ${MINIFLUX_IMAGE:?pin the verified image digest}
+    restart: unless-stopped
+    env_file: /etc/quiet-river-platform/miniflux.env
+    ports: ["127.0.0.1:3061:8080"]
+    volumes: ["/var/run/postgresql:/var/run/postgresql:ro"]
+    mem_limit: 192m
+    logging: {driver: json-file, options: {max-size: "5m", max-file: "2"}}
+  karakeep:
+    image: ${KARAKEEP_IMAGE:?pin the verified image digest}
+    restart: unless-stopped
+    env_file: /etc/quiet-river-platform/karakeep.env
+    ports: ["127.0.0.1:3062:3000"]
+    volumes: ["/var/lib/quiet-river-platform/karakeep:/data"]
+    mem_limit: 640m
+    logging: {driver: json-file, options: {max-size: "5m", max-file: "2"}}
