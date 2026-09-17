@@ -84,3 +84,18 @@ bash deploy/install-release.sh <commit>
 - Daily selection uses the full local candidate set, keeps unselected articles, and includes source gaps.
 - Gateway checks verify stable legacy access as well as the new login shell; a transient active state is insufficient.
 - A failed or rejected tool call is not an executed change and must not be recorded as a successful deployment.
+
+## Final observed runtime checks
+
+The deployed application commit is `8b48fefa921a2f4948a597f983cfb24b2a6b45ed`.
+The later repository documentation commit does not change this running application version.
+
+- A manual refresh against a real existing blog completed successfully and returned 212 stored articles.
+- At the subsequent observation the shared entry store contained 679 articles; initial source checks were still running.
+- 3 notification outbox events were recorded SENT after the local ntfy service accepted them.
+- Source results included 21 successful-new channels, 8 timeouts and 1 upstream error at that observation;
+  failures remain visible, and queued/credential-blocked channels are not counted as successful.
+- The old service's restart counter stopped increasing after its runtime path was repaired.
+- Database recovery point validation succeeded and the stopped services were restored to their prior active state.
+
+Counters above are point-in-time observations, not guaranteed feed coverage or fixed future counts.
