@@ -43,16 +43,25 @@ function preflight(){
   if(doctor.status!==0||!/Extension: connected/.test(doctor.stdout))throw new Error('Open Chrome and connect the OpenCLI Browser Bridge extension');
   transport({op:'status'});log('OpenCLI extension and restricted ECS connection verified. Cookies stay in Windows.');
 }
-function collect(job){
+function collect(job,limitOverride){
   if(!['zhihu','xiaohongshu'].includes(job.platform)||!/^[-\w]+$/.test(job.authorId))throw new Error('Invalid job identity');
   const command=job.platform==='xiaohongshu'?'user':job.kind==='answers'?'user-answers':job.kind==='articles'?'user-articles':null;
   if(!command)throw new Error('Unsupported read-only command');
-  const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(Math.min(20,job.limit||20)),'-f','json','--trace','off','--site-session','ephemeral'];
+  const limit=Math.min(20,Math.max(1,Number(limitOverride??job.limit??20)||20));
+  const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(limit),'-f','json','--trace','off','--site-session','ephemeral'];
   const r=spawnSync(process.execPath,argv,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,
     env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
   if(r.error||r.status!==0){const diagnostic=/Navigation rejected/i.test(r.stderr||'')?'navigation_rejected':'upstream_rejected';log('OpenCLI check failed: '+diagnostic);return {leaseId:job.leaseId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),items:[]};}
   try{return {leaseId:job.leaseId,status:'OK',items:normalize(job,JSON.parse(r.stdout.replace(/^\uFEFF/,'')))};}
   catch{return {leaseId:job.leaseId,status:'UPSTREAM_ERROR',items:[]};}
+}
+async function confirmedCollect(job,collectFn=collect,sleepFn=sleep){
+  const first=collectFn(job);if(first.status!=='AUTH_REQUIRED')return first;
+  await sleepFn(3000);return collectFn(job);
+}
+async function authRecovered(probe,collectFn=collect,sleepFn=sleep){
+  const first=collectFn(probe,1);if(first.status!=='OK')return false;
+  await sleepFn(2000);return collectFn(probe,1).status==='OK';
 }
 async function main(){
   if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu] [--doctor]');return;}
@@ -60,7 +69,7 @@ async function main(){
   const platforms=option('--platform','zhihu,xiaohongshu').split(',').filter(p=>['zhihu','xiaohongshu'].includes(p));
   if(!platforms.length)throw new Error('Choose a supported platform');
   const max=Math.max(1,Math.min(1000,Number(option('--max-jobs',args.includes('--watch')?'1000':'20'))||20));
-  const pending=path.join(root,'pending-result.json');let done=0,failures=0;
+  const pending=path.join(root,'pending-result.json'),authProbeAt=new Map();let done=0,failures=0;
   while(done<max){
     try{
       if(fs.existsSync(pending)){
@@ -73,15 +82,30 @@ async function main(){
       }
       const next=transport({op:'claim',platforms});
       if(!next.job){
+        let resumed=false;
+        if(next.authProbe){
+          const last=authProbeAt.get(next.authProbe.platform)||0;
+          if(Date.now()-last>=600000){
+            authProbeAt.set(next.authProbe.platform,Date.now());
+            log('Checking whether local '+next.authProbe.platform+' authorization has recovered; no cookie leaves Windows.');
+            if(await authRecovered(next.authProbe)){
+              const ack=transport({op:'resume',platform:next.authProbe.platform});
+              resumed=!!ack.resumed;log(resumed?'ECS credential group resumed after two local successful probes.':'ECS kept the credential group paused by recovery cooldown.');
+            }else log('Local authorization recovery not confirmed twice; ECS remains paused.');
+          }
+        }
+        if(resumed){await sleep(2000);continue;}
         if(!args.includes('--watch')&&!next.waitForCooldown){log('No currently eligible task. Cooling down or waiting for browser authorization is not a successful source check.');break;}
         await sleep(Math.max(8,Math.min(60,next.retryAfter||30))*1000);continue;
       }
       log('Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
-      persist(pending,collect(next.job));await sleep(8000);
+      const result=await confirmedCollect(next.job);
+      if(result.status==='AUTH_REQUIRED')log('Authentication failure repeated on the same subscribed route; shared group will pause.');
+      persist(pending,result);await sleep(8000);
     }catch(e){log(e.message);if(!args.includes('--watch'))throw e;await sleep(30000);}
   }
   log('Completed '+done+' tasks; '+failures+' blocked or failed. This is not an all-source coverage claim.');
   if(failures)process.exitCode=2;
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={normalize,statusFor};
+module.exports={normalize,statusFor,confirmedCollect,authRecovered};

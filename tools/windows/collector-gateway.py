@@ -16,7 +16,7 @@ def main():
     if len(data) > 262144:
         raise ValueError('message too large')
     message = json.loads(data)
-    if not isinstance(message, dict) or message.get('op') not in ('claim', 'submit', 'status'):
+    if not isinstance(message, dict) or message.get('op') not in ('claim', 'submit', 'status', 'resume'):
         raise ValueError('unsupported collector operation')
     config = {}
     with open('/etc/quiet-river-collector/agent.env') as stream:

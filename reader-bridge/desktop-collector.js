@@ -47,6 +47,34 @@ class DesktopCollector {
     return {device:'Shervin',lastSeen:at,online:at>0&&now-at<120000,
       note:'Windows运行时接收更新任务；登录态留在本机，离线不代表博主无更新'};
   }
+  authProbe(platforms){
+    const configured=this.s.config.adapters?.desktopPlatforms||[];
+    const sources=this.db.sources();
+    for(const platform of platforms){
+      if(!PLATFORMS.has(platform)||!configured.includes(platform))continue;
+      const group=this.db.get('SELECT state FROM groups WHERE id=?','credential:'+platform);
+      if(group?.state!=='AUTH_REQUIRED')continue;
+      const candidates=this.db.channels().filter(c=>c.transport==='desktop'&&c.group_key==='credential:'+platform&&c.enabled);
+      const c=candidates.find(c=>c.state==='AUTH_REQUIRED')||candidates[0];
+      const source=c&&sources.find(s=>s.id===c.source_id&&s.enabled&&s.adapter?.id);
+      if(source)return {platform,sourceId:source.id,authorId:source.adapter.id,kind:c.label,limit:1};
+    }
+    return null;
+  }
+  resume(platform,now=Date.now()){
+    const configured=this.s.config.adapters?.desktopPlatforms||[];
+    if(!PLATFORMS.has(platform)||!configured.includes(platform))fail('unsupported recovery platform');
+    const groupId='credential:'+platform,group=this.db.get('SELECT * FROM groups WHERE id=?',groupId);
+    if(!group)fail('credential group not found',404);
+    if(group.state!=='AUTH_REQUIRED')return {resumed:false,state:group.state};
+    const key='collector_auth_resume:'+platform,last=Number(this.db.setting(key,0))||0,wait=600000-(now-last);
+    if(wait>0)return {resumed:false,state:group.state,retryAfter:Math.ceil(wait/1000)};
+    this.db.run("UPDATE groups SET state='UNKNOWN',next_allowed=0,failures=0 WHERE id=?",groupId);
+    for(const c of this.db.channels().filter(c=>c.transport==='desktop'&&c.group_key===groupId&&c.state==='AUTH_REQUIRED'))
+      this.db.run("UPDATE channels SET state='NEVER_CHECKED',next_check=0,error='',failures=0 WHERE id=?",c.id);
+    this.db.set(key,now);this.db.audit('collector_auth_resume',platform,'local OpenCLI probe confirmed twice');
+    return {resumed:true,state:'UNKNOWN'};
+  }
   expire(now){
     for(const lease of this.db.all("SELECT * FROM collector_leases WHERE state IN ('OPEN','APPLYING') AND expires_at<?",now)){
       this.db.run("UPDATE collector_leases SET state='EXPIRED' WHERE id=?",lease.id);
@@ -81,7 +109,8 @@ class DesktopCollector {
       return {job:{leaseId:id,sourceId:source.id,platform:source.platform,authorId:source.adapter.id,
         name:source.name,kind:c.label,limit:20},retryAfter:8};
     }
-    return {job:null,retryAfter:nearCooldown||30,waitForCooldown:nearCooldown!==null,status:this.status()};
+    const authProbe=this.authProbe(allowed);
+    return {job:null,retryAfter:authProbe?60:(nearCooldown||30),waitForCooldown:nearCooldown!==null,authProbe,status:this.status()};
   }
   async submit(input){
     if(!input||typeof input!=='object')fail('invalid result');
@@ -125,6 +154,7 @@ class DesktopCollector {
     try{
       if(input.op==='claim')return this.claim(Array.isArray(input.platforms)?input.platforms:[]);
       if(input.op==='submit')return await this.submit(input.result);
+      if(input.op==='resume')return this.resume(String(input.platform||''));
       if(input.op==='status'){this.db.set('collector_seen',Date.now());return this.status();}
       fail('invalid collector operation');
     }finally{this.busy=false;}

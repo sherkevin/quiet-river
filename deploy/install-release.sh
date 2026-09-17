@@ -26,8 +26,20 @@ if [ ! -x /usr/local/bin/qr-node ]; then
 fi
 install -d -o qr -g qr -m 700 /var/lib/quiet-river-platform/bridge
 OLD=$(readlink -f /opt/quiet-river-platform/current || true)
+GATEWAY_TARGET=/usr/local/lib/quiet-river-collector/gateway.py
+GATEWAY_BACKUP=""
+GATEWAY_EXISTED=false
+GATEWAY_CHANGED=false
+if [ -f /etc/quiet-river-collector/agent.env ] && [ -e "$GATEWAY_TARGET" ]; then
+  GATEWAY_EXISTED=true
+  GATEWAY_BACKUP="/var/backups/quiet-river/gateway-$(date +%Y%m%dT%H%M%S%N).py"
+  install -m 600 "$GATEWAY_TARGET" "$GATEWAY_BACKUP"
+fi
 rollback() {
   code=$?; trap - ERR
+  if [ "$GATEWAY_CHANGED" = true ]; then
+    if [ "$GATEWAY_EXISTED" = true ]; then install -m 644 "$GATEWAY_BACKUP" "$GATEWAY_TARGET"; else rm -f "$GATEWAY_TARGET"; fi
+  fi
   if [ -n "$OLD" ] && [ -f "$OLD/deploy/quiet-river-bridge.service" ]; then
     ln -sfn "$OLD" /opt/quiet-river-platform/current.rollback
     mv -Tf /opt/quiet-river-platform/current.rollback /opt/quiet-river-platform/current
@@ -44,6 +56,12 @@ if [ -L /opt/quiet-river-platform/current ]; then
 fi
 ln -s "$DEST" /opt/quiet-river-platform/current.next.$$
 mv -Tf /opt/quiet-river-platform/current.next.$$ /opt/quiet-river-platform/current
+if [ -f /etc/quiet-river-collector/agent.env ]; then
+  install -d -m 755 "$(dirname "$GATEWAY_TARGET")"
+  install -m 644 "$DEST/tools/windows/collector-gateway.py" "$GATEWAY_TARGET.next.$$"
+  mv -Tf "$GATEWAY_TARGET.next.$$" "$GATEWAY_TARGET"
+  GATEWAY_CHANGED=true
+fi
 systemctl daemon-reload
 systemctl enable quiet-river-bridge
 systemctl restart quiet-river-bridge

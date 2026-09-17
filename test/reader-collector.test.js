@@ -4,6 +4,7 @@ const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
 const {normalize,statusFor}=require('../tools/windows/normalize.cjs');
+const {confirmedCollect,authRecovered}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
  const db=new Database(':memory:');t.after(()=>db.close());
@@ -114,4 +115,41 @@ test('collector startup removes legacy success messages from the channel error f
  const f=fixture(t);f.db.run("UPDATE channels SET state='SUCCEEDED_PARTIAL',error='legacy success note'");
  new DesktopCollector(f.service);
  assert.equal(f.db.get('SELECT error FROM channels').error,'');
+});
+
+test('paused desktop group exposes only a bounded local auth probe and can resume itself',async t=>{
+ const f=fixture(t),r=f.collector.claim(['zhihu']);
+ await f.collector.submit({leaseId:r.job.leaseId,status:'AUTH_REQUIRED',items:[]});
+ const paused=f.collector.claim(['zhihu']);assert.equal(paused.job,null);
+ assert.deepEqual(Object.keys(paused.authProbe).sort(),['authorId','kind','limit','platform','sourceId'].sort());
+ assert.equal(paused.authProbe.platform,'zhihu');assert.equal(paused.authProbe.authorId,'test-author');
+ assert.throws(()=>f.collector.resume('twitter'),/unsupported recovery platform/);
+ const resumed=f.collector.resume('zhihu');assert.equal(resumed.resumed,true);
+ assert.equal(f.db.get('SELECT state FROM groups').state,'UNKNOWN');
+ assert.equal(f.db.channels()[0].state,'NEVER_CHECKED');assert.equal(f.db.channels()[0].next_check,0);
+});
+
+test('collector recovery is rate limited after another authentication pause',async t=>{
+ const f=fixture(t),r=f.collector.claim(['zhihu']);
+ await f.collector.submit({leaseId:r.job.leaseId,status:'AUTH_REQUIRED',items:[]});
+ const at=Date.now();assert.equal(f.collector.resume('zhihu',at).resumed,true);
+ f.db.run("UPDATE groups SET state='AUTH_REQUIRED'");
+ const blocked=f.collector.resume('zhihu',at+1000);assert.equal(blocked.resumed,false);assert.ok(blocked.retryAfter>=599);
+});
+
+test('Windows confirms an authentication failure on the same route before freezing the group',async()=>{
+ let calls=0;const sequence=[{status:'AUTH_REQUIRED'},{status:'OK',items:[]}];
+ const result=await confirmedCollect({platform:'zhihu'},()=>{calls++;return sequence.shift();},async()=>{});
+ assert.equal(calls,2);assert.equal(result.status,'OK');
+ calls=0;const confirmed=await confirmedCollect({platform:'zhihu'},()=>{calls++;return {status:'AUTH_REQUIRED',items:[]};},async()=>{});
+ assert.equal(calls,2);assert.equal(confirmed.status,'AUTH_REQUIRED');
+});
+
+test('automatic credential recovery requires two consecutive local successful probes',async()=>{
+ let seq=[{status:'OK'},{status:'AUTH_REQUIRED'}],calls=0;
+ assert.equal(await authRecovered({platform:'zhihu'},()=>{calls++;return seq.shift();},async()=>{}),false);assert.equal(calls,2);
+ seq=[{status:'OK'},{status:'OK'}];calls=0;
+ assert.equal(await authRecovered({platform:'zhihu'},()=>{calls++;return seq.shift();},async()=>{}),true);assert.equal(calls,2);
+ seq=[{status:'AUTH_REQUIRED'}];calls=0;
+ assert.equal(await authRecovered({platform:'zhihu'},()=>{calls++;return seq.shift();},async()=>{}),false);assert.equal(calls,1);
 });
