@@ -85,6 +85,14 @@ function readerButtonState(entry,button){
   button.textContent=entry.readerMode==='fetchable'?'\u5c1d\u8bd5\u7ad9\u5185\u9605\u8bfb':state==='READY'?'\u7ad9\u5185\u9605\u8bfb':state==='METADATA_NOTE'?'\u6574\u7bc7\u5907\u6ce8':state==='ERROR'?'\u9605\u8bfb\u5668\u5931\u8d25\uff0c\u6253\u5f00\u539f\u6587':entry.content_state==='PARTIAL'?'\u7ad9\u5185\u9605\u8bfb\uff08\u90e8\u5206\uff09':'\u7ad9\u5185\u9605\u8bfb';
   button.title=entry.content_state==='PARTIAL'?'\u5f53\u524d\u4fdd\u5b58\u7684\u662f\u90e8\u5206\u5185\u5bb9\uff1b\u9605\u8bfb\u5668\u4f1a\u4f18\u5148\u5c1d\u8bd5\u8865\u6b63\u6587':'';return true;
 }
+async function readerDestination(path){
+  try{
+    const response=await fetch('/api/auth/session',{credentials:'same-origin',redirect:'manual'});
+    if(response.ok){const session=await response.json();if(session?.user)return path;}
+  }catch{}
+  toast('\u9996\u6b21\u8fdb\u5165\u9605\u8bfb\u5668\uff1a\u8d26\u53f7 reader@quiet-river.local\uff0c\u8bbf\u95ee\u53e3\u4ee4\u4e0e\u672c\u7ad9\u76f8\u540c');
+  return '/signin?callbackUrl='+encodeURIComponent(path);
+}
 async function openReader(entry,button,tab){
   let result=await api('/entries/'+entry.id+'/archive',{});
   if(result.state==='ORIGINAL_ONLY'){
@@ -99,7 +107,8 @@ async function openReader(entry,button,tab){
     await trackArticleOpen(entry,'original');toast('\u7ad9\u5185\u9605\u8bfb\u51c6\u5907\u5931\u8d25\uff0c\u5df2\u6253\u5f00\u539f\u6587');return;
   }
   if(['IMPORTING','QUEUED'].includes(result.state))toast('\u5f52\u6863\u4ecd\u5728\u5904\u7406\uff0c\u5df2\u6253\u5f00\u9605\u8bfb\u5668\u7b49\u5f85\u9875\u9762');
-  if(tab)tab.location.replace(result.path);else window.location.assign(result.path);
+  const destination=await readerDestination(result.path);
+  if(tab)tab.location.replace(destination);else window.location.assign(destination);
   await trackArticleOpen(entry,'reader');entry.archive_state=result.state;
 }
 function renderArticleCard(entry){

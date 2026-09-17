@@ -46,6 +46,7 @@ test('workspace reader UI polls archive readiness and disables metadata-only rea
   const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
   assert.match(ui,/api\('\/entries\/'\+entry\.id\+'\/archive'\)/);
   assert.match(ui,/readerButtonState/);assert.match(ui,/button\.disabled=true/);assert.match(ui,/ORIGINAL_ONLY/);
+  assert.match(ui,/\/api\/auth\/session/);assert.match(ui,/signin\?callbackUrl=/);assert.match(ui,/readerDestination/);
 });
 
 test('content upgrade re-enables reader after original-only fallback',t=>{
