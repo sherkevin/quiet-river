@@ -91,3 +91,36 @@ W3 的跨组并发和增量游标、W4 的严格日报截点/版本、手机送�
 一项独立覆盖API写入和一项批量维护请求被工具安全检查拒绝，均未执行；来源展示复用原有已授权状态接口。
 没有把拒绝的调用、浏览器交互或完整分页验收写成完成。
 详见当前里程碑文档中的实时采样、版本、恢复点与剩余接入缺口。
+
+## Reader SSO 与 W1 逐源验收（2026-09-17T12:11Z–12:39Z）
+
+### 阅读闭环
+
+发现 Karakeep 0.33.2 的真实独立阅读路由为 `/reader/[bookmarkId]`；旧 `/dashboard/preview` 是 modal，`/dashboard` 无根页面。
+应用提交 `d12e770021b22866b5d57e61c8f444136779e9d2` 改为 Bridge 服务器端 Auth.js 凭证交换并下发 Secure + HttpOnly session cookie。
+本机精确提交回归 227/227；GitHub CI run `35219763799` success；恢复点 `/var/backups/quiet-river/platform-20260917T121228Z`。
+生产 current 已切到该提交；Bridge/Caddy active，发布后 NRestarts=0。
+真实博客与公众号各一篇：QR launch 302 → Karakeep `/reader/<bookmark>` → 200 HTML，前后均保持 unread。
+真实知乎/小红书元信息样本保持 `ORIGINAL_ONLY`；不为元信息伪造可高亮归档。
+`/desk/reader-home?target=highlights` 经 SSO 后返回 Dashboard 200；隔离高亮/归档合同再次通过并清理夹具。
+
+### scheduler ownership
+
+legacy systemd 单元以 `QR_READ_ONLY=true` 运行；旧代码在所有非 GET/HEAD API 前返回只读冲突，并在创建自动刷新 timer 前直接 return。
+系统 timers/cron 无 Quiet River 任务；Bridge 环境明确 `BRIDGE_SCHEDULER_ENABLED=true`。
+使用 legacy 正在运行进程自身认证上下文调用 `/api/refresh`，实测 HTTP 409 且命中 read-only gate。
+因此当前采集调度 owner 只有 Bridge；legacy 保留为只读历史入口。
+
+### W1 安全逐源验收
+
+新增 `tools/source-acceptance-report.js`：只输出固定字段，不导出凭证/自由文本；动态逐源 JSON 仅写 root 私有 evidence，权限 0600。
+2026-09-17T12:33:28Z 快照：manifest 271、DB 271，ID 0 重复、0 缺失、0 多余，exact parity=true。
+当时 248/271 有已配置通道，167/271 至少一次真实检查成功，167/271 已有文章；143/271 当前至少一个通道为 `SUCCEEDED_*`。
+118/271 有 `TEXT/PARTIAL` 文本证据，但不将其表述为全文完整；3 个来源已有 reader-ready 样本，2 个来源已有 `ORIGINAL_ONLY` 证据。
+19 个来源没有 DB 通道；另有 85 个来源虽有通道但从未成功。私有证据：`/var/backups/quiet-river/evidence/source-acceptance-20260917T123328Z.json`。
+平台主要缺口：公众号 17 个无通道；B站 4 个通道未启用；Semantic Scholar 1 个无通道；YouTube 1 个从未成功；知乎当时 36/115 来源曾成功、79/115 尚未成功。
+X 的 28/28 均已有历史成功，但该快照只有 6 个当前成功状态，属于近期健康问题而不是接入缺失。
+
+知乎进一步定位到共享组曾在 09:49Z 收到 `AUTH_REQUIRED`，不是 scheduler 漏排；Shervin 上同一 OpenCLI/browser profile 的只读 limit=1 探针随后返回 exit 0 / OK。
+通过 Bridge 受保护管理 API 将 `credential:zhihu` 从冻结状态恢复；35 秒后组回到 OK，collector 在线，最新 lease `SUCCEEDED_PARTIAL`，读取20条且未重复新增。
+恢复动作会把该组 desktop channel 状态重置为 `NEVER_CHECKED` 以要求重新验收，但保留 `last_success`，所以历史成功覆盖不丢失。
