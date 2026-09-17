@@ -79,3 +79,35 @@ test('Xiaohongshu-only launcher is bounded and does not start another platform o
  assert.match(script,/--platform xiaohongshu --max-jobs 20/);
  assert.ok(!script.includes('--watch'));assert.ok(!script.includes('--platform zhihu'));
 });
+
+
+test('Bilibili video links are canonicalized without accepting lookalike hosts',()=>{
+ const biliJob={platform:'bilibili',kind:'videos',authorId:'503316308'};
+ const url='https://www.bilibili.com/video/BV1XAew6mEhw?spm_id_from=fixture';
+ const r=originalLink(biliJob,url);assert.equal(r.link,url);
+ assert.equal(r.guid,'https://www.bilibili.com/video/BV1XAew6mEhw');
+ assert.throws(()=>originalLink(biliJob,'https://www.bilibili.com.evil.example/video/BV1XAew6mEhw'));
+ assert.throws(()=>originalLink({...biliJob,kind:'answers'},'https://www.bilibili.com/video/BV1XAew6mEhw'));
+});
+
+test('Windows normalizer keeps explicit Bilibili day precision and does not invent a date',()=>{
+ const {normalize}=require('../tools/windows/normalize.cjs');
+ const job={platform:'bilibili',kind:'videos',authorId:'503316308'};
+ const a=normalize(job,[{title:'Video',date:'2026-09-17',url:'https://www.bilibili.com/video/BV1XAew6mEhw'}])[0];
+ const b=normalize(job,[{title:'Video',date:'17 Sep 2026',url:'https://www.bilibili.com/video/BV1vwtJ6DE5Y'}])[0];
+ assert.equal(a.published,Date.parse('2026-09-17T00:00:00Z'));assert.equal(b.published,null);
+});
+
+test('production Windows collector maps Bilibili only to the installed read-only user-videos command',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const script=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(script,/job\.platform==='bilibili'\?'user-videos'/);
+ assert.match(script,/zhihu,xiaohongshu,bilibili/);
+});
+
+test('Bilibili-only launcher is bounded and does not start another platform or watch loop',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const script=fs.readFileSync(path.join(__dirname,'../tools/windows/Sync-Bilibili.cmd'),'utf8');
+ assert.match(script,/--platform bilibili --max-jobs 20/);
+ assert.ok(!script.includes('--watch'));assert.ok(!script.includes('--platform zhihu'));assert.ok(!script.includes('--platform xiaohongshu'));
+});

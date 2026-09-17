@@ -158,3 +158,15 @@ Zhihu 至少一次成功的来源从 41 增至 43/115；最新成功时间继续
 manifest/DB 仍精确 271/271 对齐；全局 `CHECK_OK` 从上一快照 167 增至 174，`HAS_ENTRY` 同为174；有通道但从未成功的来源从 85 降至 78。
 `CHECK_CURRENT_OK=122` 是瞬时当前状态，不与上一快照 143 做单调覆盖比较；恢复/重验会改变 channel current state，而 `CHECK_OK` 才表示历史上至少一次真实成功。
 Zhihu 新快照：115 registered/channel-ready，43 `CHECK_OK/HAS_ENTRY`，72 有通道但尚无成功记录；仍不声称元信息等于正文。
+
+
+## B站4源：放弃ECS RSSHub，改复用Shervin desktop collector（2026-09-17T14:08Z后）
+
+先按现有架构做隔离 RSSHub pilot，没有直接改生产配置。固定普通镜像 `ghcr.io/diygod/rsshub@sha256:6408290aa3f5f467c7213bcbeb56f986f4f161cfe7f9510829e0296f81d7b093`；镜像约134MB。
+192MiB内存上限下30秒后仍未ready且占191.6MiB；调到256MiB后服务ready，常驻约245.8MiB，使主机available降到约358MiB。
+真实 `/bilibili/user/video/503316308` 30秒无返回；ECS直连 `api.bilibili.com` 的空间投稿接口与 `space.bilibili.com` 均HTTP 412，而基础nav接口200。RSSHub当前源码会在API失败后fallback到Playwright，因此ordinary镜像不能解决该ECS出口风控。
+测试容器、0字节误建测试DB与RSSHub镜像均已删除；清理后主机available约569MiB、磁盘29GiB空闲，没有把pilot残留成生产依赖。
+
+Shervin OpenCLI 1.8.7 已有只读 `bilibili user-videos`。对订阅UID 503316308的limit=2真实探针exit 0，返回2条标题、明确日期及B站视频原链。
+据此实现B站desktop transport：现有4个本地RSSHub feed的suffix继续参与channel ID计算，UID从路径解析，避免身份漂移；B站不加入共享AUTH凭证恢复集合。
+聚焦测试新增B站channel identity、claim最小字段、原链host约束、日期精度、AUTH噪声降级等，当前92/92通过；尚未据此声称生产4/4已接通。

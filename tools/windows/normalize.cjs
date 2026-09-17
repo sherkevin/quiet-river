@@ -11,6 +11,8 @@ function normalize(job,rows){
     let published=null;
     if(job.platform==='zhihu'&&row.created){
       const n=Number(row.created);if(Number.isFinite(n))published=n>100000000000?Math.floor(n):Math.floor(n*1000);
+    } else if(job.platform==='bilibili'&&typeof row.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(row.date)){
+      const n=Date.parse(row.date+'T00:00:00Z');if(Number.isFinite(n))published=n;
     }
     return {title:title.slice(0,1000),link:original.link,published,summary:''};
   });

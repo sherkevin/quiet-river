@@ -11,6 +11,12 @@ function originalLink(job,value){
     if(!valid)throw new Error('Original link mismatch');
     return {link:u.href,guid:u.origin+u.pathname,noteId:null};
   }
+  if(job.platform==='bilibili'){
+    if(kind!=='videos'||u.hostname!=='www.bilibili.com')throw new Error('Original link mismatch');
+    const match=/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/.exec(u.pathname);
+    if(!match)throw new Error('Original link mismatch');
+    return {link:u.href,guid:'https://www.bilibili.com/video/'+match[1],noteId:null};
+  }
   if(job.platform!=='xiaohongshu'||u.hostname!=='www.xiaohongshu.com')throw new Error('Original link mismatch');
   const simple=/^\/(?:explore|discovery\/item)\/([a-f\d]{24})$/i.exec(u.pathname);
   const profile=/^\/user\/profile\/([a-f\d]{24})\/([a-f\d]{24})$/i.exec(u.pathname);

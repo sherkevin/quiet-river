@@ -91,3 +91,14 @@ DataFunTalk缺准确主页，Semantic Scholar分页/更新时间仍待确认，�
 - B站 4 个已有 DB 通道但未启用；Semantic Scholar 1 个无通道；YouTube 1 个有通道但从未成功。
 
 这个快照替代“已登记=已接通”的口径，但不删除前面的历史起始快照；两者时间点不同。
+
+
+## B站4源接入路线收敛（2026-09-17）
+
+4个既有B站来源均已核对为 `/bilibili/user/video/:uid`，不是专栏/动态等其他路由。
+ECS 隔离验证当前普通 RSSHub 镜像：192 MiB 内存上限不能完成启动，256 MiB 时约占246 MiB；真实 B站 route 因 ECS 对空间/WBI接口返回412而不能出 feed。
+因此不为这4个源在2C2G主机增加RSSHub/Chromium常驻负载，也不把B站Cookie迁到ECS。
+
+Shervin OpenCLI 1.8.7 的 `bilibili user-videos` 对已订阅作者真实 limit=2 检查成功，原链与日期完整。
+实现方向固定为现有 desktop collector：保持原 channel ID，UID 从既有 feed path 解析，单次最多20条，只上传元信息。
+生产验收标准仍是4/4来源产生真实 `last_success` 与条目；代码/单点探针通过不等于4/4已经完成。

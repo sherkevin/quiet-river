@@ -31,7 +31,7 @@ def main():
         fd = os.open(env, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o640)
         with os.fdopen(fd, 'w') as out:
             out.write('QR_COLLECTOR_TOKEN=' + secrets.token_hex(32) + '\n')
-            out.write('QR_DESKTOP_PLATFORMS=zhihu,xiaohongshu\n')
+            out.write('QR_DESKTOP_PLATFORMS=zhihu,xiaohongshu,bilibili\n')
     os.chown(env, 0, gid)
     env.chmod(0o640)
     target = pathlib.Path('/usr/local/lib/quiet-river-collector')

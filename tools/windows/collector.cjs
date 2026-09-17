@@ -44,8 +44,8 @@ function preflight(){
   transport({op:'status'});log('OpenCLI extension and restricted ECS connection verified. Cookies stay in Windows.');
 }
 function collect(job,limitOverride){
-  if(!['zhihu','xiaohongshu'].includes(job.platform)||!/^[-\w]+$/.test(job.authorId))throw new Error('Invalid job identity');
-  const command=job.platform==='xiaohongshu'?'user':job.kind==='answers'?'user-answers':job.kind==='articles'?'user-articles':null;
+  if(!['zhihu','xiaohongshu','bilibili'].includes(job.platform)||!/^[-\w]+$/.test(job.authorId))throw new Error('Invalid job identity');
+  const command=job.platform==='xiaohongshu'?'user':job.platform==='bilibili'?'user-videos':job.kind==='answers'?'user-answers':job.kind==='articles'?'user-articles':null;
   if(!command)throw new Error('Unsupported read-only command');
   const limit=Math.min(20,Math.max(1,Number(limitOverride??job.limit??20)||20));
   const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(limit),'-f','json','--trace','off','--site-session','ephemeral'];
@@ -64,9 +64,9 @@ async function authRecovered(probe,collectFn=collect,sleepFn=sleep){
   await sleepFn(2000);return collectFn(probe,1).status==='OK';
 }
 async function main(){
-  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu] [--doctor]');return;}
+  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili] [--doctor]');return;}
   preflight();if(args.includes('--doctor'))return;acquire();
-  const platforms=option('--platform','zhihu,xiaohongshu').split(',').filter(p=>['zhihu','xiaohongshu'].includes(p));
+  const platforms=option('--platform','zhihu,xiaohongshu,bilibili').split(',').filter(p=>['zhihu','xiaohongshu','bilibili'].includes(p));
   if(!platforms.length)throw new Error('Choose a supported platform');
   const max=Math.max(1,Math.min(1000,Number(option('--max-jobs',args.includes('--watch')?'1000':'20'))||20));
   const pending=path.join(root,'pending-result.json'),authProbeAt=new Map();let done=0,failures=0;

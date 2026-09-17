@@ -153,3 +153,47 @@ test('automatic credential recovery requires two consecutive local successful pr
  seq=[{status:'AUTH_REQUIRED'}];calls=0;
  assert.equal(await authRecovered({platform:'zhihu'},()=>{calls++;return seq.shift();},async()=>{}),false);assert.equal(calls,1);
 });
+
+
+test('Bilibili RSSHub video channel keeps its identity when moved to the desktop collector',()=>{
+ const source={id:'bili-source',name:'Bili author',platform:'bilibili',url:'https://space.bilibili.com/503316308',
+  feeds:['http://127.0.0.1:1200/bilibili/user/video/503316308']};
+ const old=channelsFor(source)[0],next=channelsFor(source,{desktopPlatforms:['bilibili']})[0];
+ assert.equal(next.id,old.id);assert.equal(next.transport,'desktop');assert.equal(next.author_id,'503316308');
+ assert.equal(next.desktop_kind,'videos');assert.equal(next.group_key,'desktop:bilibili');assert.equal(next.enabled,true);
+});
+
+function bilibiliFixture(t){
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'bili-source',name:'Bili author',platform:'bilibili',url:'https://space.bilibili.com/503316308',
+  feeds:['http://127.0.0.1:1200/bilibili/user/video/503316308']};
+ const config={adapters:{desktopPlatforms:['bilibili']}},channels=channelsFor(source,config.adapters);db.putSource(source,channels);db.run('UPDATE channels SET feed_id=9');
+ const stored=[];const service={db,config,provisionChannels:async()=>{},importItem:async(c,item)=>{stored.push(item);return 1;},
+  finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=?,finished_at=? WHERE id=?',state,error,Date.now(),job.id)};
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,source,channels,collector,stored};
+}
+
+test('Bilibili desktop claim exposes only the subscribed UID and read-only kind',t=>{
+ const f=bilibiliFixture(t),r=f.collector.claim(['bilibili']);assert.equal(r.job.authorId,'503316308');assert.equal(r.job.kind,'videos');
+ assert.equal(r.job.platform,'bilibili');assert.equal(r.job.sourceId,'bili-source');assert.equal(r.job.url,undefined);
+});
+
+test('Bilibili desktop result accepts canonical video links and never turns auth noise into a credential freeze',async t=>{
+ const f=bilibiliFixture(t),r=f.collector.claim(['bilibili']);
+ const ack=await f.collector.submit({leaseId:r.job.leaseId,status:'OK',items:[{
+  title:'Fixture video',link:'https://www.bilibili.com/video/BV1XAew6mEhw',published:Date.parse('2026-09-17T00:00:00Z'),summary:''
+ }]});
+ assert.equal(ack.state,'SUCCEEDED_PARTIAL');assert.equal(f.stored.length,1);
+ assert.equal(f.stored[0].guid,'https://www.bilibili.com/video/BV1XAew6mEhw');
+ const next=f.collector.claim(['bilibili']);assert.equal(next.job,null);
+ f.db.run('UPDATE channels SET next_check=0');f.db.run("UPDATE groups SET next_allowed=0,state='OK'");
+ const retry=f.collector.claim(['bilibili']);assert.ok(retry.job);
+ const blocked=await f.collector.submit({leaseId:retry.job.leaseId,status:'AUTH_REQUIRED',items:[]});
+ assert.equal(blocked.state,'ACCESS_BLOCKED');assert.equal(f.db.get("SELECT state FROM groups WHERE id='desktop:bilibili'").state,'ACCESS_BLOCKED');
+});
+
+test('Bilibili desktop validator rejects unrelated hosts',()=>{
+ assert.throws(()=>validateItems({platform:'bilibili',label:'videos',authorId:'503316308'},[{
+  title:'Bad',link:'https://www.bilibili.com.evil.example/video/BV1XAew6mEhw',published:null,summary:''
+ }]),/does not match/);
+});

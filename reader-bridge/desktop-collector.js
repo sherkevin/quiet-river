@@ -2,7 +2,8 @@
 const crypto=require('node:crypto');
 const {channelsFor,escapeHTML}=require('./core');
 const {originalLink}=require('../tools/windows/original-link.cjs');
-const PLATFORMS=new Set(['zhihu','xiaohongshu']);
+const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili']);
+const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
 function fail(message,status=400){throw Object.assign(new Error(message),{status});}
 function validateItems(channel,items){
@@ -51,7 +52,7 @@ class DesktopCollector {
     const configured=this.s.config.adapters?.desktopPlatforms||[];
     const sources=this.db.sources();
     for(const platform of platforms){
-      if(!PLATFORMS.has(platform)||!configured.includes(platform))continue;
+      if(!AUTH_PLATFORMS.has(platform)||!configured.includes(platform))continue;
       const group=this.db.get('SELECT state FROM groups WHERE id=?','credential:'+platform);
       if(group?.state!=='AUTH_REQUIRED')continue;
       const candidates=this.db.channels().filter(c=>c.transport==='desktop'&&c.group_key==='credential:'+platform&&c.enabled);
@@ -63,7 +64,7 @@ class DesktopCollector {
   }
   resume(platform,now=Date.now()){
     const configured=this.s.config.adapters?.desktopPlatforms||[];
-    if(!PLATFORMS.has(platform)||!configured.includes(platform))fail('unsupported recovery platform');
+    if(!AUTH_PLATFORMS.has(platform)||!configured.includes(platform))fail('unsupported recovery platform');
     const groupId='credential:'+platform,group=this.db.get('SELECT * FROM groups WHERE id=?',groupId);
     if(!group)fail('credential group not found',404);
     if(group.state!=='AUTH_REQUIRED')return {resumed:false,state:group.state};
@@ -99,6 +100,8 @@ class DesktopCollector {
       if(g?.next_allowed>now){const seconds=Math.ceil((g.next_allowed-now)/1000);if(seconds<=60)nearCooldown=Math.min(nearCooldown??seconds,seconds);continue;}
       if(this.db.get("SELECT id FROM collector_leases WHERE state IN ('OPEN','APPLYING') AND expires_at>?",now))return {job:null,retryAfter:15};
       const id=crypto.randomBytes(24).toString('hex'),source=bySource.get(c.source_id);
+      const authorId=c.author_id||source.adapter?.id,kind=c.desktop_kind||c.label;
+      if(!authorId){this.finish(job,'NOT_CONFIGURED','桌面采集来源缺少作者标识');continue;}
       this.db.db.exec('BEGIN IMMEDIATE');
       try{
         this.db.run('INSERT INTO collector_leases(id,job_id,channel_id,expires_at) VALUES(?,?,?,?)',id,job.id,c.id,now+900000);
@@ -106,8 +109,8 @@ class DesktopCollector {
         this.db.run("UPDATE channels SET last_check=?,state='RUNNING' WHERE id=?",now,c.id);
         this.db.db.exec('COMMIT');
       }catch(e){this.db.db.exec('ROLLBACK');throw e;}
-      return {job:{leaseId:id,sourceId:source.id,platform:source.platform,authorId:source.adapter.id,
-        name:source.name,kind:c.label,limit:20},retryAfter:8};
+      return {job:{leaseId:id,sourceId:source.id,platform:source.platform,authorId,
+        name:source.name,kind,limit:20},retryAfter:8};
     }
     const authProbe=this.authProbe(allowed);
     return {job:null,retryAfter:authProbe?60:(nearCooldown||30),waitForCooldown:nearCooldown!==null,authProbe,status:this.status()};
@@ -125,16 +128,18 @@ class DesktopCollector {
     const source=this.db.sources().find(s=>s.id===c?.source_id);
     if(!source?.enabled||c?.transport!=='desktop'||!c.enabled)fail('source no longer enabled',409);
     if(!['OK',...STATES].includes(input.status))fail('invalid collector status');
-    const items=input.status==='OK'?validateItems({...c,platform:source.platform,authorId:source.adapter.id},input.items):[];
+    const reportedStatus=input.status==='AUTH_REQUIRED'&&!AUTH_PLATFORMS.has(source.platform)?'ACCESS_BLOCKED':input.status;
+    const authorId=c.author_id||source.adapter?.id,kind=c.desktop_kind||c.label;
+    const items=reportedStatus==='OK'?validateItems({...c,platform:source.platform,authorId,label:kind},input.items):[];
     this.db.run("UPDATE collector_leases SET state='APPLYING',digest=? WHERE id=?",digest,lease.id);
     let added=0;
     for(const item of items)added+=await this.s.importItem(c,item);
-    const now=Date.now(),ok=input.status==='OK';
-    const state=ok?'SUCCEEDED_PARTIAL':input.status;
+    const now=Date.now(),ok=reportedStatus==='OK';
+    const state=ok?'SUCCEEDED_PARTIAL':reportedStatus;
     const message=ok?'Windows窗口列表已同步；不承诺窗口以外的历史或漏更覆盖':
-      input.status==='AUTH_REQUIRED'?'Shervin需要重新登录该平台':
-      input.status==='BROWSER_OFFLINE'?'Shervin浏览器或OpenCLI扩展未连接':
-      input.status==='ACCESS_BLOCKED'?'浏览器导航被拒绝或平台访问受限，未绕过限制':'Windows采集失败，原有内容保留';
+      state==='AUTH_REQUIRED'?'Shervin需要重新登录该平台':
+      state==='BROWSER_OFFLINE'?'Shervin浏览器或OpenCLI扩展未连接':
+      state==='ACCESS_BLOCKED'?'浏览器导航被拒绝或平台访问受限，未绕过限制':'Windows采集失败，原有内容保留';
     if(ok){
       this.db.run("UPDATE channels SET last_success=?,next_check=?,state=?,error='',failures=0 WHERE id=?",now,now+c.interval_ms,state,c.id);
       this.db.run("UPDATE groups SET state='OK',last_success=?,next_allowed=?,failures=0 WHERE id=?",now,now+Math.max(8000,c.min_gap_ms),c.group_key);

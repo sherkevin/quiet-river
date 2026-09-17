@@ -34,6 +34,7 @@ function classifyError(error) {
 
 function channelsFor(source, options = {}) {
   const channels = [];
+  const desktopPlatforms = options.desktopPlatforms || [];
   const add = (suffix, transport, url, extra = {}) => channels.push({
     id: hash(source.id + '\0' + suffix).slice(0, 24), source_id: source.id,
     transport, url, label: suffix, group_key: extra.group_key || new URL(url).hostname,
@@ -43,6 +44,16 @@ function channelsFor(source, options = {}) {
   for (const url of source.feeds || []) {
     if (!safeURL(url)) continue;
     const u = new URL(url);
+    if (source.platform === 'bilibili' && desktopPlatforms.includes('bilibili')) {
+      const match = /^\/bilibili\/user\/video\/(\d+)$/.exec(u.pathname.replace(/\/+$/, ''));
+      if (match) {
+        add(url, 'desktop', `https://quiet-river.invalid/desktop/bilibili/${match[1]}/videos`, {
+          enabled:true,group_key:'desktop:bilibili',author_id:match[1],desktop_kind:'videos',
+          windowNote:'Shervin浏览器读取B站投稿列表；登录态不上传ECS',min_gap_ms:8000,interval_ms:6*3600000
+        });
+        continue;
+      }
+    }
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
     const restricted = local || source.tier === 2;
     const target = local && options.rsshub ? url.replace(u.origin, options.rsshub.replace(/\/$/, '')) : url;
@@ -53,7 +64,7 @@ function channelsFor(source, options = {}) {
   const adapter = source.adapter || {};
   const id = adapter.id || '';
   const base = options.rsshub || 'http://127.0.0.1:1200';
-  if ((options.desktopPlatforms||[]).includes(source.platform) && ['zhihu','xiaohongshu'].includes(source.platform) && id) {
+  if (desktopPlatforms.includes(source.platform) && ['zhihu','xiaohongshu'].includes(source.platform) && id) {
     const kinds=source.platform==='zhihu'?['answers','articles']:['notes'];
     for(const kind of kinds)add(kind,'desktop',`https://quiet-river.invalid/desktop/${source.platform}/${encodeURIComponent(id)}/${kind}`,{
       enabled:true,group_key:'credential:'+source.platform,credential_group:source.platform,

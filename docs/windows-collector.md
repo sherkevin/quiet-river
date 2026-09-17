@@ -92,3 +92,18 @@ ECS 端 `resume` 只允许已配置 desktop 平台，并有10分钟服务端冷�
 
 首次真实验收在不调用人工 resume 的前提下完成：服务端审计记录两次本地探针确认，Zhihu 组从 AUTH_REQUIRED 自动回到 OK，随后连续采集成功。
 Windows 安装版本以 `D:\QuietRiverCollector\installed-revision.txt` 记录；本次为 `e80047e04897ecefba0d481b4fd9a4e804d48e1d`，collector SHA256 与 ECS release 中同一文件一致。
+
+
+## 8. B站投稿通道并入桌面采集（2026-09-17）
+
+现有4个B站订阅都对应 `/bilibili/user/video/:uid`，不新增作者、不改manifest。
+当前 RSSHub `user/video` 路由虽然声明 `requirePuppeteer: false`，但 API 失败时会 fallback 到 Playwright；ECS 实测 B站空间/WBI 请求返回 412，因此普通镜像不能在本机稳定完成该路由。
+隔离 RSSHub pilot 在 192 MiB 上限下无法 ready；提高到 256 MiB 后常驻约246 MiB。结合主机无 Swap 与现有 Karakeep/Miniflux，未将它纳入生产。
+
+Shervin 的 OpenCLI 1.8.7 已提供只读 `bilibili user-videos <uid>`；对已订阅 UID 503316308 的 limit=2 实测成功，返回标题、日期和 `www.bilibili.com/video/BV...` 原链。
+因此 B站复用同一 desktop collector：UID 从既有 RSSHub feed 路径解析，channel ID 使用原 suffix 计算方式保持不变；Windows 只上传规范化元信息，不上传 Cookie 或原始浏览器输出。
+B站属于无需共享登录凭证的桌面来源：若某次命令误报 `AUTH_REQUIRED`，服务端降级为 `ACCESS_BLOCKED`，不会像知乎/小红书那样冻结凭证组。
+
+新增 `Sync-Bilibili.cmd` 作为最多20个当前可运行任务的一键入口；持续 watcher 默认同时领取知乎、小红书和B站任务。
+日期只接受 OpenCLI 明确返回的 `YYYY-MM-DD`，按 UTC 日精度保存；其他格式保持发布时间未知，不猜具体时刻。
+原链只接受 `https://www.bilibili.com/video/BV...` 或 `av...`，lookalike host、明文 HTTP、嵌入凭证与非标准端口均拒绝。
