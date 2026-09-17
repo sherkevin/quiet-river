@@ -58,3 +58,10 @@ CI完成状态另行读取；本机测试成功不能代替 GitHub CI 成功。
 部分正文保留 PARTIAL，不能因非空文本就升级为已确认全文。
 来源策略值为 feed_full/fetch_public_html/adapter_full/metadata_only；未明确指定时保留已有公开 Feed 提取设置。
 本批未自动开启所有博客补抓，不改写平台授权，也不自动新增浏览器任务。
+
+## 受限 Windows collector gateway 也是 release 组件
+
+如果 ECS 已存在 `/etc/quiet-river-collector/agent.env`，`deploy/install-release.sh` 会把该提交的 `tools/windows/collector-gateway.py` 原子安装到 `/usr/local/lib/quiet-river-collector/gateway.py`。
+安装前旧 gateway 以 root-only 0600 备份到 `/var/backups/quiet-river/gateway-*.py`；若 release 后续 health gate 失败，rollback 同时恢复旧 gateway 和旧 application symlink/unit。
+这样 Bridge 的 collector 协议与 forced-command gateway 不会长期跨版本漂移。
+Windows 的 `collector.cjs` 仍需在 Shervin 上单独对齐到同一已测试 commit，并核验 SHA256；更新前必须确认没有待上传结果和 active lease。

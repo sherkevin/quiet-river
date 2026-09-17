@@ -81,3 +81,14 @@ ECS已写入接收配置与systemd覆盖文件，接收密钥没有发送到Wind
 单次20条窗口不是完整历史回补；已有未读、标签和批注身份不因同步重试改变。
 尚未验收的浏览器授权、知乎/小红书批量持续覆盖，不能用脚本已部署代替。
 Windows持续模式未设置开机启动；用户双击后在前台运行，关闭窗口停止领取。
+
+## 8. 认证抖动与自动恢复（2026-09-17）
+
+生产观察证明单个 OpenCLI 请求可能短暂返回认证错误，而同一作者/同一路由立即只读复测又成功；因此单次错误不能再冻结全部115个知乎来源。
+当前协议要求同一采集任务连续两次得到 `AUTH_REQUIRED` 才向 ECS 上报组级认证失效。
+如果组已经冻结，ECS 只返回一个已登记作者的 bounded auth probe（platform/sourceId/authorId/kind/limit），不返回 Feed、Cookie 或任意命令。
+Windows 最多每10分钟尝试恢复检查；同一 probe 连续两次 OpenCLI limit=1 成功后才发送受限 `resume`。
+ECS 端 `resume` 只允许已配置 desktop 平台，并有10分钟服务端冷却；不接受任意 credential group 名称。
+
+首次真实验收在不调用人工 resume 的前提下完成：服务端审计记录两次本地探针确认，Zhihu 组从 AUTH_REQUIRED 自动回到 OK，随后连续采集成功。
+Windows 安装版本以 `D:\QuietRiverCollector\installed-revision.txt` 记录；本次为 `e80047e04897ecefba0d481b4fd9a4e804d48e1d`，collector SHA256 与 ECS release 中同一文件一致。

@@ -126,3 +126,35 @@ X 的 28/28 均已有历史成功，但该快照只有 6 个当前成功状态�
 恢复动作会把该组 desktop channel 状态重置为 `NEVER_CHECKED` 以要求重新验收，但保留 `last_success`，所以历史成功覆盖不丢失。
 
 CI 备注：`3b12f7c` 的首次 GitHub run `35222558851` 仅 Node 20 job 失败；日志确认新验收测试直接 require `node:sqlite`，但文件名未按 `reader-*` 被 legacy-only 过滤。Node 22/24 均成功。本地全量也成功。后续将该测试归入 Reader Bridge runtime scope，不把 Node 20 的预期不支持误报为产品回归。
+
+## Desktop collector 认证抖动修复与生产验收（2026-09-17T12:56Z–13:03Z）
+
+### 问题复现
+
+Zhihu 从 36 推进到 41 个成功来源后，又被单个 channel 的 `AUTH_REQUIRED` 冻结整个共享凭证组。
+两次触发作者分别为 `zzningxp / answers` 与 `jue-chen-67-88 / articles`；在 Shervin 上用同一 OpenCLI/browser profile 对这两个精确路由重测均 exit 0 / OK，另一个 canary 也 OK。
+因此故障不是持续登录失效，而是单次瞬时认证信号被升级为全组冻结。
+
+### 修复
+
+应用提交：`e80047e04897ecefba0d481b4fd9a4e804d48e1d`。
+本机精确提交回归：233/233；GitHub CI run `35224068790` 的 Node 20/22/24 均 success。
+发布前恢复点：`/var/backups/quiet-river/platform-20260917T125746Z`。
+ECS production current 与 Shervin `collector.cjs` 均锁定该提交；Windows 文件 SHA256 与 release 包一致。
+受限 SSH gateway 现在由 release 脚本一起原子安装，并在 release rollback 时恢复旧版本；本次 gateway 旧版备份位于 `/var/backups/quiet-river/gateway-20260917T205808337200919.py`。
+
+认证策略改为：单任务首次 `AUTH_REQUIRED` 后同一路由二次确认；只有再次失败才允许冻结整个凭证组。
+已冻结组由 Windows 低频做两次 limit=1 本地 OpenCLI 探针；两次都成功才通过受限 `resume` 操作解冻，Cookie 不离开 Windows。
+服务端仅允许配置过的 `zhihu/xiaohongshu` desktop 组恢复，并设置 10 分钟恢复冷却；只重置真正处于 `AUTH_REQUIRED` 的 channel，不抹掉其他成功 channel 的当前状态。
+
+### 无人工恢复的真实验收
+
+部署后保持 Zhihu 组处于冻结状态，没有手动调用 human `/groups/resume`。
+新 Windows watcher 自动完成两次本地成功探针，服务端审计于 `2026-09-17T12:59:57Z` 记录 `collector_auth_resume / zhihu / local OpenCLI probe confirmed twice`，组恢复为 OK。
+其后连续 5 个已完成 lease 均为 `SUCCEEDED_PARTIAL`，下一 lease 正常进入 RUNNING；没有立即再次冻结。
+Zhihu 至少一次成功的来源从 41 增至 43/115；最新成功时间继续推进到 13:02Z。
+
+新的私有逐源快照：`/var/backups/quiet-river/evidence/source-acceptance-20260917T130239Z.json`，权限 0600。
+manifest/DB 仍精确 271/271 对齐；全局 `CHECK_OK` 从上一快照 167 增至 174，`HAS_ENTRY` 同为174；有通道但从未成功的来源从 85 降至 78。
+`CHECK_CURRENT_OK=122` 是瞬时当前状态，不与上一快照 143 做单调覆盖比较；恢复/重验会改变 channel current state，而 `CHECK_OK` 才表示历史上至少一次真实成功。
+Zhihu 新快照：115 registered/channel-ready，43 `CHECK_OK/HAS_ENTRY`，72 有通道但尚无成功记录；仍不声称元信息等于正文。
