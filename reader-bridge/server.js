@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const {Database}=require('./database');
+const {DesktopCollector}=require('./desktop-collector');
 const {ReaderService}=require('./service');
 const {safeURL,hash,json}=require('./core');
 const {authorIdentity}=require('./sources');
@@ -31,6 +32,13 @@ function createApp(service,config){
     try{
       u=new URL(req.url,'http://localhost');
       if(u.pathname==='/healthz'){return reply(res,200,{service:'quiet-river-bridge',status:'ok'});}
+      if(u.pathname==='/desk/collector/v1'){
+        if(req.method!=='POST')return reply(res,405,{error:'POST required'});
+        if(req.headers.origin||!config.collectorToken||!secureEqual(String(req.headers['x-qr-collector-token']||''),config.collectorToken))return reply(res,401,{error:'Collector authorization required'});
+        if(!service.desktop)return reply(res,503,{error:'Collector not configured'});
+        return reply(res,200,await service.desktop.handle(await bodyJSON(req)));
+      }
+
       const host=String(req.headers['x-forwarded-host']||req.headers.host||'').split(',')[0].trim();
       if(req.method!=='GET'&&req.method!=='HEAD'){
         let originHost='';try{originHost=new URL(req.headers.origin).host;}catch{}
@@ -128,7 +136,9 @@ function createApp(service,config){
       }
       if(p==='/desk/api/groups/resume'&&req.method==='POST'){
         const b=await bodyJSON(req);if(!service.db.get('SELECT id FROM groups WHERE id=?',b.id))return reply(res,404,{error:'凭证组不存在'});
-        service.db.run("UPDATE groups SET state='UNKNOWN',next_allowed=0,failures=0 WHERE id=?",b.id);return reply(res,200,{ok:true,message:'已允许下一次正常采集验证，尚未宣称凭证有效'});
+        service.db.run("UPDATE groups SET state='UNKNOWN',next_allowed=0,failures=0 WHERE id=?",b.id);
+        for(const channel of service.db.channels())if(channel.transport==='desktop'&&channel.group_key===b.id)service.db.run("UPDATE channels SET next_check=0,state='NEVER_CHECKED',error='' WHERE id=?",channel.id);
+        return reply(res,200,{ok:true,message:'已允许下一次正常采集验证，尚未宣称凭证有效'});
       }
       if(p==='/desk/api/digest'&&req.method==='POST'){
         const b=await bodyJSON(req);return reply(res,200,service.makeDigest(String(b.day),!!b.regenerate));
@@ -139,27 +149,28 @@ function createApp(service,config){
         digest.items=(digest.items||[]).map(item=>{const entry=service.db.get('SELECT status FROM entries WHERE id=?',item.id);const snapshot=require('./article-metadata').tagSnapshot(service.db,item.id);return {...item,status:entry?.status||item.status,tags:snapshot?.tags||item.tags};});
         return reply(res,200,digest);}
       return reply(res,404,{error:'接口不存在'});
-    }catch(e){service.db.audit('request',u?.pathname||'invalid',classifyErrorSafe(e));return reply(res,[400,404,409].includes(e.status)?e.status:502,{error:'操作未完成：'+classifyErrorSafe(e)});}
+    }catch(e){service.db.audit('request',u?.pathname||'invalid',classifyErrorSafe(e));return reply(res,[400,404,409,503].includes(e.status)?e.status:502,{error:'操作未完成：'+classifyErrorSafe(e)});}
   });
 }
 function classifyErrorSafe(e){return /not configured/.test(e.message)?'阅读服务或采集通道尚未完成配置':/invalid|missing|must|too large/.test(e.message)?'请求参数不符合接口要求':'后端调用失败或超时；原有数据已保留';}
 function loadConfig(){
-  return {schedulerEnabled:process.env.BRIDGE_SCHEDULER_ENABLED!=='false',accessToken:process.env.QR_ACCESS_TOKEN,port:Number(process.env.BRIDGE_PORT||4380),host:process.env.BRIDGE_HOST||'127.0.0.1',dataDir:process.env.BRIDGE_DATA_DIR||'/var/lib/quiet-river-platform/bridge',manifest:process.env.BRIDGE_MANIFEST,
+  return {collectorToken:process.env.QR_COLLECTOR_TOKEN,schedulerEnabled:process.env.BRIDGE_SCHEDULER_ENABLED!=='false',accessToken:process.env.QR_ACCESS_TOKEN,port:Number(process.env.BRIDGE_PORT||4380),host:process.env.BRIDGE_HOST||'127.0.0.1',dataDir:process.env.BRIDGE_DATA_DIR||'/var/lib/quiet-river-platform/bridge',manifest:process.env.BRIDGE_MANIFEST,
     miniflux:process.env.MINIFLUX_URL||'http://127.0.0.1:3061',minifluxToken:process.env.MINIFLUX_TOKEN,
     karakeep:process.env.KARAKEEP_URL||'http://127.0.0.1:3062',karakeepToken:process.env.KARAKEEP_TOKEN,
-    ntfy:process.env.NTFY_URL||'',adapters:{rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
+    ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu'].includes(p)),rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
 }
 async function main(){
   const config=loadConfig();if(!config.minifluxToken)throw new Error('MINIFLUX_TOKEN required');
   const db=new Database(path.join(config.dataDir,'bridge.sqlite'));const service=new ReaderService(db,config);
   if(!db.sources().length&&config.manifest)await service.importManifest(JSON.parse(fs.readFileSync(config.manifest,'utf8')));
+  if(config.collectorToken){service.desktop=new DesktopCollector(service);await service.desktop.register();}
   const app=createApp(service,config);service.start();
   app.listen(config.port,config.host,()=>console.log('Quiet River Bridge ready on loopback; production credentials are never logged'));
   let closing=false;
   for(const event of ['SIGTERM','SIGINT'])process.on(event,async()=>{
     if(closing)return;closing=true;service.stop();app.close();
     const deadline=Date.now()+125000;
-    while((service.working||service.archiving.size||service.readWrites.size)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
+    while((service.working||service.archiving.size||service.readWrites.size||service.desktop?.busy)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
     app.closeAllConnections();db.close();process.exit(0);
   });
 }

@@ -65,7 +65,7 @@ class ReaderService {
     if(this.working||this.stopping)return;this.working=true;
     try {
       while(!this.stopping) {
-        const job=this.db.get("SELECT * FROM jobs WHERE state='QUEUED' ORDER BY priority DESC,created_at,id LIMIT 1");
+        const job=this.db.get("SELECT j.* FROM jobs j JOIN channels c ON c.id=j.channel_id WHERE j.state='QUEUED' AND COALESCE(json_extract(c.payload,'$.transport'),'')!='desktop' ORDER BY j.priority DESC,j.created_at,j.id LIMIT 1");
         if(!job)break;
         this.db.run("UPDATE jobs SET state='RUNNING' WHERE id=?",job.id);
         let c=this.db.channels().find(c=>c.id===job.channel_id);
@@ -297,7 +297,7 @@ class ReaderService {
   }
   health() {
     const sources=this.db.sources(), channels=this.db.channels();
-    return {sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
+    return {collector:this.desktop?.status()||null,sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
       groups:this.db.all('SELECT * FROM groups'),queue:this.db.get("SELECT count(*) n FROM jobs WHERE state IN ('QUEUED','RUNNING')").n,
       entries:this.db.get('SELECT count(*) n FROM entries').n,readerConfigured:!!this.config.karakeepToken,
       notifications:this.db.all('SELECT created_at,payload,state,attempts FROM outbox ORDER BY created_at DESC LIMIT 30').map(r=>({...r,payload:json(r.payload,{})}))};

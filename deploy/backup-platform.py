@@ -34,6 +34,8 @@ def main():
         for name in ('bridge','karakeep'):
             shutil.copytree(BASE/name,dest/name,copy_function=shutil.copy2)
         shutil.copytree('/etc/quiet-river-platform',dest/'private-config')
+        for directory,label in [('/etc/quiet-river-collector','collector-config'),('/etc/systemd/system/quiet-river-bridge.service.d','bridge-unit-overrides'),('/home/qr-collector/.ssh','collector-authorized-public-key')]:
+            if pathlib.Path(directory).exists():shutil.copytree(directory,dest/label)
         shutil.copy2('/etc/caddy/Caddyfile',dest/'Caddyfile')
         result={}
         for name,relative in [('bridge','bridge/bridge.sqlite'),('reader','karakeep/db.db')]:
