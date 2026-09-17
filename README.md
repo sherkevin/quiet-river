@@ -260,7 +260,9 @@ node tools/make-pages.js --out pages-out   # 生成快照站：state.json + 静�
 ## 开发
 
 ```
-node --test          # 65 个测试：XML 边界、三种 feed 格式、平台识别与转发归类、适配器匹配、改 feed 地址的回归、__NEXT_DATA__ 提取、摘要数学分段与截断修复、博主 tag 继承、来源分组、访问口令闸（含登录页与 /login 表单）
+node --test          # 测试：XML 边界、三种 feed 格式、平台识别与转发归类、适配器匹配、改 feed 地址的回归、__NEXT_DATA__ 提取、摘要数学分段与截断修复、博主 tag 继承、来源分组、访问口令闸（含登录页与 /login 表单）
+                     # 源码仓 66 个（含 tools/lib/library.test.js 的 9 个），公开仓形态 57 个。
+                     # 这里刻意不写死数字：它会漂（曾写成 65/56）。以命令输出为准。
 PORT=8080 node server.js
 ```
 
