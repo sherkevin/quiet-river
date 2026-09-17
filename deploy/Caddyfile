@@ -1,0 +1,22 @@
+{
+  auto_https off
+  admin 127.0.0.1:2019
+}
+
+# Stage on loopback 4381 first. Production binds are set by the controlled installer.
+http://127.0.0.1:4381 {
+  encode gzip
+  header X-Robots-Tag "noindex, nofollow"
+  route {
+    @home path /
+    redir @home /desk/ 302
+    @desk path /desk /desk/*
+    reverse_proxy @desk 127.0.0.1:4380
+    handle_path /legacy/* {
+      reverse_proxy 127.0.0.1:4322
+    }
+    @legacy path /api/state /api/resolve /api/subscriptions* /api/refresh* /api/settings* /api/export /login /app.js /style.css /math-seg.js /source-group.js /vendor/* /index.html
+    reverse_proxy @legacy 127.0.0.1:4322
+    reverse_proxy 127.0.0.1:3062
+  }
+}

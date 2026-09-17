@@ -48,3 +48,30 @@ test('HTTP: auth required, cross-origin mutations denied, valid local writes acc
  const csrf=await fetch(base+'/desk/api/preferences',{method:'POST',headers:{'X-Qr-Token':'test-only-token','X-QR-Action':'1','Origin':'https://evil.example','Content-Type':'application/json'},body:'{}'});assert.equal(csrf.status,403);
  const r=await fetch(base+'/desk/api/preferences',{method:'POST',headers:{'X-Qr-Token':'test-only-token','X-QR-Action':'1','Content-Type':'application/json'},body:JSON.stringify({keywords:'测试'})});assert.equal(r.status,200);assert.equal(db.setting('preferences',{}).keywords,'测试');
  }finally{await new Promise(r=>app.close(r));db.close();}});
+
+test('empty refresh completes immediately without a permanently active run',()=>{
+  const {db}=setup();const run=db.createRun([]);
+  assert.equal(run.pending,0);assert.ok(run.finished_at);db.close();
+});
+test('paused sources remain readable in the timeline but leave recommendations',()=>{
+  const {db,service}=setup();service.project(entry(1),channel);
+  db.run('UPDATE sources SET enabled=0');
+  assert.equal(service.list({mode:'latest'}).total,1);
+  assert.equal(service.list({mode:'recommend'}).total,0);db.close();
+});
+test('sources without a usable channel remain represented in health and daily gaps',()=>{
+  const {db,service}=setup();
+  db.putSource({...source,id:'manual',platform:'wechat',feeds:[]},[]);
+  assert.equal(service.health().unconfiguredSources.length,1);
+  const digest=service.makeDigest('2026-09-17');
+  assert(digest.issues.some(i=>i.sourceId==='manual'));db.close();
+});
+test('never-successful channels also generate local-only stale alerts',()=>{
+  const {db,service}=setup();db.set('manifest_imported_at',1);
+  service.monitor(10*3600000);service.monitor(10*3600000);
+  assert.equal(db.get('SELECT count(*) n FROM outbox').n,1);db.close();
+});
+test('archive supplies a local-to-origin favicon hint instead of depending on Google fallback',()=>{
+  const html=buildArchive({url:'https://example.com/article',title:'Test',author:'A'},'<p>Body</p>');
+  assert(html.includes('rel="icon" href="https://example.com/favicon.ico"'));
+});

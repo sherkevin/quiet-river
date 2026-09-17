@@ -18,7 +18,7 @@ class ReaderService {
       if(!s.id||!s.name||ids.has(s.id))throw new Error('invalid or duplicate source ID');ids.add(s.id);
       this.db.putSource(s,channelsFor(s,{...this.config.adapters,...options}));
     }
-    this.db.set('manifest_imported_at',Date.now());this.db.set('manifest_source_count',ids.size);
+    if(!this.db.setting('manifest_imported_at',0))this.db.set('manifest_imported_at',Date.now());this.db.set('manifest_source_count',this.db.sources().length);
     await this.provisionChannels();
     return {sources:this.db.sources().length,channels:this.db.channels().length};
   }
@@ -166,7 +166,7 @@ class ReaderService {
   list({mode='latest',sourceId,tag,unread=false,limit=30,offset=0}={}) {
     const sources=this.db.sources(), byId=new Map(sources.map(s=>[s.id,s]));
     let entries=this.db.all('SELECT * FROM entries ORDER BY published_at DESC,id DESC').filter(e=>{
-      const s=byId.get(e.source_id);return s?.visible&&s.enabled&&(!sourceId||s.id===sourceId)&&(!tag||s.tags.includes(tag))&&(!unread||e.status==='unread');
+      const s=byId.get(e.source_id);return s?.visible&&(mode!=='recommend'||s.enabled)&&(!sourceId||s.id===sourceId)&&(!tag||s.tags.includes(tag))&&(!unread||e.status==='unread');
     });
     const fb=Object.fromEntries(this.db.all('SELECT * FROM feedback').map(f=>[f.entry_id,f.value]));
     if(mode==='recommend')entries=rankEntries(entries,sources,this.db.setting('preferences',{}),fb);
@@ -181,7 +181,14 @@ class ReaderService {
   async _archive(id) {
     let row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw new Error('entry not found');
     if(!this.config.karakeepToken)throw new Error('not configured: reader account');
-    if(row.bookmark_id)return {bookmarkId:row.bookmark_id,path:`/dashboard/preview/${row.bookmark_id}`,state:row.archive_state};
+    if(row.bookmark_id){
+      const saved=await this.kk.call('/api/v1/bookmarks/'+encodeURIComponent(row.bookmark_id));
+      const status=saved.content?.crawlStatus;
+      if(status==='success')row.archive_state='READY';
+      if(status==='failure')row.archive_state='ERROR';
+      this.db.run('UPDATE entries SET archive_state=? WHERE id=?',row.archive_state,id);
+      return {bookmarkId:row.bookmark_id,path:`/dashboard/preview/${row.bookmark_id}`,state:row.archive_state};
+    }
     this.db.run("UPDATE entries SET archive_state='IMPORTING' WHERE id=?",id);
     try {
       const entry=await this.mf.call(`/v1/entries/${id}`);const html=String(entry.content||'');
@@ -207,20 +214,23 @@ class ReaderService {
   }
   async highlights(cursor='') {
     if(!this.config.karakeepToken)return {highlights:[],nextCursor:null,notConfigured:true};
-    return this.kk.call('/api/v1/highlights?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+    const page=await this.kk.call('/api/v1/highlights?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+    return {...page,highlights:(page.highlights||[]).map(h=>({...h,article:this.db.get('SELECT title,url,author,source_id FROM entries WHERE bookmark_id=? LIMIT 1',h.bookmarkId)||null}))};
   }
   async notes(cursor='') {
     if(!this.config.karakeepToken)return {bookmarks:[],nextCursor:null,notConfigured:true};
-    return this.kk.call('/api/v1/bookmarks?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+    return this.kk.call('/api/v1/bookmarks?limit=50&includeContent=true'+(cursor?'&cursor='+encodeURIComponent(cursor):''));
   }
   makeDigest(day,regenerate=false) {
     if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('invalid day');
     const old=this.db.get('SELECT * FROM digests WHERE day=?',day);if(old&&!regenerate)return json(old.payload,{});
     const pref=this.db.setting('preferences',{}), now=Date.now();
     // The whole local candidate set is scored before top-N selection, never one upstream page.
-    const all=this.list({mode:'recommend',unread:true,limit:Number.MAX_SAFE_INTEGER}).items;
-    const items=all.filter(e=>(e.published_at||e.discovered_at)>=now-7*86400000).slice(0,Math.max(1,Math.min(50,Number(pref.digestCount)||15)));
-    const issues=this.health().channels.filter(c=>!['SUCCEEDED_NEW','SUCCEEDED_NO_NEW'].includes(c.state));
+    const all=this.list({mode:'recommend',unread:true,limit:Number.MAX_SAFE_INTEGER}).items.filter(e=>(e.published_at||e.discovered_at)>=now-7*86400000&&(e.published_at||e.discovered_at)<=now+300000);
+    const items=all.slice(0,Math.max(1,Math.min(50,Number(pref.digestCount)||15)));
+    const health=this.health();
+    const issues=health.channels.filter(c=>c.state!=='PAUSED'&&!['SUCCEEDED_NEW','SUCCEEDED_NO_NEW'].includes(c.state));
+    for(const s of health.unconfiguredSources)issues.push({sourceId:s.id,state:'NOT_CONFIGURED',error:'来源仍在台账中，但没有可执行的采集通道'});
     const digest={day,createdAt:now,revision:(old?.revision||0)+1,algorithm:'local-rules-v1',candidateCount:all.length,preferences:pref,items,issues};
     this.db.run('INSERT INTO digests VALUES(?,?,?,?) ON CONFLICT(day) DO UPDATE SET created_at=excluded.created_at,revision=excluded.revision,payload=excluded.payload',day,now,digest.revision,JSON.stringify(digest));
     if(!old)this.db.alert('digest:'+day,'Quiet River 日报',`${day}：优先阅读 ${items.length} 篇；另有 ${issues.length} 个通道需要关注。请在私人阅读器查看。`);
@@ -228,16 +238,25 @@ class ReaderService {
   }
   health() {
     const sources=this.db.sources(), channels=this.db.channels();
-    return {sources:sources.length,channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id})),
+    return {sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id})),
       groups:this.db.all('SELECT * FROM groups'),queue:this.db.get("SELECT count(*) n FROM jobs WHERE state IN ('QUEUED','RUNNING')").n,
       entries:this.db.get('SELECT count(*) n FROM entries').n,readerConfigured:!!this.config.karakeepToken,
       notifications:this.db.all('SELECT created_at,payload,state,attempts FROM outbox ORDER BY created_at DESC LIMIT 30').map(r=>({...r,payload:json(r.payload,{})}))};
   }
   monitor(now=Date.now()) {
     // Local-only liveness check: no platform request is made here.
+    const since=this.db.setting('manifest_imported_at',now);
+    const enabled=new Set(this.db.sources().filter(s=>s.enabled).map(s=>s.id));
+    const stale=new Map();
     for(const c of this.db.channels()) {
-      if(!c.enabled||!c.last_success)continue;
-      if(now-c.last_success>Math.max(c.interval_ms*3,6*3600000))this.db.alert(`stale:${c.id}:${c.last_success}`,'订阅长时间未检查成功',`通道 ${c.id} 已超过预计检查周期；这不等于作者没有更新。`);
+      if(!c.enabled||!enabled.has(c.source_id))continue;
+      const reference=c.last_success||since;
+      if(now-reference>Math.max(c.interval_ms*3,6*3600000)){const old=stale.get(c.group_key);stale.set(c.group_key,{count:(old?.count||0)+1,reference:Math.min(old?.reference||reference,reference)});}
+    }
+    for(const [key,info] of stale){
+      const group=this.db.get('SELECT state,last_success FROM groups WHERE id=?',key);
+      if(group?.state==='AUTH_REQUIRED')continue;
+      this.db.alert(`stale:${key}:${group?.last_success||info.reference}`,'订阅长时间未检查成功',`采集组 ${key} 的 ${info.count} 个通道超过预计检查周期；这不等于作者没有更新。`);
     }
   }
   async sendNotifications() {
@@ -251,12 +270,12 @@ class ReaderService {
   }
   tick() {
     const now=Date.now(), sourceIds=new Set(this.db.sources().filter(s=>s.enabled).map(s=>s.id));
-    const due=this.db.channels().filter(c=>c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now&&this.db.get('SELECT state FROM groups WHERE id=?',c.group_key)?.state!=='AUTH_REQUIRED');
+    const due=this.config.schedulerEnabled===false?[]:this.db.channels().filter(c=>{const g=this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now&&g?.state!=='AUTH_REQUIRED'&&(!g||g.next_allowed<=now);});
     if(due.length)this.db.createRun(due,'scheduled');this.pump().catch(e=>this.db.audit('scheduler','error',e.message));
     this.monitor();this.sendNotifications().catch(()=>{});
     const timezone=this.db.setting('preferences',{}).timezone||'Asia/Shanghai';
     const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now));
-    const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));if(Number(p.hour)>=8)this.makeDigest(`${p.year}-${p.month}-${p.day}`);
+    const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));if(Number(p.hour)>=8&&this.db.get('SELECT count(*) n FROM entries').n>0)this.makeDigest(`${p.year}-${p.month}-${p.day}`);
   }
   start(){this.db.recover();this.timer=setInterval(()=>{if(!this.stopping)this.tick();},60000);this.timer.unref();}
   stop(){this.stopping=true;clearInterval(this.timer);}

@@ -162,7 +162,7 @@ function buildArchive(entry, html) {
   if (!original) throw new Error('unsafe article URL');
   return '<!doctype html><html lang="zh"><head><meta charset="utf-8">' +
     `<title>${escapeHTML(entry.title)}</title><meta name="author" content="${escapeHTML(entry.author)}">` +
-    `<link rel="canonical" href="${escapeHTML(original)}"></head><body><article>` +
+    `<link rel="canonical" href="${escapeHTML(original)}"><link rel="icon" href="${escapeHTML(new URL("/favicon.ico", original).href)}"></head><body><article>` +
     `<h1>${escapeHTML(entry.title)}</h1><p>${escapeHTML(entry.author)} · <a href="${escapeHTML(original)}">原文</a></p>` +
     html + '</article></body></html>';
 }

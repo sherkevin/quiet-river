@@ -115,6 +115,9 @@ async function statePayload() {
 
 async function handleApi(req, res, pathname) {
   const method = req.method.toUpperCase();
+  if (process.env.QR_READ_ONLY === 'true' && method !== 'GET' && method !== 'HEAD') {
+    return sendJson(res, 409, { error: '旧站已切换为只读档案，请到 /desk/ 刷新和管理订阅' });
+  }
 
   if (pathname === '/api/state' && method === 'GET') {
     return sendJson(res, 200, await statePayload());
@@ -422,6 +425,7 @@ function guardedRefresh(force) {
 let autoTimer = null;
 async function scheduleServerAuto() {
   if (autoTimer) clearInterval(autoTimer);
+  if (process.env.QR_READ_ONLY === 'true') return;
   const config = await store.loadConfig();
   const minutes = Number(config.settings?.refreshMinutes || 0);
   if (!minutes || minutes < 1) return;

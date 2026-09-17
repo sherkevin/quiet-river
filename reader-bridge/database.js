@@ -39,7 +39,7 @@ class Database {
   putSource(source,channels){
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.run('INSERT INTO sources(id,payload,visible,enabled) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',source.id,JSON.stringify(source),source.disabled?0:1,1);
+      this.run('INSERT INTO sources(id,payload,visible,enabled) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',source.id,JSON.stringify(source),source.disabled||source.visible===false?0:1,source.enabled===false?0:1);
       for(const c of channels){this.run('INSERT INTO channels(id,source_id,payload,state) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',c.id,source.id,JSON.stringify(c),c.enabled?'NEVER_CHECKED':'NOT_CONFIGURED');this.run('INSERT OR IGNORE INTO groups(id) VALUES(?)',c.group_key);}
       this.db.exec('COMMIT');
     }catch(e){this.db.exec('ROLLBACK');throw e;}
@@ -53,6 +53,7 @@ class Database {
         if(!job){job={id:cryptoRandom()};this.run('INSERT INTO jobs(id,channel_id,state,created_at) VALUES(?,?,?,?)',job.id,c.id,'QUEUED',now);}
         this.run('INSERT OR IGNORE INTO run_jobs VALUES(?,?)',id,job.id);
       }
+      if(!channels.length)this.run('UPDATE runs SET finished_at=? WHERE id=?',now,id);
       this.db.exec('COMMIT');return this.runStatus(id);
     }catch(e){this.db.exec('ROLLBACK');throw e;}
   }

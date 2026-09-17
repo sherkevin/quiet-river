@@ -73,7 +73,7 @@ function createApp(service,config){
       if(p==='/desk/api/bookmarks'&&req.method==='GET')return reply(res,200,await service.notes(u.searchParams.get('cursor')||''));
       if(p==='/desk/api/notes/export'&&req.method==='GET'){
         let cursor='',more=true,count=0;const lines=['# Quiet River 高亮导出','',`导出时间：${new Date().toISOString()}`,''];
-        while(more&&count<10000){const page=await service.highlights(cursor);const records=page.highlights||[];for(const h of records){lines.push(`## ${h.bookmarkId||h.bookmark?.title||'高亮'}`,'',String(h.text||'').split('\n').map(s=>'> '+s).join('\n'),'',h.note||'','');count++;}cursor=page.nextCursor||'';more=!!cursor;}
+        while(more&&count<10000){const page=await service.highlights(cursor);const records=page.highlights||[];for(const h of records){lines.push(`## ${h.article?.title||h.bookmark?.title||h.bookmarkId||'高亮'}`,'',`作者：${h.article?.author||'未知'} · 原文：${h.article?.url||'见阅读器'}`,`阅读器对象：${h.bookmarkId}`,'',String(h.text||'').split('\n').map(s=>'> '+s).join('\n'),'',h.note||'','');count++;}cursor=page.nextCursor||'';more=!!cursor;}
         if(more)lines.push('导出达到安全上限，尚有未导出记录。');
         res.writeHead(200,{'Content-Type':'text/markdown; charset=utf-8','Content-Disposition':'attachment; filename="quiet-river-highlights.md"','Cache-Control':'no-store'});return res.end(lines.join('\n'));
       }
@@ -112,7 +112,7 @@ function createApp(service,config){
 }
 function classifyErrorSafe(e){return /not configured/.test(e.message)?'阅读服务或采集通道尚未完成配置':/invalid|missing|must|too large/.test(e.message)?'请求参数不符合接口要求':'后端调用失败或超时；原有数据已保留';}
 function loadConfig(){
-  return {accessToken:process.env.QR_ACCESS_TOKEN,port:Number(process.env.BRIDGE_PORT||4380),host:process.env.BRIDGE_HOST||'127.0.0.1',dataDir:process.env.BRIDGE_DATA_DIR||'/var/lib/quiet-river-platform/bridge',manifest:process.env.BRIDGE_MANIFEST,
+  return {schedulerEnabled:process.env.BRIDGE_SCHEDULER_ENABLED!=='false',accessToken:process.env.QR_ACCESS_TOKEN,port:Number(process.env.BRIDGE_PORT||4380),host:process.env.BRIDGE_HOST||'127.0.0.1',dataDir:process.env.BRIDGE_DATA_DIR||'/var/lib/quiet-river-platform/bridge',manifest:process.env.BRIDGE_MANIFEST,
     miniflux:process.env.MINIFLUX_URL||'http://127.0.0.1:3061',minifluxToken:process.env.MINIFLUX_TOKEN,
     karakeep:process.env.KARAKEEP_URL||'http://127.0.0.1:3062',karakeepToken:process.env.KARAKEEP_TOKEN,
     ntfy:process.env.NTFY_URL||'',adapters:{rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
@@ -123,7 +123,13 @@ async function main(){
   if(!db.sources().length&&config.manifest)await service.importManifest(JSON.parse(fs.readFileSync(config.manifest,'utf8')));
   const app=createApp(service,config);service.start();
   app.listen(config.port,config.host,()=>console.log('Quiet River Bridge ready on loopback; production credentials are never logged'));
-  for(const event of ['SIGTERM','SIGINT'])process.on(event,()=>{service.stop();app.close();setTimeout(()=>{db.close();process.exit(0);},1000).unref();});
+  let closing=false;
+  for(const event of ['SIGTERM','SIGINT'])process.on(event,async()=>{
+    if(closing)return;closing=true;service.stop();app.close();
+    const deadline=Date.now()+125000;
+    while((service.working||service.archiving.size)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
+    app.closeAllConnections();db.close();process.exit(0);
+  });
 }
 if(require.main===module)main().catch(e=>{console.error('Bridge startup failed:',e.message);process.exit(1);});
 module.exports={createApp,validPreferences,secureEqual,cookies,loadConfig};
