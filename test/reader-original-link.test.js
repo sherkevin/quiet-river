@@ -73,3 +73,9 @@ test('ECS validator accepts profile-note links only for the assigned author and 
  assert.equal(a.guid,b.guid);assert.notEqual(a.link,b.link);
  assert.throws(()=>validateItems({...channel,authorId:'ffffffffffffffffffffffff'},[{title:'A',link:profile}]),/does not match/);
 });
+test('Xiaohongshu-only launcher is bounded and does not start another platform or watch loop',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const script=fs.readFileSync(path.join(__dirname,'../tools/windows/Sync-Xiaohongshu.cmd'),'utf8');
+ assert.match(script,/--platform xiaohongshu --max-jobs 20/);
+ assert.ok(!script.includes('--watch'));assert.ok(!script.includes('--platform zhihu'));
+});

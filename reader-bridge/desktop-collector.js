@@ -25,6 +25,11 @@ class DesktopCollector {
       id TEXT PRIMARY KEY,job_id TEXT NOT NULL,channel_id TEXT NOT NULL,
       expires_at INTEGER NOT NULL,state TEXT NOT NULL DEFAULT 'OPEN',digest TEXT,ack TEXT);
       CREATE INDEX IF NOT EXISTS collector_lease_state ON collector_leases(state,expires_at);`);
+    for(const channel of this.db.channels()){
+      if(channel.transport==='desktop'&&['SUCCEEDED_PARTIAL','SUCCEEDED_NEW','SUCCEEDED_NO_NEW'].includes(channel.state)&&channel.error){
+        this.db.run("UPDATE channels SET error='' WHERE id=?",channel.id);
+      }
+    }
   }
   async register(){
     const configured=this.s.config.adapters?.desktopPlatforms||[];
@@ -102,7 +107,7 @@ class DesktopCollector {
       input.status==='BROWSER_OFFLINE'?'Shervin浏览器或OpenCLI扩展未连接':
       input.status==='ACCESS_BLOCKED'?'浏览器导航被拒绝或平台访问受限，未绕过限制':'Windows采集失败，原有内容保留';
     if(ok){
-      this.db.run('UPDATE channels SET last_success=?,next_check=?,state=?,error=?,failures=0 WHERE id=?',now,now+c.interval_ms,state,message,c.id);
+      this.db.run("UPDATE channels SET last_success=?,next_check=?,state=?,error='',failures=0 WHERE id=?",now,now+c.interval_ms,state,c.id);
       this.db.run("UPDATE groups SET state='OK',last_success=?,next_allowed=?,failures=0 WHERE id=?",now,now+Math.max(8000,c.min_gap_ms),c.group_key);
     }else{
       const retry=now+(state==='AUTH_REQUIRED'?86400000:state==='ACCESS_BLOCKED'?1800000:600000);

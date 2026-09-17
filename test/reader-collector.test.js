@@ -99,3 +99,19 @@ test('an authentication-paused group does not create repeated scheduled runs',as
  f.collector.claim(['zhihu']);f.collector.claim(['zhihu']);
  assert.equal(f.db.get('SELECT count(*) n FROM runs').n,before);
 });
+test('successful desktop collection clears stale channel errors while retaining partial task detail',async t=>{
+ const f=fixture(t);const r=f.collector.claim(['zhihu']);
+ f.db.run("UPDATE channels SET error='old failure' WHERE id=?",f.channels[0].id);
+ const ack=await f.collector.submit({leaseId:r.job.leaseId,status:'OK',items:[answer]});
+ assert.equal(ack.state,'SUCCEEDED_PARTIAL');
+ assert.equal(f.db.get('SELECT error FROM channels WHERE id=?',f.channels[0].id).error,'');
+ const job=f.db.get('SELECT error FROM jobs WHERE id=?',r.job.leaseId); // lease ID is not the job ID; task detail is covered by runStatus below.
+ assert.equal(job,undefined);
+ const run=f.db.all('SELECT error FROM jobs ORDER BY created_at DESC LIMIT 1')[0];
+ assert.match(run.error,/窗口列表已同步/);
+});
+test('collector startup removes legacy success messages from the channel error field',t=>{
+ const f=fixture(t);f.db.run("UPDATE channels SET state='SUCCEEDED_PARTIAL',error='legacy success note'");
+ new DesktopCollector(f.service);
+ assert.equal(f.db.get('SELECT error FROM channels').error,'');
+});
