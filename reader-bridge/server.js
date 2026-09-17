@@ -7,6 +7,7 @@ const crypto=require('node:crypto');
 const {Database}=require('./database');
 const {ReaderService}=require('./service');
 const {safeURL,hash,json}=require('./core');
+const {authorIdentity}=require('./sources');
 const {request,ApiClient}=require('./network');
 
 function secureEqual(a,b){return typeof a==='string'&&typeof b==='string'&&crypto.timingSafeEqual(Buffer.from(hash(a)),Buffer.from(hash(b)));}
@@ -57,7 +58,7 @@ function createApp(service,config){
       if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
       if(p==='/desk/api/entries'&&req.method==='GET'){
         const offset=Math.max(0,Number(u.searchParams.get('offset'))||0), limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit'))||30));
-        return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,tag:u.searchParams.get('tag')||undefined,unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
+        return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,platform:u.searchParams.get('platform')||undefined,tag:u.searchParams.get('tag')||undefined,unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
       }
       if(p==='/desk/api/refresh'&&req.method==='POST')return reply(res,202,service.refresh(await bodyJSON(req)));
       const run=/^\/desk\/api\/runs\/([a-f0-9]+)$/.exec(p);
@@ -83,7 +84,26 @@ function createApp(service,config){
         const b=await bodyJSON(req), url=safeURL(b.url),feed=safeURL(b.feedUrl);
         if(!String(b.name||'').trim()||(!url&&!feed))return reply(res,400,{error:'需要来源名称以及主页或 Feed 地址'});
         const source={id:crypto.randomBytes(8).toString('hex'),name:String(b.name).slice(0,150),url:url||feed,platform:String(b.platform||'blog').slice(0,40),tags:Array.isArray(b.tags)?b.tags.map(String).filter(x=>x.length<100):[],feeds:feed?[feed]:[],manual:!feed};
+        const identity=authorIdentity(source.url);
+        if(identity){source.platform=identity.platform;source.adapter=identity;source.manual=false;}
         await service.importManifest({subscriptions:[source]});return reply(res,201,{source});
+      }
+      const configureMatch=/^\/desk\/api\/sources\/([\w-]+)\/configure$/.exec(p);
+      if(configureMatch&&req.method==='POST'){
+        const source=service.db.sources().find(s=>s.id===configureMatch[1]);
+        if(!source)return reply(res,404,{error:'来源不存在'});
+        await service.importManifest({subscriptions:[source]});
+        return reply(res,200,{ok:true,message:'已按服务器配置重新登记通道；尚未宣称采集成功'});
+      }
+      const feedMatch=/^\/desk\/api\/sources\/([\w-]+)\/feed$/.exec(p);
+      if(feedMatch&&req.method==='POST'){
+        const b=await bodyJSON(req),source=service.db.sources().find(s=>s.id===feedMatch[1]);
+        if(!source)return reply(res,404,{error:'来源不存在'});
+        const url=safeURL(b.feedUrl);
+        if(!url||url.length>4096)return reply(res,400,{error:'请输入有效的 HTTP/HTTPS 订阅地址'});
+        if((source.feeds||[]).includes(url))return reply(res,200,{ok:true,added:false});
+        await service.importManifest({subscriptions:[{...source,feeds:[...(source.feeds||[]),url]}]});
+        return reply(res,200,{ok:true,added:true,message:'通道已登记，尚需一次成功更新检查'});
       }
       const sourceMatch=/^\/desk\/api\/sources\/([\w-]+)$/.exec(p);
       if(sourceMatch&&req.method==='POST'){

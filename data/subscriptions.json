@@ -231,7 +231,9 @@
       "tags": [
         "推荐系统"
       ],
-      "feeds": [],
+      "feeds": [
+        "https://feeds.transistor.fm/recsperts-recommender-systems-experts"
+      ],
       "addedAt": "2026-09-11T07:01:34.148Z",
       "adapter": {
         "platform": "podcast",

@@ -53,7 +53,12 @@ function channelsFor(source, options = {}) {
   const adapter = source.adapter || {};
   const id = adapter.id || '';
   const base = options.rsshub || 'http://127.0.0.1:1200';
-  if (source.platform === 'zhihu' && id) {
+  if (source.platform === 'juejin' && /^\d+$/.test(id)) {
+    add('metadata', 'native', 'https://api.juejin.cn/content_api/v1/article/query_list', {
+      native_adapter:'juejin',author_id:id,enabled:true,group_key:'api.juejin.cn',
+      windowNote:'单页作者更新列表；未完成翻页时不宣称覆盖全部更新',interval_ms:6*3600000,min_gap_ms:8000
+    });
+  } else if (source.platform === 'zhihu' && id) {
     for (const type of ['answers', 'articles']) {
       const route = type === 'answers' ? `/zhihu/people/answers/${encodeURIComponent(id)}` : `/zhihu/posts/people/${encodeURIComponent(id)}`;
       add(type, 'rsshub', base + route, {group_key: 'credential:zhihu', credential_group: 'zhihu', enabled: Boolean(options.rsshub && options.zhihuReady)});

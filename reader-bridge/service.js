@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const {hash,json,opmlFor,channelsFor,parseFullFeed,rankEntries,buildArchive,stripHTML,safeURL,classifyError,articleKey} = require('./core');
 const {ApiClient,request} = require('./network');
+const {fetchNativeMetadata}=require('./native-metadata');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
@@ -10,6 +11,7 @@ class ReaderService {
     this.mf=clients.mf || new ApiClient(config.miniflux,{ 'X-Auth-Token':config.minifluxToken });
     this.kk=clients.kk || new ApiClient(config.karakeep,{Authorization:`Bearer ${config.karakeepToken || ''}`});
     this.internalFetch=clients.internalFetch || request;
+    this.fetchNative=clients.fetchNative || fetchNativeMetadata;
   }
   async importManifest(manifest,options={}) {
     if(!Array.isArray(manifest.subscriptions))throw new Error('manifest missing subscriptions array');
@@ -46,8 +48,8 @@ class ReaderService {
       await this.mf.call(`/v1/feeds/${feed.id}`,'PUT',patch);
     }
   }
-  refresh({sourceId,tag,kind='manual'}={}) {
-    const sources=this.db.sources().filter(s=>s.enabled&&(!sourceId||s.id===sourceId)&&(!tag||(s.tags||[]).includes(tag)));
+  refresh({sourceId,tag,platform,kind='manual'}={}) {
+    const sources=this.db.sources().filter(s=>s.enabled&&(!sourceId||s.id===sourceId)&&(!platform||s.platform===platform)&&(!tag||(s.tags||[]).includes(tag)));
     const ids=new Set(sources.map(s=>s.id));
     const run=this.db.createRun(this.db.channels().filter(c=>ids.has(c.source_id)),kind);
     this.pump().catch(e=>this.db.audit('pump','error',e.message));
@@ -74,13 +76,13 @@ class ReaderService {
         if(this.stopping){this.db.run("UPDATE jobs SET state='QUEUED' WHERE id=?",job.id);break;}
         this.db.run('UPDATE channels SET last_check=?,state=? WHERE id=?',Date.now(),'RUNNING',c.id);
         try {
-          let added=0;
-          if(c.transport==='public')added=await this.refreshPublic(c);
-          else added=await this.refreshAdapter(c);
+          const result=c.transport==='public'?await this.refreshPublic(c):await this.refreshAdapter(c);
+          const added=typeof result==='number'?result:result.added;
+          const finalState=result?.partial?'SUCCEEDED_PARTIAL':added?'SUCCEEDED_NEW':'SUCCEEDED_NO_NEW';
           const success=Date.now();
-          this.db.run("UPDATE channels SET last_success=?,next_check=?,state=?,error='',failures=0 WHERE id=?",success,success+c.interval_ms,added?'SUCCEEDED_NEW':'SUCCEEDED_NO_NEW',c.id);
+          this.db.run("UPDATE channels SET last_success=?,next_check=?,state=?,error='',failures=0 WHERE id=?",success,success+c.interval_ms,finalState,c.id);
           this.db.run("UPDATE groups SET state='OK',last_success=?,next_allowed=?,failures=0,alerted=0 WHERE id=?",success,success+c.min_gap_ms,c.group_key);
-          this.finish(job,added?'SUCCEEDED_NEW':'SUCCEEDED_NO_NEW','');
+          this.finish(job,finalState,result?.partial?'已取得一页更新，但上游仍有下一页；不能证明全部更新已覆盖':'');
         } catch(e) {
           const state=classifyError(e), now=Date.now();
           const wait=state==='AUTH_REQUIRED'?24*3600000:Math.min(6*3600000,60000*2**Math.min(c.failures,8));
@@ -144,6 +146,11 @@ class ReaderService {
     return old?0:1;
   }
   async refreshAdapter(c) {
+    if(c.transport==='native'){
+      const result=await this.fetchNative(c);let added=0;
+      for(const item of result.items)added+=await this.importItem(c,item);
+      return {added,partial:result.moreAvailable};
+    }
     if(c.browser && !this.config.adapters?.browserEnabled)throw new Error('missing configuration: browser acceptance');
     const base=c.transport==='werss'?this.config.adapters?.werss:this.config.adapters?.rsshub;
     if(!base||new URL(c.url).origin!==new URL(base).origin)throw new Error('not configured: trusted adapter origin');
@@ -193,10 +200,10 @@ class ReaderService {
     this.project(await this.mf.call(`/v1/entries/${id}`),c);
     return created;
   }
-  list({mode='latest',sourceId,tag,unread=false,limit=30,offset=0,asOf=Date.now()}={}) {
+  list({mode='latest',sourceId,platform,tag,unread=false,limit=30,offset=0,asOf=Date.now()}={}) {
     const sources=this.db.sources(), byId=new Map(sources.map(s=>[s.id,s]));
     let entries=this.db.all('SELECT * FROM entries ORDER BY published_at DESC,id DESC').filter(e=>{
-      const s=byId.get(e.source_id);return e.discovered_at<=asOf&&s?.visible&&(mode!=='recommend'||s.enabled)&&(!sourceId||s.id===sourceId)&&(!tag||s.tags.includes(tag))&&(!unread||e.status==='unread');
+      const s=byId.get(e.source_id);return e.discovered_at<=asOf&&s?.visible&&(mode!=='recommend'||s.enabled)&&(!sourceId||s.id===sourceId)&&(!platform||s.platform===platform)&&(!tag||s.tags.includes(tag))&&(!unread||e.status==='unread');
     });
     const fb=Object.fromEntries(this.db.all('SELECT * FROM feedback').map(f=>[f.entry_id,f.value]));
     if(mode==='recommend')entries=rankEntries(entries,sources,this.db.setting('preferences',{}),fb,asOf);
@@ -280,7 +287,7 @@ class ReaderService {
   }
   health() {
     const sources=this.db.sources(), channels=this.db.channels();
-    return {sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id})),
+    return {sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
       groups:this.db.all('SELECT * FROM groups'),queue:this.db.get("SELECT count(*) n FROM jobs WHERE state IN ('QUEUED','RUNNING')").n,
       entries:this.db.get('SELECT count(*) n FROM entries').n,readerConfigured:!!this.config.karakeepToken,
       notifications:this.db.all('SELECT created_at,payload,state,attempts FROM outbox ORDER BY created_at DESC LIMIT 30').map(r=>({...r,payload:json(r.payload,{})}))};
