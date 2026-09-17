@@ -9,7 +9,7 @@ function validateItems(channel,items){
   return items.map(item=>{
     const url=safeURL(item.link);if(!url)fail('invalid original URL');const u=new URL(url);
     const match=channel.platform==='zhihu'
-      ? (u.hostname==='www.zhihu.com'&&/^\/question\/\d+\/answer\/\d+$/.test(u.pathname)||u.hostname==='zhuanlan.zhihu.com'&&/^\/p\/\d+$/.test(u.pathname))
+      ? (channel.label==='answers'&&u.hostname==='www.zhihu.com'&&/^\/question\/\d+\/answer\/\d+$/.test(u.pathname)||channel.label==='articles'&&u.hostname==='zhuanlan.zhihu.com'&&/^\/p\/\d+$/.test(u.pathname))
       : (u.hostname==='www.xiaohongshu.com'&&/^\/(explore|discovery\/item)\/[a-f\d]{24}$/i.test(u.pathname));
     if(!match||url.length>4096)fail('collector original URL does not match platform');
     if(typeof item.title!=='string'||!item.title.trim()||item.title.length>1000)fail('invalid title');
@@ -59,12 +59,13 @@ class DesktopCollector {
     const due=candidates.filter(c=>{const g=this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.next_check<=now&&g?.state!=='AUTH_REQUIRED'&&(!g||g.next_allowed<=now)&&!this.db.get("SELECT id FROM jobs WHERE channel_id=? AND state IN ('QUEUED','RUNNING')",c.id);});
     if(due.length)this.db.createRun(due,'scheduled');
     const jobs=this.db.all("SELECT * FROM jobs WHERE state='QUEUED' ORDER BY priority DESC,created_at,id");
+    let nearCooldown=null;
     for(const job of jobs){
       const c=candidates.find(x=>x.id===job.channel_id);if(!c)continue;
       const g=this.db.get('SELECT * FROM groups WHERE id=?',c.group_key);
       if(g?.state==='AUTH_REQUIRED'){this.s.finish(job,'AUTH_REQUIRED','Windows登录态需要重新授权');continue;}
       if(c.next_check>now){this.s.finish(job,'COOLDOWN','尚未到本来源允许的检查时间');continue;}
-      if(g?.next_allowed>now)continue;
+      if(g?.next_allowed>now){const seconds=Math.ceil((g.next_allowed-now)/1000);if(seconds<=60)nearCooldown=Math.min(nearCooldown??seconds,seconds);continue;}
       if(this.db.get("SELECT id FROM collector_leases WHERE state IN ('OPEN','APPLYING') AND expires_at>?",now))return {job:null,retryAfter:15};
       const id=crypto.randomBytes(24).toString('hex'),source=bySource.get(c.source_id);
       this.db.db.exec('BEGIN IMMEDIATE');
@@ -77,7 +78,7 @@ class DesktopCollector {
       return {job:{leaseId:id,sourceId:source.id,platform:source.platform,authorId:source.adapter.id,
         name:source.name,kind:c.label,limit:20},retryAfter:8};
     }
-    return {job:null,retryAfter:30,status:this.status()};
+    return {job:null,retryAfter:nearCooldown||30,waitForCooldown:nearCooldown!==null,status:this.status()};
   }
   async submit(input){
     if(!input||typeof input!=='object')fail('invalid result');

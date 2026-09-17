@@ -50,7 +50,7 @@ function collect(job){
   const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(Math.min(20,job.limit||20)),'-f','json','--trace','off'];
   const r=spawnSync(process.execPath,argv,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,
     env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
-  if(r.error||r.status!==0)return {leaseId:job.leaseId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),items:[]};
+  if(r.error||r.status!==0){const diagnostic=/Navigation rejected/i.test(r.stderr||'')?'navigation_rejected':'upstream_rejected';log('OpenCLI check failed: '+diagnostic);return {leaseId:job.leaseId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),items:[]};}
   try{return {leaseId:job.leaseId,status:'OK',items:normalize(job,JSON.parse(r.stdout.replace(/^\uFEFF/,'')))};}
   catch{return {leaseId:job.leaseId,status:'UPSTREAM_ERROR',items:[]};}
 }
@@ -60,26 +60,28 @@ async function main(){
   const platforms=option('--platform','zhihu,xiaohongshu').split(',').filter(p=>['zhihu','xiaohongshu'].includes(p));
   if(!platforms.length)throw new Error('Choose a supported platform');
   const max=Math.max(1,Math.min(1000,Number(option('--max-jobs',args.includes('--watch')?'1000':'20'))||20));
-  const pending=path.join(root,'pending-result.json');let done=0;
+  const pending=path.join(root,'pending-result.json');let done=0,failures=0;
   while(done<max){
     try{
       if(fs.existsSync(pending)){
         const result=JSON.parse(fs.readFileSync(pending,'utf8'));
         try{const ack=transport({op:'submit',result});if(!ack.accepted)throw new Error('Missing acknowledgement');
+          if(ack.state!=='SUCCEEDED_PARTIAL')failures++;
           fs.unlinkSync(pending);log(`ECS accepted ${ack.received} records; ${ack.state}`);done++;
         }catch(e){if(e.status===409){fs.renameSync(pending,pending+'.expired-'+Date.now());log('Expired result retained locally; new collection required');}else throw e;}
         if(done>=max)break;
       }
       const next=transport({op:'claim',platforms});
       if(!next.job){
-        if(!args.includes('--watch')){log('No currently eligible task. Cooling down or waiting for browser authorization is not a successful source check.');break;}
-        await sleep(Math.max(15,Math.min(60,next.retryAfter||30))*1000);continue;
+        if(!args.includes('--watch')&&!next.waitForCooldown){log('No currently eligible task. Cooling down or waiting for browser authorization is not a successful source check.');break;}
+        await sleep(Math.max(8,Math.min(60,next.retryAfter||30))*1000);continue;
       }
       log('Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
       persist(pending,collect(next.job));await sleep(8000);
     }catch(e){log(e.message);if(!args.includes('--watch'))throw e;await sleep(30000);}
   }
-  log('Completed '+done+' tasks. This is not an all-source coverage claim.');
+  log('Completed '+done+' tasks; '+failures+' blocked or failed. This is not an all-source coverage claim.');
+  if(failures)process.exitCode=2;
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
 module.exports={normalize,statusFor};

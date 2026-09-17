@@ -62,3 +62,22 @@ Shervin上 doctor 确认扩展 v1.0.21 在线；知乎所关注作者的回答�
 
 参考：OpenCLI 官方 Browser Bridge 文档 https://opencli.info/docs/guide/browser-bridge.html
 固定契约：Shervin 已安装 OpenCLI 1.8.7 的 user-answers、user-articles、xiaohongshu user 帮助和实现。
+
+## 7. 真实连接验收记录（2026-09-17）
+
+Windows脚本已实际安装于 `D:\QuietRiverCollector`；原 `D:\quiet-river` 保持 main、无工作区改动。
+专用私钥留在 Windows 本地权限目录；服务器仅登记公钥，并固定核对服务器主机公钥。
+`collector.cjs --doctor` 在 Shervin 成功验证 OpenCLI 扩展与 ECS 受限 SSH 接收端。
+使用该SSH身份请求非同步命令 `id` 被拒绝，没有获得普通 shell 或 root 权限。
+ECS已写入接收配置与systemd覆盖文件，接收密钥没有发送到Windows或聊天中。
+
+首次一键端到端试验领取了一个知乎文章通道：ECS接收结果为 ACCESS_BLOCKED、0条文章。
+这是正确回传故障，不是知乎入库成功；本次不能从这个归类单独判断是站点403还是导航授权拒绝。
+此前独立知乎回答读取返回2条，但不把它当成一键同步已经写入ECS的证据。
+小红书独立检查的原始错误是 Navigation rejected，仍需用户确认站点登录与扩展权限。
+失败后没有不断重试115位知乎作者，也没有去绕过访问拒绝。
+
+脚本正常退出与采集成功分开：新版本对受限/失败任务返回非零退出码；短暂8秒组间隔会等待，不提前假报全批完成。
+单次20条窗口不是完整历史回补；已有未读、标签和批注身份不因同步重试改变。
+尚未验收的浏览器授权、知乎/小红书批量持续覆盖，不能用脚本已部署代替。
+Windows持续模式未设置开机启动；用户双击后在前台运行，关闭窗口停止领取。

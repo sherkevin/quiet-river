@@ -9,7 +9,7 @@ function fixture(t,platform='zhihu'){
  const db=new Database(':memory:');t.after(()=>db.close());
  const source={id:'source1',name:'Subscribed author',platform,url:'https://www.zhihu.com/people/test',tags:['Agent'],feeds:[],adapter:{id:platform==='zhihu'?'test-author':'0123456789abcdef01234567'}};
  const config={adapters:{desktopPlatforms:['zhihu','xiaohongshu']}};
- const channels=channelsFor(source,config.adapters);db.putSource(source,channels);db.run('UPDATE channels SET feed_id=7');
+ const channels=channelsFor(source,config.adapters).filter(c=>c.label!=='articles');db.putSource(source,channels);db.run('UPDATE channels SET feed_id=7');
  const stored=[];
  const service={db,config,provisionChannels:async()=>{},importItem:async(c,item)=>{stored.push(item);return 1;},
   finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=?,finished_at=? WHERE id=?',state,error,Date.now(),job.id)};
@@ -59,7 +59,7 @@ test('lease expiry rejects late uploads and never fabricates new updates',async 
  await assert.rejects(f.collector.submit({leaseId:r.job.leaseId,status:'OK',items:[answer]}),/expired lease/);
 });
 test('metadata summary is escaped rather than executed',()=>{
- const r=validateItems({platform:'zhihu'},[{...answer,summary:'<script>bad</script>'}]);
+ const r=validateItems({platform:'zhihu',label:'answers'},[{...answer,summary:'<script>bad</script>'}]);
  assert.ok(r[0].content.includes('&lt;script&gt;'));assert.equal(r[0].published,null);
 });
 test('Windows normalizer discards unrelated fields and preserves unknown XHS date',()=>{
@@ -88,4 +88,14 @@ test('normal server collector does not make the browser fetch for a desktop chan
  const s=new ReaderService(f.db,{miniflux:'http://unused.invalid',karakeep:'http://unused.invalid',adapters:{}},{mf:{call:async()=>{calls++;return [];}}});
  f.db.createRun(f.db.channels());await s.pump();assert.equal(calls,0);
  assert.ok(f.db.all("SELECT * FROM jobs WHERE state='QUEUED'").length>0);
+});
+test('answer metadata cannot be uploaded under the article channel',()=>{
+ assert.throws(()=>validateItems({platform:'zhihu',label:'articles'},[answer]),/does not match/);
+});
+test('an authentication-paused group does not create repeated scheduled runs',async t=>{
+ const f=fixture(t),r=f.collector.claim(['zhihu']);
+ await f.collector.submit({leaseId:r.job.leaseId,status:'AUTH_REQUIRED',items:[]});
+ const before=f.db.get('SELECT count(*) n FROM runs').n;
+ f.collector.claim(['zhihu']);f.collector.claim(['zhihu']);
+ assert.equal(f.db.get('SELECT count(*) n FROM runs').n,before);
 });
