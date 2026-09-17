@@ -144,6 +144,7 @@ class ReaderService {
     const metadataChanged=old&&Object.entries(values).some(([key,value])=>old[key]!==value);
     // First post-migration sync establishes a hash baseline, not a fictional content update.
     const changed=!old||metadataChanged||(old.content_hash!==null&&old.content_hash!==contentHash);
+    if(old?.archive_state==='ORIGINAL_ONLY'&&!old.bookmark_id&&state!=='META')this.db.run("UPDATE entries SET archive_state='NONE' WHERE id=?",e.id);
     this.db.run(`INSERT INTO entries(id,channel_id,source_id,url,title,author,summary,published_at,discovered_at,changed_at,status,content_state,content_hash,synced_at,content_origin,published_at_source)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
       url=excluded.url,title=excluded.title,author=excluded.author,summary=excluded.summary,
@@ -220,6 +221,24 @@ class ReaderService {
   openArticle(id,eventId,target) {return require('./article-actions').openArticle(this,id,eventId,target);}
   backend() {return require('./article-actions').backend(this);}
   feedback(id,value){if(![-1,0,1].includes(value)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid feedback');this.db.run('INSERT INTO feedback VALUES(?,?,?) ON CONFLICT(entry_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',id,value,Date.now());}
+  async readerStatus(id) {
+    const row=this.db.get('SELECT * FROM entries WHERE id=?',id);
+    if(!row)throw Object.assign(new Error('entry not found'),{status:404});
+    const base={entryId:id,originalUrl:row.url,contentState:row.content_state,canHighlight:false};
+    if(!row.bookmark_id){
+      const state=row.archive_state==='ERROR'?'ERROR':['IMPORTING','QUEUED'].includes(row.archive_state)?row.archive_state:row.content_state==='META'?'ORIGINAL_ONLY':'NONE';
+      return {...base,state,path:null,bookmarkId:null};
+    }
+    if(!this.config.karakeepToken)return {...base,state:'NOT_CONFIGURED',path:null,bookmarkId:row.bookmark_id};
+    const saved=await this.kk.call('/api/v1/bookmarks/'+encodeURIComponent(row.bookmark_id));
+    const crawl=saved.content?.crawlStatus;let state=row.archive_state;
+    if(state==='METADATA_NOTE')state='METADATA_NOTE';
+    else if(crawl==='success')state='READY';
+    else if(crawl==='failure')state='ERROR';
+    else state='QUEUED';
+    this.db.run('UPDATE entries SET archive_state=? WHERE id=?',state,id);
+    return {...base,state,bookmarkId:row.bookmark_id,path:`/dashboard/preview/${row.bookmark_id}`,canHighlight:state==='READY'};
+  }
   async archive(id) {
     if(this.archiving.has(id))return this.archiving.get(id);
     const p=this._archive(id);this.archiving.set(id,p);try{return await p;}finally{this.archiving.delete(id);}
@@ -227,21 +246,14 @@ class ReaderService {
   async _archive(id) {
     let row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw new Error('entry not found');
     if(!this.config.karakeepToken)throw new Error('not configured: reader account');
-    if(row.bookmark_id){
-      const saved=await this.kk.call('/api/v1/bookmarks/'+encodeURIComponent(row.bookmark_id));
-      const status=saved.content?.crawlStatus;
-      if(status==='success')row.archive_state='READY';
-      if(status==='failure')row.archive_state='ERROR';
-      this.db.run('UPDATE entries SET archive_state=? WHERE id=?',row.archive_state,id);
-      return {bookmarkId:row.bookmark_id,path:`/dashboard/preview/${row.bookmark_id}`,state:row.archive_state};
-    }
+    if(row.bookmark_id)return this.readerStatus(id);
     this.db.run("UPDATE entries SET archive_state='IMPORTING' WHERE id=?",id);
     try {
       const fetchedAt=Date.now();
       const entry=await this.mf.call(`/v1/entries/${id}`);let html=String(entry.content||'');
       const source=this.db.sources().find(s=>s.id===row.source_id);
       const channel=this.db.channels().find(c=>c.id===row.channel_id);
-      if(channel?.transport==='public'&&['blog','github','csdn','juejin'].includes(source?.platform)&&source?.fullTextMode!=='feed'&&!['feed_full','metadata_only'].includes(source?.content_policy)&&stripHTML(html).length<1500){
+      if(channel?.transport==='public'&&['blog','github','csdn','juejin','wechat'].includes(source?.platform)&&source?.fullTextMode!=='feed'&&!['feed_full','metadata_only'].includes(source?.content_policy)&&stripHTML(html).length<1500){
         try{
           const fetched=await this.mf.call(`/v1/entries/${id}/fetch-content?update_content=false`,'GET',undefined,{timeout:20000});
           const candidate=String(fetched?.content||'');
@@ -252,9 +264,8 @@ class ReaderService {
         }catch{this.db.audit('fulltext',id,'Native extraction unavailable; existing content retained');}
       }
       if(!stripHTML(html)) {
-        const bookmark=await this.kk.call('/api/v1/bookmarks','POST',{type:'text',text:`${row.title}\n\n作者：${row.author}\n原文：${row.url}\n\n本站尚未取得原文，以下可记录整篇笔记。`,sourceUrl:row.url});
-        this.db.run("UPDATE entries SET bookmark_id=?,archive_state='METADATA_NOTE' WHERE id=?",bookmark.id,id);
-        return {bookmarkId:bookmark.id,path:`/dashboard/preview/${bookmark.id}`,state:'METADATA_NOTE'};
+        this.db.run("UPDATE entries SET archive_state='ORIGINAL_ONLY' WHERE id=?",id);
+        return {entryId:id,bookmarkId:null,path:null,state:'ORIGINAL_ONLY',originalUrl:row.url,contentState:row.content_state,canHighlight:false};
       }
       // Recovery: do not upload duplicate archives on a retry after a timeout.
       const prior=await this.kk.call('/api/v1/bookmarks/check-url?url='+encodeURIComponent(row.url));

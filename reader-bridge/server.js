@@ -73,6 +73,8 @@ function createApp(service,config){
       if(p==='/desk/api/refresh'&&req.method==='POST')return reply(res,202,service.refresh(await bodyJSON(req)));
       const run=/^\/desk\/api\/runs\/([a-f0-9]+)$/.exec(p);
       if(run&&req.method==='GET'){const result=service.db.runStatus(run[1]);return reply(res,result?200:404,result||{error:'任务不存在'});}
+      const archiveStatus=/^\/desk\/api\/entries\/(\d+)\/archive$/.exec(p);
+      if(archiveStatus&&req.method==='GET')return reply(res,200,await service.readerStatus(Number(archiveStatus[1])));
       const entry=/^\/desk\/api\/entries\/(\d+)\/(read|open|tags|feedback|archive)$/.exec(p);
       if(entry&&req.method==='POST'){
         const data=await bodyJSON(req),id=Number(entry[1]);

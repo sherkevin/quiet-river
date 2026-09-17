@@ -7,7 +7,7 @@ const problem=(message,status=400)=>Object.assign(new Error(message),{status});
 function list(service,{mode='latest',sourceId,platform,tag,tags,unread=false,order='desc',limit=30,offset=0,asOf=Date.now()}={}) {
   if(!['asc','desc'].includes(order))throw problem('invalid time order');
   const selected=requestedTags(tags,tag),sources=service.db.sources();
-  const byId=new Map(sources.map(s=>[s.id,s])),snapshots=meta.articleTagMap(service.db);
+  const byId=new Map(sources.map(s=>[s.id,s])),channelById=new Map(service.db.channels().map(c=>[c.id,c])),snapshots=meta.articleTagMap(service.db);
   let entries=service.db.all('SELECT * FROM entries').map(e=>{
     const snapshot=snapshots.get(e.id);
     return {...e,tags:snapshot?snapshot.tags:(byId.get(e.source_id)?.tags||[]),tagOrigin:snapshot?.origin||'inherited'};
@@ -24,8 +24,10 @@ function list(service,{mode='latest',sourceId,platform,tag,tags,unread=false,ord
   const feedback=Object.fromEntries(service.db.all('SELECT * FROM feedback').map(f=>[f.entry_id,f.value]));
   if(mode==='recommend')entries=rankEntries(entries,sources,service.db.setting('preferences',{}),feedback,asOf);
   return {asOf,total:entries.length,offset,limit,order,tags:selected,items:entries.slice(offset,offset+limit)
-    .map(e=>({...e,source:byId.get(e.source_id).name,platform:byId.get(e.source_id).platform,
-      sourceTags:byId.get(e.source_id).tags||[],feedback:feedback[e.id]||0}))};
+    .map(e=>{const source=byId.get(e.source_id),channel=channelById.get(e.channel_id);
+      const publicExtractable=channel?.transport==='public'&&['blog','github','csdn','juejin','wechat'].includes(source?.platform)&&source?.content_policy!=='metadata_only';
+      const readerMode=e.bookmark_id||e.content_state!=='META'?'reader':publicExtractable?'fetchable':'original';
+      return {...e,source:source.name,platform:source.platform,sourceTags:source.tags||[],feedback:feedback[e.id]||0,readerMode};})};
 }
 function tagCatalog(service) {
   const all=new Set(service.db.sources().flatMap(s=>s.tags||[]));

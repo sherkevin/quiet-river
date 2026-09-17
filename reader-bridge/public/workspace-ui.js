@@ -75,6 +75,33 @@ async function renderBackend(){
   container.querySelectorAll('[data-backend]').forEach(b=>b.onclick=()=>({activity:showActivity,history:showHistory,faults:showFaults}[b.dataset.backend])());
   showActivity();
 }
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function readerButtonState(entry,button){
+  const state=entry.archive_state||'NONE';
+  if(entry.readerMode==='original'&&!['READY','QUEUED','IMPORTING','METADATA_NOTE'].includes(state)){
+    button.textContent='\u6682\u65e0\u7ad9\u5185\u6b63\u6587';button.disabled=true;button.title='\u8be5\u6761\u76ee\u76ee\u524d\u53ea\u6709\u5143\u4fe1\u606f\uff0c\u8bf7\u76f4\u63a5\u6253\u5f00\u539f\u6587';return false;
+  }
+  button.disabled=false;
+  button.textContent=entry.readerMode==='fetchable'?'\u5c1d\u8bd5\u7ad9\u5185\u9605\u8bfb':state==='READY'?'\u7ad9\u5185\u9605\u8bfb':state==='METADATA_NOTE'?'\u6574\u7bc7\u5907\u6ce8':state==='ERROR'?'\u9605\u8bfb\u5668\u5931\u8d25\uff0c\u6253\u5f00\u539f\u6587':entry.content_state==='PARTIAL'?'\u7ad9\u5185\u9605\u8bfb\uff08\u90e8\u5206\uff09':'\u7ad9\u5185\u9605\u8bfb';
+  button.title=entry.content_state==='PARTIAL'?'\u5f53\u524d\u4fdd\u5b58\u7684\u662f\u90e8\u5206\u5185\u5bb9\uff1b\u9605\u8bfb\u5668\u4f1a\u4f18\u5148\u5c1d\u8bd5\u8865\u6b63\u6587':'';return true;
+}
+async function openReader(entry,button,tab){
+  let result=await api('/entries/'+entry.id+'/archive',{});
+  if(result.state==='ORIGINAL_ONLY'){
+    if(tab)tab.location.replace(result.originalUrl||entry.url);else window.location.assign(result.originalUrl||entry.url);
+    await trackArticleOpen(entry,'original');toast('\u7ad9\u5185\u9605\u8bfb\u51c6\u5907\u5931\u8d25\uff0c\u5df2\u6253\u5f00\u539f\u6587');return;
+  }
+  for(let i=0;i<15&&['IMPORTING','QUEUED'].includes(result.state);i++){
+    button.textContent='\u51c6\u5907\u9605\u8bfb\u5668\u2026';await wait(800);result=await api('/entries/'+entry.id+'/archive');
+  }
+  if(result.state==='ERROR'||result.state==='NOT_CONFIGURED'||!result.path){
+    if(tab)tab.location.replace(result.originalUrl||entry.url);else window.location.assign(result.originalUrl||entry.url);
+    await trackArticleOpen(entry,'original');toast('\u7ad9\u5185\u9605\u8bfb\u51c6\u5907\u5931\u8d25\uff0c\u5df2\u6253\u5f00\u539f\u6587');return;
+  }
+  if(['IMPORTING','QUEUED'].includes(result.state))toast('\u5f52\u6863\u4ecd\u5728\u5904\u7406\uff0c\u5df2\u6253\u5f00\u9605\u8bfb\u5668\u7b49\u5f85\u9875\u9762');
+  if(tab)tab.location.replace(result.path);else window.location.assign(result.path);
+  await trackArticleOpen(entry,'reader');entry.archive_state=result.state;
+}
 function renderArticleCard(entry){
   const a=document.createElement('article');a.className='card article-card';a.dataset.entryId=entry.id;a.dataset.status=entry.status||'unread';
   const contentLabel=entry.content_state==='META'?'仅元信息':entry.content_state==='PARTIAL'?'部分内容':'已有内容';
@@ -101,12 +128,14 @@ function renderArticleCard(entry){
     if(e.target.closest('a,button,input,textarea,select,label,form,.tag-chips')||window.getSelection()?.toString())return;
     a.querySelector('.actions a[data-original][href]')?.click();
   });
-  const read=a.querySelector('[data-action=read]');read.onclick=async()=>{
-    const tab=window.open('about:blank','_blank');if(tab)tab.opener=null;read.disabled=true;
-    try{const result=await api('/entries/'+entry.id+'/archive',{});
-      if(tab){tab.location.replace(result.path);await trackArticleOpen(entry,'reader');}
-      else {await trackArticleOpen(entry,'reader');window.location.assign(result.path);}
-    }catch(e){if(tab)tab.close();error(e);}finally{read.disabled=false;}
+  const read=a.querySelector('[data-action=read]');readerButtonState(entry,read);read.onclick=async()=>{
+    if(read.disabled)return;const tab=window.open('about:blank','_blank');if(tab)tab.opener=null;read.disabled=true;const before=read.textContent;
+    try{await openReader(entry,read,tab);}
+    catch(e){
+      try{if(tab)tab.location.replace(entry.url);else window.location.assign(entry.url);await trackArticleOpen(entry,'original');toast('\u9605\u8bfb\u5668\u6682\u4e0d\u53ef\u7528\uff0c\u5df2\u6253\u5f00\u539f\u6587');}
+      catch{if(tab)tab.close();error(e);}
+    }
+    finally{read.textContent=before;readerButtonState(entry,read);}
   };
   const mark=a.querySelector('[data-action=mark]');
   mark.textContent=entry.status==='read'?'设为未读':'标记已读';
