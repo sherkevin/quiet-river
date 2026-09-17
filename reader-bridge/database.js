@@ -26,6 +26,20 @@ class Database {
       CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,payload TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'PENDING',attempts INTEGER NOT NULL DEFAULT 0,next_attempt INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,created_at INTEGER NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,result TEXT NOT NULL);
     `);
+    // Additive, idempotent provenance migration; preserve existing article/annotation IDs.
+    const additions={
+      entries:{content_hash:'TEXT',synced_at:'INTEGER NOT NULL DEFAULT 0',content_origin:"TEXT NOT NULL DEFAULT 'legacy_unknown'",published_at_source:"TEXT NOT NULL DEFAULT 'unverified'"},
+      imports:{original_published_at:'INTEGER',published_at_source:'TEXT',content_state:'TEXT',content_origin:'TEXT'}
+    };
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for(const [table,columns] of Object.entries(additions)){
+        const existing=new Set(this.all(`PRAGMA table_info(${table})`).map(c=>c.name));
+        for(const [name,type] of Object.entries(columns))if(!existing.has(name))this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+      }
+      this.db.exec('CREATE INDEX IF NOT EXISTS imports_entry ON imports(entry_id)');
+      this.db.exec('COMMIT');
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
     if(!this.all('PRAGMA table_info(jobs)').some(c=>c.name==='priority'))this.db.exec('ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0');
   }
   all(sql,...args){return this.db.prepare(sql).all(...args);}

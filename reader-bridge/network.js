@@ -23,6 +23,16 @@ function publicLookup(hostname, options, cb) {
   });
 }
 
+function redirectHeaders(headers, previous, next) {
+  const result = {...headers};
+  if (new URL(previous).origin !== new URL(next).origin) {
+    for (const name of Object.keys(result)) {
+      if (['authorization','proxy-authorization','cookie','x-auth-token'].includes(name.toLowerCase())) delete result[name];
+    }
+  }
+  return result;
+}
+
 function request(url, {method='GET', headers={}, body, trusted=false, timeout=30000, maxBytes=8*1024*1024, redirects=3} = {}) {
   return new Promise((resolve,reject) => {
     let u;
@@ -38,8 +48,7 @@ function request(url, {method='GET', headers={}, body, trusted=false, timeout=30
         res.resume();
         if (trusted || redirects <= 0) return reject(new Error('redirect not allowed for trusted API or limit exceeded'));
         const target = new URL(res.headers.location,u);
-        const nextHeaders = {...headers};
-        if (target.origin !== u.origin) {delete nextHeaders.Authorization; delete nextHeaders.Cookie; delete nextHeaders['X-Auth-Token'];}
+        const nextHeaders = redirectHeaders(headers,u.href,target.href);
         request(target.href,{method,headers:nextHeaders,body,timeout,maxBytes,redirects:redirects-1}).then(resolve,reject);
         return;
       }
@@ -67,4 +76,4 @@ class ApiClient {
   }
 }
 
-module.exports = {request, isPublicIPv4, publicLookup, ApiClient};
+module.exports = {redirectHeaders, request, isPublicIPv4, publicLookup, ApiClient};

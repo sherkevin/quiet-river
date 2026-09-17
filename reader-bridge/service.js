@@ -16,14 +16,18 @@ class ReaderService {
     const ids=new Set();
     for(const s of manifest.subscriptions){
       if(!s.id||!s.name||ids.has(s.id))throw new Error('invalid or duplicate source ID');ids.add(s.id);
+      if(s.content_policy!==undefined&&!['feed_full','fetch_public_html','adapter_full','metadata_only'].includes(s.content_policy))throw new Error('invalid content policy');
+    }
+    // Complete validation before the first persistent write.
+    for(const s of manifest.subscriptions){
       this.db.putSource(s,channelsFor(s,{...this.config.adapters,...options}));
     }
     if(!this.db.setting('manifest_imported_at',0))this.db.set('manifest_imported_at',Date.now());this.db.set('manifest_source_count',this.db.sources().length);
-    await this.provisionChannels();
+    await this.provisionChannels(ids);
     return {sources:this.db.sources().length,channels:this.db.channels().length};
   }
-  async provisionChannels() {
-    const channels=this.db.channels();
+  async provisionChannels(sourceIds) {
+    const channels=this.db.channels().filter(c=>!sourceIds||sourceIds.has(c.source_id));
     if(!channels.length)return;
     await this.mf.call('/v1/import','POST',opmlFor(channels,this.db.sources()),{headers:{'Content-Type':'application/xml'}});
     const feeds=await this.mf.call('/v1/feeds');
@@ -33,7 +37,13 @@ class ReaderService {
       if(!feed)throw new Error('Miniflux did not create channel '+c.id);
       this.db.run('UPDATE channels SET feed_id=? WHERE id=?',feed.id,c.id);
       // All refresh requests go through our single scheduler. No interest-based ingestion filters.
-      await this.mf.call(`/v1/feeds/${feed.id}`,'PUT',{disabled:true,crawler:false,blocklist_rules:'',keeplist_rules:'',block_filter_entry_rules:'',keep_filter_entry_rules:''});
+      const policy=this.db.sources().find(s=>s.id===c.source_id)?.content_policy;
+      const patch={disabled:true,blocklist_rules:'',keeplist_rules:'',block_filter_entry_rules:'',keep_filter_entry_rules:''};
+      // Keep public-feed crawler/CSS settings unless explicitly changed by this source.
+      // Imported restricted feeds must not independently crawl the original platform.
+      if(c.transport!=='public')patch.crawler=false;
+      else if(policy!==undefined)patch.crawler=policy==='fetch_public_html';
+      await this.mf.call(`/v1/feeds/${feed.id}`,'PUT',patch);
     }
   }
   refresh({sourceId,tag,kind='manual'}={}) {
@@ -112,12 +122,25 @@ class ReaderService {
   }
   project(e,c) {
     const old=this.db.get('SELECT * FROM entries WHERE id=?',e.id);
-    const raw=String(e.content||'');const text=stripHTML(raw);
-    const published=Date.parse(e.published_at)||null;
-    const discovered=old?.discovered_at||Date.now();
-    const state=text?'TEXT':'META';
-    this.db.run(`INSERT INTO entries(id,channel_id,source_id,url,title,author,summary,published_at,discovered_at,changed_at,status,content_state)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,author=excluded.author,summary=excluded.summary,status=excluded.status,changed_at=excluded.changed_at,content_state=excluded.content_state`,e.id,c.id,c.source_id,safeURL(e.url)||'',e.title||'(无标题)',e.author||'',text.slice(0,1200),published,discovered,Date.now(),e.status||'unread',state);
+    const imported=this.db.get('SELECT * FROM imports WHERE entry_id=? AND published_at_source IS NOT NULL',e.id);
+    const raw=String(e.content||''), text=stripHTML(raw), now=Date.now();
+    const published=imported?imported.original_published_at:(Date.parse(e.published_at)||null);
+    const dateSource=imported?imported.published_at_source:(published?'miniflux_unverified':'unknown');
+    const state=text?(imported?.content_state||'TEXT'):'META';
+    const origin=imported?.content_origin||'miniflux';
+    const values={url:safeURL(e.url)||'',title:e.title||'(无标题)',author:e.author||'',summary:text.slice(0,1200),published_at:published,content_state:state};
+    const contentHash=hash(JSON.stringify([values.url,values.title,values.author,raw,published,state,dateSource,origin]));
+    const metadataChanged=old&&Object.entries(values).some(([key,value])=>old[key]!==value);
+    // First post-migration sync establishes a hash baseline, not a fictional content update.
+    const changed=!old||metadataChanged||(old.content_hash!==null&&old.content_hash!==contentHash);
+    this.db.run(`INSERT INTO entries(id,channel_id,source_id,url,title,author,summary,published_at,discovered_at,changed_at,status,content_state,content_hash,synced_at,content_origin,published_at_source)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
+      url=excluded.url,title=excluded.title,author=excluded.author,summary=excluded.summary,
+      published_at=excluded.published_at,status=excluded.status,changed_at=excluded.changed_at,
+      content_state=excluded.content_state,content_hash=excluded.content_hash,synced_at=excluded.synced_at,
+      content_origin=excluded.content_origin,published_at_source=excluded.published_at_source`,
+      e.id,c.id,c.source_id,values.url,values.title,values.author,values.summary,published,
+      old?.discovered_at||now,changed?now:old.changed_at,e.status||'unread',state,contentHash,now,origin,dateSource);
     return old?0:1;
   }
   async refreshAdapter(c) {
@@ -147,8 +170,10 @@ class ReaderService {
   async importItem(c,item) {
     const source=this.db.sources().find(s=>s.id===c.source_id);
     const external=articleKey(source.platform,item.guid,item.link), contentHash=hash(item.content||'');
+    const published=Number.isFinite(item.published)&&item.published>0?item.published:null;
+    const itemState=['TEXT','PARTIAL','META'].includes(item.content_state)?item.content_state:(item.content?'TEXT':'META');
     const payload={url:item.link,title:item.title,author:item.author||source.name,content:item.content||'',status:'unread',external_id:external};
-    if(item.published)payload.published_at=Math.floor(item.published/1000);
+    if(published)payload.published_at=Math.floor(published/1000);
     let row=this.db.get('SELECT * FROM imports WHERE channel_id=? AND external_id=?',c.id,external), id=row?.entry_id, created=0;
     if(!id && row){const existing=await this.findImported(c,payload);id=existing?.id;}
     if(!id){
@@ -159,7 +184,12 @@ class ReaderService {
       // PUT modifies content/title only. Re-import would silently overwrite read state.
       await this.mf.call(`/v1/entries/${id}`,'PUT',{title:item.title,content:item.content});
     }
-    this.db.run("UPDATE imports SET entry_id=?,content_hash=?,state='COMPLETE',payload='{}' WHERE channel_id=? AND external_id=?",id,contentHash,c.id,external);
+    // Empty later output must not downgrade valid content or invent a publication time.
+    const retainContent=!item.content&&row?.entry_id&&row?.content_hash;
+    this.db.run("UPDATE imports SET entry_id=?,content_hash=?,state='COMPLETE',payload='{}',original_published_at=?,published_at_source=?,content_state=?,content_origin=? WHERE channel_id=? AND external_id=?",
+      id,retainContent?row.content_hash:contentHash,published??row?.original_published_at??null,
+      published?'upstream':(row?.published_at_source||'unknown'),
+      retainContent?(row.content_state||'TEXT'):itemState,'adapter_feed',c.id,external);
     this.project(await this.mf.call(`/v1/entries/${id}`),c);
     return created;
   }
@@ -194,7 +224,7 @@ class ReaderService {
       const entry=await this.mf.call(`/v1/entries/${id}`);let html=String(entry.content||'');
       const source=this.db.sources().find(s=>s.id===row.source_id);
       const channel=this.db.channels().find(c=>c.id===row.channel_id);
-      if(channel?.transport==='public'&&['blog','github','csdn','juejin'].includes(source?.platform)&&source?.fullTextMode!=='feed'&&stripHTML(html).length<1500){
+      if(channel?.transport==='public'&&['blog','github','csdn','juejin'].includes(source?.platform)&&source?.fullTextMode!=='feed'&&!['feed_full','metadata_only'].includes(source?.content_policy)&&stripHTML(html).length<1500){
         try{
           const fetched=await this.mf.call(`/v1/entries/${id}/fetch-content?update_content=false`,'GET',undefined,{timeout:20000});
           const candidate=String(fetched?.content||'');

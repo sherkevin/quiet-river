@@ -2,13 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'chatgpt/**']
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version: [20, 22, 24]
     steps:
@@ -16,5 +20,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
-      - run: node --test
+      - name: Test declared runtime scope
+        run: |
+          node -e "const fs=require('node:fs'),cp=require('node:child_process');const legacy=Number(process.versions.node.split('.')[0])<22;const tests=fs.readdirSync('test').filter(f=>f.endsWith('.test.js')&&(!legacy||!f.startsWith('reader-'))).sort().map(f=>'test/'+f);console.log(legacy?'Legacy-only suite: Reader Bridge requires Node 22+':'Full legacy and Reader Bridge suite');const r=cp.spawnSync(process.execPath,['--test','--test-concurrency=1',...tests],{stdio:'inherit'});process.exit(r.status??1);"
       - run: node --check server.js
+      - run: bash -n deploy/install-release.sh
