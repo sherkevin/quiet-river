@@ -124,3 +124,5 @@ X 的 28/28 均已有历史成功，但该快照只有 6 个当前成功状态�
 知乎进一步定位到共享组曾在 09:49Z 收到 `AUTH_REQUIRED`，不是 scheduler 漏排；Shervin 上同一 OpenCLI/browser profile 的只读 limit=1 探针随后返回 exit 0 / OK。
 通过 Bridge 受保护管理 API 将 `credential:zhihu` 从冻结状态恢复；35 秒后组回到 OK，collector 在线，最新 lease `SUCCEEDED_PARTIAL`，读取20条且未重复新增。
 恢复动作会把该组 desktop channel 状态重置为 `NEVER_CHECKED` 以要求重新验收，但保留 `last_success`，所以历史成功覆盖不丢失。
+
+CI 备注：`3b12f7c` 的首次 GitHub run `35222558851` 仅 Node 20 job 失败；日志确认新验收测试直接 require `node:sqlite`，但文件名未按 `reader-*` 被 legacy-only 过滤。Node 22/24 均成功。本地全量也成功。后续将该测试归入 Reader Bridge runtime scope，不把 Node 20 的预期不支持误报为产品回归。
