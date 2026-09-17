@@ -38,7 +38,8 @@ function createApp(service,config){
         if(Date.now()-attempt.at>60000){attempt.n=0;attempt.at=Date.now();}
         if(++attempt.n>20)return reply(res,429,{error:'登录尝试过多，请稍后再试'});loginAttempts.set(address,attempt);
         const body=await bodyJSON(req);if(!secureEqual(String(body.token||''),config.accessToken))return reply(res,401,{error:'访问口令不正确'});
-        const secure=req.headers['x-forwarded-proto']==='https'?'; Secure':'';
+        const localHost=/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host);
+        const secure=localHost?'':'; Secure';
         res.setHeader('Set-Cookie',`qr_token=${encodeURIComponent(config.accessToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
         return reply(res,200,{ok:true});
       }
@@ -56,7 +57,7 @@ function createApp(service,config){
       if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
       if(p==='/desk/api/entries'&&req.method==='GET'){
         const offset=Math.max(0,Number(u.searchParams.get('offset'))||0), limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit'))||30));
-        return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,tag:u.searchParams.get('tag')||undefined,unread:u.searchParams.get('unread')==='1',offset,limit}));
+        return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,tag:u.searchParams.get('tag')||undefined,unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
       }
       if(p==='/desk/api/refresh'&&req.method==='POST')return reply(res,202,service.refresh(await bodyJSON(req)));
       const run=/^\/desk\/api\/runs\/([a-f0-9]+)$/.exec(p);

@@ -5,6 +5,7 @@
 
 # Stage on loopback 4381 first. Production binds are set by the controlled installer.
 http://127.0.0.1:4381 {
+  bind 127.0.0.1
   encode gzip
   header X-Robots-Tag "noindex, nofollow"
   route {

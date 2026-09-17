@@ -26,6 +26,7 @@ class Database {
       CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,payload TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'PENDING',attempts INTEGER NOT NULL DEFAULT 0,next_attempt INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,created_at INTEGER NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,result TEXT NOT NULL);
     `);
+    if(!this.all('PRAGMA table_info(jobs)').some(c=>c.name==='priority'))this.db.exec('ALTER TABLE jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0');
   }
   all(sql,...args){return this.db.prepare(sql).all(...args);}
   get(sql,...args){return this.db.prepare(sql).get(...args);}
@@ -51,6 +52,8 @@ class Database {
       for(const c of channels){
         let job=this.get("SELECT id FROM jobs WHERE channel_id=? AND state IN ('QUEUED','RUNNING')",c.id);
         if(!job){job={id:cryptoRandom()};this.run('INSERT INTO jobs(id,channel_id,state,created_at) VALUES(?,?,?,?)',job.id,c.id,'QUEUED',now);}
+        const priority=kind==='scheduled'?0:channels.length<=4?2:1;
+        this.run("UPDATE jobs SET priority=MAX(priority,?) WHERE id=? AND state='QUEUED'",priority,job.id);
         this.run('INSERT OR IGNORE INTO run_jobs VALUES(?,?)',id,job.id);
       }
       if(!channels.length)this.run('UPDATE runs SET finished_at=? WHERE id=?',now,id);

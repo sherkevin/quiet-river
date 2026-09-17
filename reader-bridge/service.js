@@ -47,7 +47,7 @@ class ReaderService {
     if(this.working||this.stopping)return;this.working=true;
     try {
       while(!this.stopping) {
-        const job=this.db.get("SELECT * FROM jobs WHERE state='QUEUED' ORDER BY created_at,id LIMIT 1");
+        const job=this.db.get("SELECT * FROM jobs WHERE state='QUEUED' ORDER BY priority DESC,created_at,id LIMIT 1");
         if(!job)break;
         this.db.run("UPDATE jobs SET state='RUNNING' WHERE id=?",job.id);
         let c=this.db.channels().find(c=>c.id===job.channel_id);
@@ -163,14 +163,14 @@ class ReaderService {
     this.project(await this.mf.call(`/v1/entries/${id}`),c);
     return created;
   }
-  list({mode='latest',sourceId,tag,unread=false,limit=30,offset=0}={}) {
+  list({mode='latest',sourceId,tag,unread=false,limit=30,offset=0,asOf=Date.now()}={}) {
     const sources=this.db.sources(), byId=new Map(sources.map(s=>[s.id,s]));
     let entries=this.db.all('SELECT * FROM entries ORDER BY published_at DESC,id DESC').filter(e=>{
-      const s=byId.get(e.source_id);return s?.visible&&(mode!=='recommend'||s.enabled)&&(!sourceId||s.id===sourceId)&&(!tag||s.tags.includes(tag))&&(!unread||e.status==='unread');
+      const s=byId.get(e.source_id);return e.discovered_at<=asOf&&s?.visible&&(mode!=='recommend'||s.enabled)&&(!sourceId||s.id===sourceId)&&(!tag||s.tags.includes(tag))&&(!unread||e.status==='unread');
     });
     const fb=Object.fromEntries(this.db.all('SELECT * FROM feedback').map(f=>[f.entry_id,f.value]));
-    if(mode==='recommend')entries=rankEntries(entries,sources,this.db.setting('preferences',{}),fb);
-    return {total:entries.length,items:entries.slice(offset,offset+limit).map(e=>({...e,source:byId.get(e.source_id).name,platform:byId.get(e.source_id).platform,tags:byId.get(e.source_id).tags,feedback:fb[e.id]||0})),offset,limit};
+    if(mode==='recommend')entries=rankEntries(entries,sources,this.db.setting('preferences',{}),fb,asOf);
+    return {asOf,total:entries.length,items:entries.slice(offset,offset+limit).map(e=>({...e,source:byId.get(e.source_id).name,platform:byId.get(e.source_id).platform,tags:byId.get(e.source_id).tags,feedback:fb[e.id]||0})),offset,limit};
   }
   async markRead(id,status){if(!['read','unread'].includes(status)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid read state or entry');await this.mf.call('/v1/entries','PUT',{entry_ids:[id],status});this.db.run('UPDATE entries SET status=? WHERE id=?',status,id);}
   feedback(id,value){if(![-1,0,1].includes(value)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid feedback');this.db.run('INSERT INTO feedback VALUES(?,?,?) ON CONFLICT(entry_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',id,value,Date.now());}
@@ -191,7 +191,19 @@ class ReaderService {
     }
     this.db.run("UPDATE entries SET archive_state='IMPORTING' WHERE id=?",id);
     try {
-      const entry=await this.mf.call(`/v1/entries/${id}`);const html=String(entry.content||'');
+      const entry=await this.mf.call(`/v1/entries/${id}`);let html=String(entry.content||'');
+      const source=this.db.sources().find(s=>s.id===row.source_id);
+      const channel=this.db.channels().find(c=>c.id===row.channel_id);
+      if(channel?.transport==='public'&&['blog','github','csdn','juejin'].includes(source?.platform)&&source?.fullTextMode!=='feed'&&stripHTML(html).length<1500){
+        try{
+          const fetched=await this.mf.call(`/v1/entries/${id}/fetch-content?update_content=false`,'GET',undefined,{timeout:20000});
+          const candidate=String(fetched?.content||'');
+          if(stripHTML(candidate).length>stripHTML(html).length){
+            html=candidate;await this.mf.call(`/v1/entries/${id}`,'PUT',{content:html});
+            this.project({...entry,content:html},channel);
+          }
+        }catch{this.db.audit('fulltext',id,'Native extraction unavailable; existing content retained');}
+      }
       if(!stripHTML(html)) {
         const bookmark=await this.kk.call('/api/v1/bookmarks','POST',{type:'text',text:`${row.title}\n\n作者：${row.author}\n原文：${row.url}\n\n本站尚未取得原文，以下可记录整篇笔记。`,sourceUrl:row.url});
         this.db.run("UPDATE entries SET bookmark_id=?,archive_state='METADATA_NOTE' WHERE id=?",bookmark.id,id);
@@ -275,7 +287,14 @@ class ReaderService {
     this.monitor();this.sendNotifications().catch(()=>{});
     const timezone=this.db.setting('preferences',{}).timezone||'Asia/Shanghai';
     const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now));
-    const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));if(Number(p.hour)>=8&&this.db.get('SELECT count(*) n FROM entries').n>0)this.makeDigest(`${p.year}-${p.month}-${p.day}`);
+    const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+    if(Number(p.hour)>=8&&this.db.get('SELECT count(*) n FROM entries').n>0){
+      const day=`${p.year}-${p.month}-${p.day}`,last=this.db.get('SELECT created_at FROM digests WHERE day=?',day);
+      const pending=this.db.get("SELECT count(*) n FROM jobs WHERE state IN ('QUEUED','RUNNING')").n;
+      const changed=this.db.get('SELECT MAX(changed_at) last FROM entries').last;
+      if(!last)this.makeDigest(day);
+      else if(!pending&&changed>last.created_at)this.makeDigest(day,true);
+    }
   }
   start(){this.db.recover();this.timer=setInterval(()=>{if(!this.stopping)this.tick();},60000);this.timer.unref();}
   stop(){this.stopping=true;clearInterval(this.timer);}

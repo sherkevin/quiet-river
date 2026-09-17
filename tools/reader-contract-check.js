@@ -16,7 +16,7 @@ async function main() {
   const service = new ReaderService(db, config);
   const suffix = crypto.randomBytes(8).toString('hex');
   const source = {id:'contract-'+suffix, name:'Integration test '+suffix,
-    platform:'blog', tags:['contract'], url:'https://example.invalid/',
+    platform:'blog', fullTextMode:'feed', tags:['contract'], url:'https://example.invalid/',
     feeds:['https://example.invalid/quiet-river-test/'+suffix]};
   let feedId, bookmarkId, highlightId;
   try {

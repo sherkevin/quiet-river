@@ -1,0 +1,10 @@
+# Private local notification backend. No public listener or upstream relay.
+base-url: "http://127.0.0.1:4390"
+listen-http: "127.0.0.1:4390"
+cache-file: "/var/cache/ntfy/cache.db"
+cache-duration: "168h"
+behind-proxy: false
+attachment-total-size-limit: "0"
+enable-signup: false
+enable-login: false
+log-level: "warn"

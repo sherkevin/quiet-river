@@ -75,3 +75,18 @@ test('archive supplies a local-to-origin favicon hint instead of depending on Go
   const html=buildArchive({url:'https://example.com/article',title:'Test',author:'A'},'<p>Body</p>');
   assert(html.includes('rel="icon" href="https://example.com/favicon.ico"'));
 });
+
+test('specific manual refresh takes priority without duplicating scheduled work',()=>{
+  const {db}=setup();const second={...channel,id:'channel2'};db.putSource(source,[second]);
+  db.createRun([channel,second],'scheduled');db.createRun([second],'manual');
+  const first=db.get("SELECT * FROM jobs ORDER BY priority DESC,created_at,id LIMIT 1");
+  assert.equal(first.channel_id,'channel2');assert.equal(db.get('SELECT count(*) n FROM jobs').n,2);
+  db.close();
+});
+test('pagination cutoff prevents new arrivals shifting an existing read session',()=>{
+  const {db,service}=setup();service.project(entry(1),channel);
+  const first=service.list();service.project(entry(2),channel);
+  db.run('UPDATE entries SET discovered_at=? WHERE id=2',first.asOf+1000);
+  assert.equal(service.list({asOf:first.asOf}).total,1);
+  assert.equal(service.list({asOf:first.asOf+2000}).total,2);db.close();
+});
