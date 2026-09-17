@@ -113,6 +113,14 @@ else
   run 'systemctl restart quiet-river && sleep 2 && systemctl is-active quiet-river' 60
 fi
 
-run "curl -s -o /dev/null -w '本机自检 /api/state -> %{http_code}（应为 401）\n' http://127.0.0.1:$PORT/api/state" 30
+# PORT 可以是逗号列表（默认 80,4321，每种网络各取能通的那个），直接拼进 URL 会得到
+# http://127.0.0.1:80,4321/ 这种非法端口，curl 报 000 —— 看着像服务没起来，其实服务好好的。
+# 逐个端口自检，每个都要是 401（有口令闸）或 200（无闸）。
+IFS=',' read -r -a SELF_PORTS <<< "$PORT"
+for p in ${SELF_PORTS[@]+"${SELF_PORTS[@]}"}; do
+  p="$(echo "$p" | tr -d ' ')"
+  [ -n "$p" ] || continue
+  run "curl -s -o /dev/null -w '本机自检 :$p/api/state -> %{http_code}（应为 401）\n' --max-time 10 http://127.0.0.1:$p/api/state" 30
+done
 echo "==> 完成。公网地址：http://<实例公网IP>/"
 echo "    口令在远端 /etc/quiet-river/env；浏览器打开首页输入一次即可。"
