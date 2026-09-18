@@ -187,3 +187,5 @@ Miniflux HTTP_CLIENT_PROXY 已从旧 Shervin reverse tunnel 172.18.0.1:17891 切
 YouTube 与 Google Research 经 Miniflux 和 Bridge 双层真实刷新恢复成功；X 的单 feed canary 也成功，因此28个 X feed 已全部设置 fetch_via_proxy=true。
 X 共享组旧 TIMEOUT 退避在 canary 成功后通过受保护 resume 清零，再由 Bridge 正常平台刷新，不直接篡改文章或成功状态。恢复过程以实际 SUCCEEDED_* 为准。
 Mihomo 节点 provider 为运行时私有资产，只进 root-only backup；仓库只保存 systemd / 无密钥配置模板和代理策略逻辑。
+
+Mihomo 规则补充 `DOMAIN-SUFFIX,twimg.com,PROXY` 后，pbs.twimg.com 从持续 TCP timeout 变为立即可达；避免 X feed 中媒体资源继续走受限直连。部署后 YouTube 曾出现一次上游临时 server error，但同一 feed 经 Mihomo 实时 200，随后 Bridge 正常重试回到 SUCCEEDED_NO_NEW；不把单次上游5xx归因为代理失效。

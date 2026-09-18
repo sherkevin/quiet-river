@@ -39,5 +39,6 @@ rules:
   - DOMAIN-SUFFIX,googleusercontent.com,PROXY
   - DOMAIN-SUFFIX,x.com,PROXY
   - DOMAIN-SUFFIX,twitter.com,PROXY
+  - DOMAIN-SUFFIX,twimg.com,PROXY
   - DOMAIN-SUFFIX,xgo.ing,PROXY
   - MATCH,DIRECT
