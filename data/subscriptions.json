@@ -302,7 +302,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.372Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3686300831"
+      }
     },
     {
       "id": "81c3b465ba27",
@@ -316,7 +320,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.376Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3934680828"
+      }
     },
     {
       "id": "a43085ae78aa",
@@ -385,7 +393,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.389Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3235660192"
+      }
     },
     {
       "id": "0aefaaea9a0d",
@@ -399,11 +411,15 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.392Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3250458697"
+      }
     },
     {
       "id": "b1cede844cdf",
-      "name": "丁丁丁写字的地方",
+      "name": "推广搜老油条",
       "url": "",
       "platform": "wechat",
       "platformLabel": "公众号",
@@ -413,7 +429,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.396Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3216764246"
+      }
     },
     {
       "id": "b048946ac3c1",
@@ -427,21 +447,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.401Z",
-      "manual": true
-    },
-    {
-      "id": "472dcfa59dee",
-      "name": "搜广推学习笔记",
-      "url": "",
-      "platform": "wechat",
-      "platformLabel": "公众号",
-      "tier": 3,
-      "tags": [
-        "搜广推"
-      ],
-      "feeds": [],
-      "addedAt": "2026-09-11T07:04:58.406Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3874445885"
+      }
     },
     {
       "id": "b235289243a2",
@@ -455,7 +465,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.409Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3912866524"
+      }
     },
     {
       "id": "a25adb6d53d0",
@@ -487,7 +501,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.415Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3688226115"
+      }
     },
     {
       "id": "8c8a9abb342f",
@@ -501,7 +519,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.417Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3903659061"
+      }
     },
     {
       "id": "895223cd018a",
@@ -515,7 +537,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.420Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3576768737"
+      }
     },
     {
       "id": "4de45ade211e",
@@ -2712,7 +2738,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-13T06:50:56.750Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3934626354"
+      }
     },
     {
       "id": "3808fdee1145",

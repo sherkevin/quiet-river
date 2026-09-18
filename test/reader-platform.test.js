@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
 const {Database}=require('../reader-bridge/database');
 const {ReaderService}=require('../reader-bridge/service');
 const {createApp,secureEqual,cookies,validPreferences}=require('../reader-bridge/server');
@@ -99,4 +100,22 @@ test('pagination cutoff prevents new arrivals shifting an existing read session'
   db.run('UPDATE entries SET discovered_at=? WHERE id=2',first.asOf+1000);
   assert.equal(service.list({asOf:first.asOf}).total,1);
   assert.equal(service.list({asOf:first.asOf+2000}).total,2);db.close();
+});
+
+test('verified WeChat bloggers keep stable unique WeRSS identities in the manifest',()=>{
+  const manifest=JSON.parse(fs.readFileSync(require.resolve('../data/subscriptions.json'),'utf8'));
+  const mapped=manifest.subscriptions.filter(s=>s.platform==='wechat'&&s.adapter?.platform==='wechat');
+  assert.equal(mapped.length,16);
+  const ids=mapped.map(s=>s.adapter.mp_id);
+  assert.equal(new Set(ids).size,16);
+  for(const id of ids)assert.match(id,/^MP_WXS_\d+$/);
+  assert.equal(manifest.subscriptions.length,268);
+});
+test('renamed WeChat blogger keeps the historical source id and the mistaken repository source stays removed',()=>{
+  const manifest=JSON.parse(fs.readFileSync(require.resolve('../data/subscriptions.json'),'utf8'));
+  const renamed=manifest.subscriptions.find(s=>s.id==='b1cede844cdf');
+  assert.equal(renamed?.name,'推广搜老油条');
+  assert.equal(renamed?.adapter?.mp_id,'MP_WXS_3216764246');
+  assert.equal(manifest.subscriptions.some(s=>s.name==='丁丁丁写字的地方'),false);
+  assert.equal(manifest.subscriptions.some(s=>s.name==='搜广推学习笔记'),false);
 });
