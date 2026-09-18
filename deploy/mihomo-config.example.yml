@@ -1,0 +1,43 @@
+mixed-port: 7890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: warning
+ipv6: false
+tcp-concurrent: true
+listeners:
+  - name: docker-mixed
+    type: mixed
+    port: 7891
+    listen: 172.18.0.1
+    users: []
+proxy-providers:
+  bootstrap:
+    type: file
+    path: ./providers/bootstrap.yaml
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 600
+      timeout: 5000
+      lazy: true
+proxy-groups:
+  - name: PROXY
+    type: url-test
+    use: [bootstrap]
+    url: https://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 100
+rules:
+  - DOMAIN,research.google,PROXY
+  - DOMAIN-SUFFIX,youtube.com,PROXY
+  - DOMAIN-SUFFIX,youtu.be,PROXY
+  - DOMAIN-SUFFIX,googlevideo.com,PROXY
+  - DOMAIN-SUFFIX,ytimg.com,PROXY
+  - DOMAIN-SUFFIX,gstatic.com,PROXY
+  - DOMAIN-SUFFIX,googleapis.com,PROXY
+  - DOMAIN-SUFFIX,googleusercontent.com,PROXY
+  - DOMAIN-SUFFIX,x.com,PROXY
+  - DOMAIN-SUFFIX,twitter.com,PROXY
+  - DOMAIN-SUFFIX,xgo.ing,PROXY
+  - MATCH,DIRECT

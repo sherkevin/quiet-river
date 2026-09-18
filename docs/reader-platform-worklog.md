@@ -179,3 +179,11 @@ Shervin 的 Mihomo mixed-port 7890 对 YouTube Feed 与 Google Research RSS 均�
 Miniflux 保留全局代理能力但按 feed opt-in：仅 feed 19（ACM RecSys YouTube）与 358（Google Research Blog）设置 fetch_via_proxy。
 直接 Miniflux 验收分别约 2.0s / 3.5s，错误计数清零；清除这两个 host 的旧退避后，Bridge 均为 SUCCEEDED_NEW，入库 15 / 100 条。
 该改动没有让知乎、公众号、国内博客或其他正常来源走代理。
+
+## ECS-local Mihomo 与 X 恢复（2026-09-18）
+
+ECS 出网实测不是全局断网，而是 YouTube / Google Research 等特定国际域名存在 DNS/线路问题。官方 Mihomo v1.19.31 经发布资产 SHA256 校验后安装；服务仅监听 loopback 与 Docker bridge，不开放公网。
+Miniflux HTTP_CLIENT_PROXY 已从旧 Shervin reverse tunnel 172.18.0.1:17891 切到本机 Mihomo 172.18.0.1:7891；旧 tunnel 暂保留作回滚。
+YouTube 与 Google Research 经 Miniflux 和 Bridge 双层真实刷新恢复成功；X 的单 feed canary 也成功，因此28个 X feed 已全部设置 fetch_via_proxy=true。
+X 共享组旧 TIMEOUT 退避在 canary 成功后通过受保护 resume 清零，再由 Bridge 正常平台刷新，不直接篡改文章或成功状态。恢复过程以实际 SUCCEEDED_* 为准。
+Mihomo 节点 provider 为运行时私有资产，只进 root-only backup；仓库只保存 systemd / 无密钥配置模板和代理策略逻辑。

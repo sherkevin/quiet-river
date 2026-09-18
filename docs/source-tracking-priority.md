@@ -102,3 +102,8 @@ ECS 隔离验证当前普通 RSSHub 镜像：192 MiB 内存上限不能完成启
 Shervin OpenCLI 1.8.7 的 `bilibili user-videos` 对已订阅作者真实 limit=2 检查成功，原链与日期完整。
 实现方向固定为现有 desktop collector：保持原 channel ID，UID 从既有 feed path 解析，单次最多20条，只上传元信息。
 生产验收标准仍是4/4来源产生真实 `last_success` 与条目；代码/单点探针通过不等于4/4已经完成。
+
+### 本地 Mihomo 代理收敛（2026-09-18）
+
+ECS 已切为本机 Mihomo v1.19.31 作为 Miniflux 选择性代理，旧 Shervin reverse tunnel 仅保留作回滚。YouTube 与 Google Research 已由 Bridge 真实刷新为成功；X 的28个 Miniflux feed 均已启用 fetch_via_proxy。
+X 平台解除旧 TIMEOUT 组退避后由 Bridge 正常刷新：本轮27个任务得到 SUCCEEDED_NEW/NO_NEW，1个因自身 next_check 尚未到而 COOLDOWN；该来源此前单独 Miniflux canary 已经 parsing_error_count=0，因此不能把旧 TIMEOUT 状态解释为本轮代理失败。

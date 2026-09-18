@@ -1,0 +1,24 @@
+[Unit]
+Description=Mihomo selective outbound proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qr-collector
+Group=qr-collector
+ExecStart=/usr/local/bin/mihomo -d /var/lib/mihomo -f /etc/mihomo/config.yaml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/mihomo
+ReadWritePaths=/var/lib/mihomo
+MemoryHigh=96M
+MemoryMax=160M
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

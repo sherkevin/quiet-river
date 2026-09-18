@@ -109,15 +109,16 @@ B站属于无需共享登录凭证的桌面来源：若某次命令误报 `AUTH_
 日期只接受 OpenCLI 明确返回的 `YYYY-MM-DD`，按 UTC 日精度保存；其他格式保持发布时间未知，不猜具体时刻。
 原链只接受 `https://www.bilibili.com/video/BV...` 或 `av...`，lookalike host、明文 HTTP、嵌入凭证与非标准端口均拒绝。
 
-## 9. Shervin 选择性境外代理（2026-09-18）
+## 9. ECS 本地选择性境外代理（2026-09-18）
 
-ECS 不是无公网：GitHub、arXiv、PyPI、npm、知乎、小红书、B站等可直接建立 TLS；YouTube / Google Research 的 DNS 与直连路径异常。
-Shervin 已运行 Clash Party / Mihomo；不复制节点、订阅或代理凭证到 ECS。
-持续模式 `Start-Watch.cmd` 同时维护一条独立受限 SSH reverse tunnel：
-`Shervin 127.0.0.1:7890 → ECS 127.0.0.1:17890`。
-该 SSH identity 只允许监听 ECS loopback 的 17890，不提供 shell、sudo 或普通采集权限；私钥仅留 Windows。
-ECS 通过 systemd socket-proxyd 将其仅暴露给 Quiet River Docker bridge：`172.18.0.1:17891`；公网网卡不监听代理端口。
-Miniflux 的 `HTTP_CLIENT_PROXY` 指向该 Docker-only 地址，但只有明确设置 `fetch_via_proxy=true` 的 feed 才会使用。
-当前只启用 ACM RecSys YouTube 与 Google Research Blog；其他来源继续直连。
-真实验收：两者经代理均返回有效 XML；Miniflux 刷新 parsing_error_count=0，Bridge 随后分别入库 15 条与 100 条。
-watcher 退出时关闭隧道；SSH 子进程意外退出后 5 秒重连。单次 Sync 脚本不启动代理隧道。
+ECS 并非无公网：GitHub、arXiv、PyPI、npm、知乎、小红书、B站等可直连；YouTube / Google Research 的 DNS 与国际直连路径异常。Shervin 的 Clash Party / Mihomo fake-IP 结果用于确认问题性质，但生产主路径不再依赖 Windows 长久在线。
+
+ECS 锁定官方 Mihomo v1.19.31；Linux amd64 发布资产经 SHA256 校验后安装到 /usr/local/bin/mihomo。节点 provider 只保存在 /var/lib/mihomo/providers/bootstrap.yaml，权限 0600，不进入 GitHub、聊天或普通日志。首次节点集合通过一次性受限 SFTP 从 Shervin 当前已解析配置中引导，传输 key 与 drop 目录随后已删除。
+
+Mihomo 仅监听 127.0.0.1:7890 和 Docker bridge 172.18.0.1:7891，公网网卡没有代理端口。Miniflux 的 HTTP_CLIENT_PROXY 指向 7891；每个 feed 仍必须显式 fetch_via_proxy=true 才使用代理。当前策略为 X / YouTube / Google Research 走 proxy，其余公开 Feed 默认 direct；Mihomo 内部仍有按域名规则，国内来源不强制绕境外节点。
+
+真实验收：YouTube Feed 与 Google Research RSS 通过 Mihomo 返回 200；Miniflux parsing_error_count=0；Bridge 后续均为 SUCCEEDED_NO_NEW，分别已有15条与100条。X 先对高失败 feed 做 canary，真实 Miniflux 刷新成功后再给28个 X feed 开启 proxy，Bridge 按原调度/退避节奏逐步恢复。
+
+旧的 Shervin 127.0.0.1:7890 → reverse SSH → ECS 17890/17891 保留为短期回滚路径，但 Miniflux 已不再指向17891。Mihomo 配置与私有 provider 会进入 root-only 本地恢复点；provider 内容绝不提交公开仓库。
+
+Clash Party 当前订阅 URL 不能被普通 HTTP 客户端直接 GET，因此 ECS 不伪装成已完成订阅自动更新。当前节点集为已验证静态 bootstrap；后续节点变更需经受限同步流程更新，Shervin 离线不会影响 ECS 使用最后一次成功 provider。

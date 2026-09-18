@@ -152,3 +152,23 @@ test('same-origin redirects retain authentication without mutating caller header
   const result = redirectHeaders(headers, 'https://one.example/a', 'https://one.example/b');
   assert.deepEqual(result, headers); assert.notEqual(result, headers);
 });
+test('public feed proxy policy survives channel reprovisioning without proxying unrelated feeds', async t => {
+  const db=new Database(':memory:');t.after(()=>db.close());
+  const sources=[
+    {id:'x',name:'X relay',platform:'twitter',url:'https://x.com/example',feeds:['https://relay.example/x'],tags:[]},
+    {id:'yt',name:'YouTube',platform:'youtube',url:'https://youtube.com/@x',feeds:['https://www.youtube.com/feeds/videos.xml?channel_id=test'],tags:[]},
+    {id:'gr',name:'Google Research Blog',platform:'blog',url:'https://research.google/blog/',feeds:['https://research.google/blog/rss/'],tags:[]},
+    {id:'blog',name:'Direct blog',platform:'blog',url:'https://example.org/',feeds:['https://example.org/feed'],tags:[]}
+  ];
+  const channels=[];for(const s of sources){const cs=channelsFor(s);db.putSource(s,cs);channels.push(...cs);}
+  const feeds=channels.map((c,i)=>({id:100+i,feed_url:c.url}));
+  const writes=[];
+  const mf={call:async(path,method,body)=>{if(path==='/v1/feeds')return feeds;if(method==='PUT')writes.push({path,body});return null;}};
+  const service=new ReaderService(db,{adapters:{},karakeep:'http://unused.invalid',proxyFeedsEnabled:true},{mf});
+  await service.provisionChannels(new Set(sources.map(s=>s.id)));
+  const patches=new Map(writes.map(w=>[Number(w.path.split('/').at(-1)),w.body]));
+  assert.equal(patches.get(100).fetch_via_proxy,true);
+  assert.equal(patches.get(101).fetch_via_proxy,true);
+  assert.equal(patches.get(102).fetch_via_proxy,true);
+  assert.equal(patches.get(103).fetch_via_proxy,false);
+});

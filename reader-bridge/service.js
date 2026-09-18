@@ -44,8 +44,13 @@ class ReaderService {
       if(!feed)throw new Error('Miniflux did not create channel '+c.id);
       this.db.run('UPDATE channels SET feed_id=? WHERE id=?',feed.id,c.id);
       // All refresh requests go through our single scheduler. No interest-based ingestion filters.
-      const policy=this.db.sources().find(s=>s.id===c.source_id)?.content_policy;
+      const source=this.db.sources().find(s=>s.id===c.source_id);
+      const policy=source?.content_policy;
       const patch={disabled:true,blocklist_rules:'',keeplist_rules:'',block_filter_entry_rules:'',keep_filter_entry_rules:''};
+      if(this.config.proxyFeedsEnabled&&c.transport==='public'){
+        let host='';try{host=new URL(c.url).hostname;}catch{}
+        patch.fetch_via_proxy=['twitter','youtube'].includes(source?.platform)||host==='research.google';
+      }
       // Keep public-feed crawler/CSS settings unless explicitly changed by this source.
       // Imported restricted feeds must not independently crawl the original platform.
       if(c.transport!=='public')patch.crawler=false;

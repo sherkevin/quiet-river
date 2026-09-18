@@ -34,9 +34,9 @@ def main():
         for name in ('bridge','karakeep'):
             shutil.copytree(BASE/name,dest/name,copy_function=shutil.copy2)
         shutil.copytree('/etc/quiet-river-platform',dest/'private-config')
-        for directory,label in [('/etc/quiet-river-collector','collector-config'),('/etc/systemd/system/quiet-river-bridge.service.d','bridge-unit-overrides'),('/home/qr-collector/.ssh','collector-authorized-public-key'),('/home/qr-proxy-tunnel/.ssh','proxy-tunnel-authorized-public-key')]:
+        for directory,label in [('/etc/quiet-river-collector','collector-config'),('/etc/systemd/system/quiet-river-bridge.service.d','bridge-unit-overrides'),('/home/qr-collector/.ssh','collector-authorized-public-key'),('/home/qr-proxy-tunnel/.ssh','proxy-tunnel-authorized-public-key'),('/etc/mihomo','mihomo-config'),('/var/lib/mihomo/providers','mihomo-providers')]:
             if pathlib.Path(directory).exists():shutil.copytree(directory,dest/label)
-        for filename in ('quiet-river-proxy-bridge.socket','quiet-river-proxy-bridge.service'):
+        for filename in ('quiet-river-proxy-bridge.socket','quiet-river-proxy-bridge.service','mihomo.service'):
             unit=pathlib.Path('/etc/systemd/system')/filename
             if unit.exists():shutil.copy2(unit,dest/filename)
         shutil.copy2('/etc/caddy/Caddyfile',dest/'Caddyfile')

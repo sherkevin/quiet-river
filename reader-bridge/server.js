@@ -179,6 +179,7 @@ function createApp(service,config,clients={}){
 function classifyErrorSafe(e){return /not configured/.test(e.message)?'阅读服务或采集通道尚未完成配置':/invalid|missing|must|too large/.test(e.message)?'请求参数不符合接口要求':'后端调用失败或超时；原有数据已保留';}
 function loadConfig(){
   return {collectorToken:process.env.QR_COLLECTOR_TOKEN,schedulerEnabled:process.env.BRIDGE_SCHEDULER_ENABLED!=='false',accessToken:process.env.QR_ACCESS_TOKEN,port:Number(process.env.BRIDGE_PORT||4380),host:process.env.BRIDGE_HOST||'127.0.0.1',dataDir:process.env.BRIDGE_DATA_DIR||'/var/lib/quiet-river-platform/bridge',manifest:process.env.BRIDGE_MANIFEST,
+    proxyFeedsEnabled:process.env.QR_PUBLIC_FEED_PROXY==='true',
     miniflux:process.env.MINIFLUX_URL||'http://127.0.0.1:3061',minifluxToken:process.env.MINIFLUX_TOKEN,
     karakeep:process.env.KARAKEEP_URL||'http://127.0.0.1:3062',karakeepToken:process.env.KARAKEEP_TOKEN,
     ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu','bilibili'].includes(p)),rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
