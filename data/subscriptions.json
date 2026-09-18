@@ -928,20 +928,6 @@
       "addedAt": "2026-09-11T12:08:32.755Z"
     },
     {
-      "id": "d40f6cc79d60",
-      "name": "DataFunTalk",
-      "url": "",
-      "platform": "blog",
-      "platformLabel": "公众号",
-      "tier": 3,
-      "tags": [
-        "搜广推"
-      ],
-      "feeds": [],
-      "addedAt": "2026-09-11T12:08:34.268Z",
-      "manual": true
-    },
-    {
       "id": "9bde0d629203",
       "name": "Pluto",
       "url": "https://www.zhihu.com/people/jue-chen-67-88",
@@ -2692,26 +2678,6 @@
         "https://github.com/HKBU-LAGAS/Awesome-Item-ID-Gen-RecSys/commits.atom"
       ],
       "addedAt": "2026-09-13T06:16:34.844Z"
-    },
-    {
-      "id": "100b9c4c76be",
-      "name": "Ed H. Chi（Semantic Scholar 作者页）",
-      "url": "https://www.semanticscholar.org/author/Ed-H.-Chi/2226805",
-      "platform": "semanticscholar",
-      "platformLabel": "Semantic Scholar",
-      "tier": 1,
-      "tags": [
-        "生成式推荐",
-        "推荐系统"
-      ],
-      "feeds": [],
-      "addedAt": "2026-09-13T06:16:54.825Z",
-      "adapter": {
-        "platform": "semanticscholar",
-        "id": "2226805",
-        "itemCount": 20,
-        "latest": 1694649600000
-      }
     },
     {
       "id": "ebdf788b9ed5",

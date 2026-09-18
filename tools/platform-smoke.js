@@ -14,7 +14,7 @@ async function main(){
   assert.equal((await fetch(base+'/desk/api/state')).status,401);
   assert.equal((await fetch(base+'/desk/')).status,200);
   const state=await call('/state');
-  assert.equal(state.sources.length,271);
+  assert.equal(state.sources.length,269);
   assert(state.health.readerConfigured);
   console.log('PASS private API, public login shell and complete source catalog');
   const notes=await call('/notes');assert(Array.isArray(notes.highlights));
