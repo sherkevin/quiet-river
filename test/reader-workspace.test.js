@@ -123,10 +123,14 @@ test('editing article tags is not a viewing event',async t=>{
  await fetch(f.base+'/desk/api/entries/1/tags',{method:'POST',headers:auth,body:JSON.stringify({tags:[]})});
  assert.equal(history.historyPage(f.db).items.length,0);assert.equal(f.db.get('SELECT status FROM entries WHERE id=1').status,'unread');
 });
-test('navigation, tag editor and unread styling are present without removing prior data views',()=>{
+test('navigation, inline tag adders and unread styling are present without removing prior data views',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/index.html'),'utf8');
  const css=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/style.css'),'utf8');
+ const workspace=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ const app=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/app.js'),'utf8');
  for(const label of ['文章','未读','博主','后台'])assert.ok(html.includes('>'+label+'</button>'));
  assert.match(html,/workspace-ui.js/);assert.match(css,/\.unread-dot/);assert.match(css,/box-shadow/);
- assert.match(css,/activity-grid/);
+ assert.match(css,/activity-grid/);assert.match(css,/\.tag-add/);assert.match(css,/\.tag-quick-form/);
+ assert.match(workspace,/drawQuickAddTags\(tagBox/);assert.match(workspace,/给这篇文章添加标签/);
+ assert.match(app,/class="source-tags tag-chips"/);assert.match(app,/给博主添加标签/);
 });

@@ -21,6 +21,25 @@ function editTags(container,initial,onSave,heading) {
 }
 function drawArticleTags(container,tags){container.replaceChildren();
   for(const tag of tags||[]){const span=document.createElement('span');span.className='tag-chip';span.textContent=tag;container.append(span);}}
+function drawQuickAddTags(container,tags,onAdd,ariaLabel='添加标签'){
+  drawArticleTags(container,tags);
+  const plus=document.createElement('button');plus.type='button';plus.className='tag-add';plus.textContent='+';
+  plus.setAttribute('aria-label',ariaLabel);plus.title=ariaLabel;
+  plus.onclick=()=>{
+    if(container.querySelector('.tag-quick-form'))return;
+    plus.hidden=true;
+    const form=document.createElement('form');form.className='tag-quick-form';
+    form.innerHTML='<input name="tag" maxlength="80" autocomplete="off" placeholder="新 tag"><button type="submit">添加</button><button type="button" data-cancel aria-label="取消添加标签">×</button><span class="error" role="alert" hidden></span>';
+    const input=form.elements.tag,warning=form.querySelector('[role=alert]');
+    form.querySelector('[data-cancel]').onclick=()=>{form.remove();plus.hidden=false;};
+    form.onsubmit=async e=>{e.preventDefault();const value=input.value.normalize('NFC').trim().replace(/\s+/gu,' ');
+      if(!value||(tags||[]).includes(value)){form.remove();plus.hidden=false;return;}
+      const submit=form.querySelector('[type=submit]');submit.disabled=true;
+      try{await onAdd(value);}catch(error){warning.textContent=error.message;warning.hidden=false;submit.disabled=false;}};
+    container.append(form);input.focus();
+  };
+  container.append(plus);
+}
 function syncReadCards(entryId,status){
   for(const card of document.querySelectorAll('[data-entry-id="'+entryId+'"]')){
     card.dataset.status=status;const dot=card.querySelector('.unread-dot');if(dot)dot.hidden=status!=='unread';
@@ -114,9 +133,14 @@ function renderArticleCard(entry){
   a.querySelector('.summary').textContent=(entry.summary||'').slice(0,230)+((entry.summary||'').length>230?'…':'');
   a.querySelector('.reason').textContent=(entry.reasons||[]).join('；');
   a.querySelector('.unread-dot').hidden=entry.status!=='unread';
-  const tagBox=a.querySelector('.article-tags');drawArticleTags(tagBox,entry.tags||[]);
+  const tagBox=a.querySelector('.article-tags');
+  const drawEntryTags=()=>drawQuickAddTags(tagBox,entry.tags||[],async value=>{
+    const result=await api('/entries/'+entry.id+'/tags',{tags:[...(entry.tags||[]),value]});
+    entry.tags=result.tags;drawEntryTags();await loadState();toast('已添加文章标签 '+value);
+  },'给这篇文章添加标签');
+  drawEntryTags();
   a.querySelector('[data-action=tags]').onclick=()=>editTags(a,entry.tags||[],async tags=>{
-    const result=await api('/entries/'+entry.id+'/tags',{tags});entry.tags=result.tags;drawArticleTags(tagBox,result.tags);await loadState();if(['latest','unread','recommend'].includes(view))await renderList(false);toast('文章标签已保存');
+    const result=await api('/entries/'+entry.id+'/tags',{tags});entry.tags=result.tags;drawEntryTags();await loadState();if(['latest','unread','recommend'].includes(view))await renderList(false);toast('文章标签已保存');
   },'编辑文章标签（只影响这篇文章）');
   for(const link of a.querySelectorAll('[data-original]')){
     try{const url=new URL(entry.url);if(!['http:','https:'].includes(url.protocol))throw new Error();link.href=url.href;}

@@ -7,6 +7,13 @@
 .article-title{color:var(--ink)}
 .tag-chips{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0}
 .tag-chip{font-size:11px;color:var(--accent);background:var(--tint);border:1px solid var(--line);padding:2px 8px;border-radius:20px}
+.tag-add{width:24px;height:24px;min-width:24px;padding:0;border-radius:50%;font-size:16px;line-height:20px;color:var(--accent);background:transparent;border:1px dashed var(--accent)}
+.tag-add:hover,.tag-add:focus-visible{background:var(--tint);border-style:solid}
+.tag-quick-form{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.tag-quick-form input{width:110px;min-width:90px;padding:3px 7px;font-size:12px}
+.tag-quick-form button{padding:3px 7px;font-size:11px}
+.tag-quick-form .error{flex-basis:100%;margin:0;font-size:11px}
+.source-tags{margin:6px 0 9px}
 .tag-editor{flex-basis:100%;width:100%;padding:16px;margin-top:14px;background:var(--tint);border:1px solid var(--line);border-radius:8px}
 .tag-editor .tag-chips button{padding:3px 9px;font-size:12px}
 .source:has(.tag-editor){flex-wrap:wrap}
