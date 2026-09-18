@@ -4,7 +4,7 @@ const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
 const {normalize,statusFor}=require('../tools/windows/normalize.cjs');
-const {confirmedCollect,authRecovered}=require('../tools/windows/collector.cjs');
+const {confirmedCollect,authRecovered,proxyTunnelArgs}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
  const db=new Database(':memory:');t.after(()=>db.close());
@@ -196,4 +196,11 @@ test('Bilibili desktop validator rejects unrelated hosts',()=>{
  assert.throws(()=>validateItems({platform:'bilibili',label:'videos',authorId:'503316308'},[{
   title:'Bad',link:'https://www.bilibili.com.evil.example/video/BV1XAew6mEhw',published:null,summary:''
  }]),/does not match/);
+});test('proxy tunnel is loopback-only and uses a dedicated SSH identity',()=>{
+ const spec=proxyTunnelArgs({host:'ecs.example',port:22,knownHostsFile:'known_hosts'},'/collector');
+ assert.equal(spec.key,require('node:path').join('/collector','proxy_tunnel_ed25519'));
+ const joined=spec.argv.join(' ');
+ assert.match(joined,/127\.0\.0\.1:17890:127\.0\.0\.1:7890/);
+ assert.match(joined,/qr-proxy-tunnel@ecs\.example/);
+ assert.ok(!joined.includes('0.0.0.0'));assert.ok(!joined.includes('qr-collector@'));
 });

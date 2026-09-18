@@ -170,3 +170,12 @@ Zhihu 新快照：115 registered/channel-ready，43 `CHECK_OK/HAS_ENTRY`，72 �
 Shervin OpenCLI 1.8.7 已有只读 `bilibili user-videos`。对订阅UID 503316308的limit=2真实探针exit 0，返回2条标题、明确日期及B站视频原链。
 据此实现B站desktop transport：现有4个本地RSSHub feed的suffix继续参与channel ID计算，UID从路径解析，避免身份漂移；B站不加入共享AUTH凭证恢复集合。
 聚焦测试新增B站channel identity、claim最小字段、原链host约束、日期精度、AUTH噪声降级等，当前92/92通过；尚未据此声称生产4/4已接通。
+
+## 选择性国际网络修复（2026-09-18）
+
+实测证明 ECS 不是整体无法联网；故障集中在部分国际域名。阿里云 DNS 对 YouTube 出现异常答案，Cloudflare DoH 直连也被 reset/timeout。
+Shervin 的 Mihomo mixed-port 7890 对 YouTube Feed 与 Google Research RSS 均返回 200 + 有效 XML，因此不在 ECS 再复制一份代理订阅。
+建立独立受限 SSH reverse tunnel + Docker-only socket bridge；代理节点秘密仍只存在 Shervin。
+Miniflux 保留全局代理能力但按 feed opt-in：仅 feed 19（ACM RecSys YouTube）与 358（Google Research Blog）设置 fetch_via_proxy。
+直接 Miniflux 验收分别约 2.0s / 3.5s，错误计数清零；清除这两个 host 的旧退避后，Bridge 均为 SUCCEEDED_NEW，入库 15 / 100 条。
+该改动没有让知乎、公众号、国内博客或其他正常来源走代理。

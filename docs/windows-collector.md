@@ -32,11 +32,12 @@ Windows 当前系统自带 OpenSSH 执行未成功，已确认 Git 附带 OpenSS
 将 Windows 公钥（不是私钥）通过已有管理员通道放到 ECS，执行：
 
 ```bash
-python3 tools/windows/install-ecs.py /path/to/windows-public-key.pub
+python3 tools/windows/install-ecs.py /path/to/collector-public-key.pub /path/to/proxy-tunnel-public-key.pub
 ```
 
 它创建专用 `qr-collector` 用户，SSH key 带 restrict 和 forced-command：不能取得 shell、端口转发、TTY 或 sudo。
-网关只接受 claim / submit / status 三类 JSON，并经本机受限 API 调用 Bridge；不接受任意文件路径或命令。
+提供第二把公钥时另建 `qr-proxy-tunnel`；它只能在 ECS loopback 监听固定 17890 端口，不能取得 shell、sudo 或开放公网代理。
+采集网关只接受 claim / submit / status / resume 四类受限 JSON，并经本机 API 调用 Bridge；不接受任意文件路径或命令。
 服务配置的更新通过 systemd EnvironmentFile 生效；安装后仍须用精确提交测试和受控发布流程重启应用。
 服务器公钥不符时必须重新核对，不使用 StrictHostKeyChecking=no。
 
@@ -44,7 +45,7 @@ python3 tools/windows/install-ecs.py /path/to/windows-public-key.pub
 
 - 博主/标签以 ECS 为准，Windows不自行添加博主或传递第三方推荐列表。
 - 网页刷新、自动更新、Windows一键执行共用 ECS 通道队列；普通 Feed 仍在服务器抓取。
-- Windows每次领取一个15分钟租约，只运行固定的三个只读命令，不从服务端接收任意 shell。
+- Windows每次领取一个15分钟租约，只运行固定的四个只读命令（知乎回答/文章、小红书作者列表、B站投稿），不从服务端接收任意 shell。
 - 同一时间只允许一个浏览器任务；每个凭证组遵守至少8秒间隔、来源6小时重抓周期。
 - 登录失败暂停整组，导航拒绝/平台限制与凭证失效分开；不自动绕过验证码或授权确认。
 - 上传重试复用租约和相同消息；确认成功的消息不再次入库，不重置已读状态。
@@ -107,3 +108,16 @@ B站属于无需共享登录凭证的桌面来源：若某次命令误报 `AUTH_
 新增 `Sync-Bilibili.cmd` 作为最多20个当前可运行任务的一键入口；持续 watcher 默认同时领取知乎、小红书和B站任务。
 日期只接受 OpenCLI 明确返回的 `YYYY-MM-DD`，按 UTC 日精度保存；其他格式保持发布时间未知，不猜具体时刻。
 原链只接受 `https://www.bilibili.com/video/BV...` 或 `av...`，lookalike host、明文 HTTP、嵌入凭证与非标准端口均拒绝。
+
+## 9. Shervin 选择性境外代理（2026-09-18）
+
+ECS 不是无公网：GitHub、arXiv、PyPI、npm、知乎、小红书、B站等可直接建立 TLS；YouTube / Google Research 的 DNS 与直连路径异常。
+Shervin 已运行 Clash Party / Mihomo；不复制节点、订阅或代理凭证到 ECS。
+持续模式 `Start-Watch.cmd` 同时维护一条独立受限 SSH reverse tunnel：
+`Shervin 127.0.0.1:7890 → ECS 127.0.0.1:17890`。
+该 SSH identity 只允许监听 ECS loopback 的 17890，不提供 shell、sudo 或普通采集权限；私钥仅留 Windows。
+ECS 通过 systemd socket-proxyd 将其仅暴露给 Quiet River Docker bridge：`172.18.0.1:17891`；公网网卡不监听代理端口。
+Miniflux 的 `HTTP_CLIENT_PROXY` 指向该 Docker-only 地址，但只有明确设置 `fetch_via_proxy=true` 的 feed 才会使用。
+当前只启用 ACM RecSys YouTube 与 Google Research Blog；其他来源继续直连。
+真实验收：两者经代理均返回有效 XML；Miniflux 刷新 parsing_error_count=0，Bridge 随后分别入库 15 条与 100 条。
+watcher 退出时关闭隧道；SSH 子进程意外退出后 5 秒重连。单次 Sync 脚本不启动代理隧道。

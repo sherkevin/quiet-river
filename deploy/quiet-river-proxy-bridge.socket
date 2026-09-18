@@ -1,0 +1,11 @@
+[Unit]
+Description=Quiet River Docker-only proxy socket
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Socket]
+ListenStream=172.18.0.1:17891
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

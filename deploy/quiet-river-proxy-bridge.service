@@ -1,0 +1,10 @@
+[Unit]
+Description=Quiet River proxy bridge to Shervin Mihomo
+Requires=quiet-river-proxy-bridge.socket
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:17890
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

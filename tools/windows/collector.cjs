@@ -1,14 +1,27 @@
 #!/usr/bin/env node
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const {spawnSync}=require('node:child_process');
+const {spawnSync,spawn}=require('node:child_process');
 const {normalize,statusFor}=require('./normalize.cjs');
 const root=process.env.QR_COLLECTOR_HOME||path.join(process.env.LOCALAPPDATA||os.homedir(),'QuietRiverCollector');
 const configPath=path.join(root,'config.json'),args=process.argv.slice(2);
 const option=(name,fallback)=>args.includes(name)?args[args.indexOf(name)+1]:fallback;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-let config,locked=false;
+let config,locked=false,proxyTunnel=null,proxyRestart=null,exiting=false;
 function log(message){console.log(new Date().toLocaleString()+' '+message);}
+function proxyTunnelArgs(cfg=config,rootDir=root){
+  const key=path.join(rootDir,'proxy_tunnel_ed25519');
+  return {key,argv:['-NT','-p',String(cfg.port||22),'-i',key,'-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile='+cfg.knownHostsFile,'-o','ExitOnForwardFailure=yes','-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3','-R','127.0.0.1:17890:127.0.0.1:7890','qr-proxy-tunnel@'+cfg.host]};
+}
+function startProxyTunnel(){
+  const spec=proxyTunnelArgs();if(!fs.existsSync(spec.key)){log('Proxy tunnel key not installed; international feed proxy remains unavailable.');return;}
+  proxyTunnel=spawn(config.ssh||'ssh.exe',spec.argv,{windowsHide:true,stdio:'ignore'});
+  proxyTunnel.on('spawn',()=>log('Restricted ECS proxy tunnel started; Clash credentials remain on Windows.'));
+  proxyTunnel.on('exit',()=>{proxyTunnel=null;if(!exiting)proxyRestart=setTimeout(startProxyTunnel,5000);});
+  proxyTunnel.on('error',()=>{if(!exiting&&!proxyRestart)proxyRestart=setTimeout(startProxyTunnel,5000);});
+}
+function stopProxyTunnel(){exiting=true;if(proxyRestart)clearTimeout(proxyRestart);proxyRestart=null;if(proxyTunnel)try{proxyTunnel.kill();}catch{}}
+process.on('exit',stopProxyTunnel);process.on('SIGINT',()=>{stopProxyTunnel();process.exit(130);});process.on('SIGTERM',()=>{stopProxyTunnel();process.exit(143);});
 function transport(message){
   const argv=['-T','-p',String(config.port||22),'-i',config.identityFile,
     '-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','StrictHostKeyChecking=yes',
@@ -65,7 +78,7 @@ async function authRecovered(probe,collectFn=collect,sleepFn=sleep){
 }
 async function main(){
   if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili] [--doctor]');return;}
-  preflight();if(args.includes('--doctor'))return;acquire();
+  preflight();if(args.includes('--doctor'))return;acquire();if(args.includes('--watch'))startProxyTunnel();
   const platforms=option('--platform','zhihu,xiaohongshu,bilibili').split(',').filter(p=>['zhihu','xiaohongshu','bilibili'].includes(p));
   if(!platforms.length)throw new Error('Choose a supported platform');
   const max=Math.max(1,Math.min(1000,Number(option('--max-jobs',args.includes('--watch')?'1000':'20'))||20));
@@ -108,4 +121,4 @@ async function main(){
   if(failures)process.exitCode=2;
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={normalize,statusFor,confirmedCollect,authRecovered};
+module.exports={normalize,statusFor,confirmedCollect,authRecovered,proxyTunnelArgs};

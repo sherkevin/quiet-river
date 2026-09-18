@@ -14,9 +14,12 @@ $keygen=Join-Path $GitRoot 'usr\bin\ssh-keygen.exe'
 $cli=Join-Path $OpenCliRoot 'dist\src\main.js'
 foreach($p in @($ssh,$keygen,$cli)){if(!(Test-Path $p)){throw ('Missing runtime: '+$p)}}
 $key=Join-Path $root 'collector_ed25519'
-if(!(Test-Path $key)){
-  & $keygen -t ed25519 -N '""' -C quiet-river-Shervin -f $key
-  if($LASTEXITCODE -ne 0){throw 'Dedicated key creation failed'}
+$proxyKey=Join-Path $root 'proxy_tunnel_ed25519'
+foreach($spec in @(@($key,'quiet-river-Shervin'),@($proxyKey,'quiet-river-proxy-tunnel'))){
+  if(!(Test-Path $spec[0])){
+    & $keygen -t ed25519 -N '""' -C $spec[1] -f $spec[0]
+    if($LASTEXITCODE -ne 0){throw 'Dedicated key creation failed'}
+  }
 }
 $utf8=New-Object System.Text.UTF8Encoding($false)
 $known=Join-Path $root 'known_hosts'
@@ -30,6 +33,9 @@ if(Test-Path $config){Copy-Item $config ($config+'.before-'+(Get-Date -Format 'y
 icacls $root /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" 'SYSTEM:(OI)(CI)F' | Out-Null
 if($LASTEXITCODE -ne 0){throw 'Could not restrict collector folder permissions'}
 Write-Output 'Collector configured. Existing project, browser cookies and user SSH config were not changed.'
-Write-Output 'Register only this PUBLIC key on ECS:'
+Write-Output 'Register these PUBLIC keys on ECS; private keys stay on Windows:'
+Write-Output 'Collector ingestion key:'
 Get-Content ($key+'.pub')
+Write-Output 'Restricted reverse-proxy tunnel key:'
+Get-Content ($proxyKey+'.pub')
 Write-Output 'Then run Check-Connection.cmd, Sync-Now.cmd or Start-Watch.cmd.'
