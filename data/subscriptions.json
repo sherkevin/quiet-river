@@ -284,7 +284,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.365Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3590093867"
+      }
     },
     {
       "id": "c48786ab14f6",
@@ -327,7 +331,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.379Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3705167681"
+      }
     },
     {
       "id": "57e68778302c",
@@ -341,7 +349,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.382Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3883200396"
+      }
     },
     {
       "id": "62ab05e31717",
@@ -355,7 +367,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.385Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3085515186"
+      }
     },
     {
       "id": "5fb5918faf99",
@@ -453,7 +469,11 @@
       ],
       "feeds": [],
       "addedAt": "2026-09-11T07:04:58.412Z",
-      "manual": true
+      "manual": true,
+      "adapter": {
+        "platform": "wechat",
+        "mp_id": "MP_WXS_3916280939"
+      }
     },
     {
       "id": "de6210f2a866",

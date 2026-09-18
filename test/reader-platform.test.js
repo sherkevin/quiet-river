@@ -13,6 +13,16 @@ function entry(id,extra={}){return {id,feed_id:1,title:'Agent 工具学习',url:
 
 test('all sources survive migration including manual and multiple channels',()=>{const z={...source,platform:'zhihu',feeds:[],adapter:{id:'alice'}};assert.equal(channelsFor(z).length,2);assert.equal(channelsFor({...source,platform:'wechat',feeds:[],manual:true}).length,0);});
 test('existing third-party author feeds remain enabled',()=>{const c=channelsFor({...source,platform:'wechat',feeds:['https://relay.example/feed/a']});assert.equal(c[0].transport,'public');assert.equal(c[0].enabled,true);});
+test('declared WeRSS IDs are bound to the blogger and do not need a side mapping',()=>{
+  const s={...source,platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'MP_WXS_1234567890'}};
+  const c=channelsFor(s,{werss:'http://127.0.0.1:8001'});
+  assert.equal(c.length,1);assert.equal(c[0].transport,'werss');assert.equal(c[0].mp_id,'MP_WXS_1234567890');
+  assert.equal(c[0].url,'http://127.0.0.1:8001/feed/MP_WXS_1234567890');assert.equal(c[0].enabled,true);
+});
+test('invalid declared WeRSS IDs are not turned into executable channels',()=>{
+  const c=channelsFor({...source,platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'guess-me'}},{werss:'http://127.0.0.1:8001'});
+  assert.equal(c.length,0);
+});
 test('credential-gated routes do not claim readiness without credentials',()=>{const c=channelsFor({...source,platform:'zhihu',feeds:[],adapter:{id:'alice'}},{rsshub:'http://127.0.0.1:1200'});assert.equal(c[0].enabled,false);assert.equal(c[0].credential_group,'zhihu');});
 test('RSSHub route generation encodes author identifiers',()=>{const c=channelsFor({...source,platform:'zhihu',feeds:[],adapter:{id:'a/b?x'}},{rsshub:'http://127.0.0.1:1200',zhihuReady:true});assert.ok(c[0].url.includes('a%2Fb%3Fx'));});
 test('OPML disables automatic fetching and escapes untrusted names',()=>{const s={...source,name:'<script>&"'};const x=opmlFor([channel],[s]);assert.ok(x.includes('miniflux:disabled="true"'));assert.ok(!x.includes('<script>'));assert.ok(x.includes('&amp;'));});
