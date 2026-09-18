@@ -134,3 +134,16 @@ test('navigation, inline tag adders and unread styling are present without remov
  assert.match(workspace,/drawQuickAddTags\(tagBox/);assert.match(workspace,/给这篇文章添加标签/);
  assert.match(app,/class="source-tags tag-chips"/);assert.match(app,/给博主添加标签/);
 });
+
+test('article list exposes the subscribed blogger homepage for card navigation',t=>{
+ const {service}=setup(t);service.project(article(1),channel);
+ const item=service.list().items[0];
+ assert.equal(item.source,'Test author');
+ assert.equal(item.sourceUrl,'https://example.org/');
+});
+test('article card renders blogger name as a dedicated link and never treats it as article open',()=>{
+ const workspace=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ assert.match(workspace,/<a data-author target="_blank" rel="noopener noreferrer">/);
+ assert.match(workspace,/if\(entry\.sourceUrl\)authorLink\.href=entry\.sourceUrl/);
+ assert.match(workspace,/closest\('a,button,input,textarea,select,label,form,\.tag-chips'\)/);
+});

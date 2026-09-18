@@ -27,7 +27,7 @@ function list(service,{mode='latest',sourceId,platform,tag,tags,unread=false,ord
     .map(e=>{const source=byId.get(e.source_id),channel=channelById.get(e.channel_id);
       const publicExtractable=channel?.transport==='public'&&['blog','github','csdn','juejin','wechat'].includes(source?.platform)&&source?.content_policy!=='metadata_only';
       const readerMode=e.bookmark_id||e.content_state!=='META'?'reader':publicExtractable?'fetchable':'original';
-      return {...e,source:source.name,platform:source.platform,sourceTags:source.tags||[],feedback:feedback[e.id]||0,readerMode};})};
+      return {...e,source:source.name,sourceUrl:safeURL(source.url)||null,platform:source.platform,sourceTags:source.tags||[],feedback:feedback[e.id]||0,readerMode};})};
 }
 function tagCatalog(service) {
   const all=new Set(service.db.sources().flatMap(s=>s.tags||[]));
