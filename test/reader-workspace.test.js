@@ -135,15 +135,21 @@ test('navigation, inline tag adders and unread styling are present without remov
  assert.match(app,/class="source-tags tag-chips"/);assert.match(app,/给博主添加标签/);
 });
 
-test('article list exposes the subscribed blogger homepage for card navigation',t=>{
+test('article list exposes blogger identity and external homepage separately',t=>{
  const {service}=setup(t);service.project(article(1),channel);
  const item=service.list().items[0];
  assert.equal(item.source,'Test author');
+ assert.equal(item.sourceId,'author');
  assert.equal(item.sourceUrl,'https://example.org/');
 });
-test('article card renders blogger name as a dedicated link and never treats it as article open',()=>{
+test('article card opens the in-site blogger profile before any external homepage',()=>{
  const workspace=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
- assert.match(workspace,/<a data-author target="_blank" rel="noopener noreferrer">/);
- assert.match(workspace,/if\(entry\.sourceUrl\)authorLink\.href=entry\.sourceUrl/);
+ const app=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/app.js'),'utf8');
+ assert.match(workspace,/<a data-author><\/a>/);
+ assert.match(workspace,/authorLink\.href='\/desk\/\?view=sources&source='/);
+ assert.doesNotMatch(workspace,/authorLink\.href=entry\.sourceUrl/);
+ assert.match(app,/function renderSourceProfile\(container,s\)/);
+ assert.match(app,/data-source-home[^>]*>原地址 ↗<\/a>/);
+ assert.match(app,/home\.href=u\.href/);
  assert.match(workspace,/closest\('a,button,input,textarea,select,label,form,\.tag-chips'\)/);
 });

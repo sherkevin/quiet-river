@@ -30,6 +30,10 @@ Updated: 2026-09-19
 - Production source payload contains `推广搜老油条`; the obsolete `丁丁丁写字的地方` and `搜广推学习笔记` source names are absent.
 - DataFunTalk, Semantic Scholar, and Ed H. Chi are absent from the current manifest/source catalog.
 
+## Active task
+
+- doing — Change article-card blogger navigation to open the matching in-site blogger profile first; the blogger profile must expose the bound external homepage as an explicit “原地址” link. Implement, test, deploy, and verify this behavior before marking done.
+
 ## Remaining follow-up
 
-- WeRSS runtime is still not configured, so the 16 newly identified WeChat sources are registered but not yet automatically refreshed.
+- open — WeRSS runtime is still not configured, so the 16 newly identified WeChat sources are registered but not yet automatically refreshed.
