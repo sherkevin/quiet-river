@@ -25,17 +25,18 @@ Updated: 2026-09-19
 
 ## Verification 2026-09-19
 
-- Production release: `2ff28f30970d618b77b0949d6414c894cfccf4be`.
+- Production release: `93cf7c885b7d892b7897b6efc661c7063212ad33`.
 - Production source count: 268; manifest/database parity is exact.
 - Source acceptance: `without_channel=0`; 16 WeChat adapter channels exist and are currently `NOT_CONFIGURED` because the WeRSS runtime is not configured.
-- Automated tests: 251 passed, 0 failed; exact-commit serial evidence is bound to `2ff28f3` and reports an unchanged worktree.
-- Live HTTP smoke: passed; production pagination verification confirmed stable non-overlapping article pages, served pagination UI for article/blogger/profile views, and an individual blogger with 212 stored Cards paginating correctly.
+- Automated tests: `93cf7c8` exact-commit serial evidence: 257 passed, 0 failed, unchanged worktree.
+- Live HTTP smoke: passed on `93cf7c8`; production checks confirmed `/desk/article/<id>`, default Card routing, safe DOM reconstruction assets, a real public TEXT body rendered from Miniflux, and a real Xiaohongshu META entry with `canFetchFullText=false` / `readerMode=original`.
 - Production source payload contains `推广搜老油条`; the obsolete `丁丁丁写字的地方` and `搜广推学习笔记` source names are absent.
 - DataFunTalk, Semantic Scholar, and Ed H. Chi are absent from the current manifest/source catalog.
 
 ## Active task
 
-- doing — Make Quiet River's native article detail page the default Card destination. The page must read the current article body from the Miniflux content master, render it safely inside `/desk/article/<entryId>`, preserve in-site blogger/tag/read/feedback controls, expose the external original only as a secondary action, and retain the existing Karakeep reader as the current highlight/annotation bridge. Public fetchable entries may explicitly request a full-text refresh; restricted metadata-only entries must not trigger ECS-side platform bypasses.
+- done — `93cf7c8` makes `/desk/article/<entryId>` the default Card destination, reads current bodies from Miniflux, rebuilds upstream HTML through an explicit DOM/tag/URL allowlist, keeps original links secondary, and preserves Karakeep as the highlight bridge. Public full-text preparation is explicit; restricted META sources cannot use ECS extraction. Production smoke and real public/restricted article checks passed; pre-release recovery point: `/var/backups/quiet-river/platform-20260919T044929Z`.
+- doing — Bring whole-article note editing into the native article page while keeping Karakeep as the sole note store. Keep content bookmark and metadata-only note bookmark identities separate so note creation never blocks a later content archive/highlight upgrade. Native text-selection highlights remain gated until offset compatibility is proven.
 
 ## Remaining follow-up
 

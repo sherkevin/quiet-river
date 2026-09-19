@@ -187,3 +187,11 @@ test('native article rendering rebuilds an allowlisted DOM instead of trusting u
  assert.match(ui,/document\.createElement\(tag\)/);assert.doesNotMatch(ui,/\.innerHTML\s*=\s*detail\.content/);
  assert.match(ui,/safeArticleURL/);assert.match(ui,/referrerPolicy='no-referrer'/);
 });
+test('native article page edits whole-article notes without injecting note text into HTML',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ const css=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/style.css'),'utf8');
+ assert.match(ui,/data-native-note rows="8"/);assert.match(ui,/data-native-note-save>保存笔记<\/button>/);
+ assert.match(ui,/noteInput\.value=detail\.note\|\|''/);assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/note',\{note:noteInput\.value\}\)/);
+ assert.match(ui,/暂时无法读取已有笔记，为避免覆盖已禁止编辑/);assert.doesNotMatch(ui,/innerHTML\s*=\s*detail\.note/);
+ assert.match(css,/\.native-article-note/);
+});

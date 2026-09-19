@@ -226,6 +226,39 @@ class ReaderService {
   openArticle(id,eventId,target) {return require('./article-actions').openArticle(this,id,eventId,target);}
   backend() {return require('./article-actions').backend(this);}
   feedback(id,value){if(![-1,0,1].includes(value)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid feedback');this.db.run('INSERT INTO feedback VALUES(?,?,?) ON CONFLICT(entry_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',id,value,Date.now());}
+  async _articleNoteBookmark(row,{create=false}={}) {
+    if(!this.config.karakeepToken){if(create)throw Object.assign(new Error('not configured: notes'),{status:503});return null;}
+    let bookmarkId=row.note_bookmark_id||row.bookmark_id||null;
+    if(bookmarkId){
+      const bookmark=await this.kk.call('/api/v1/bookmarks/'+encodeURIComponent(bookmarkId));
+      if(create&&!row.note_bookmark_id)this.db.run('UPDATE entries SET note_bookmark_id=? WHERE id=?',bookmarkId,row.id);
+      return bookmark;
+    }
+    if(!create)return null;
+    const text=[row.title,row.summary].filter(Boolean).join('\n\n').slice(0,50000)||'Quiet River article note';
+    const payload={type:'text',text},sourceUrl=safeURL(row.url);if(sourceUrl)payload.sourceUrl=sourceUrl;
+    const bookmark=await this.kk.call('/api/v1/bookmarks','POST',payload);
+    if(!bookmark?.id)throw new Error('notes bookmark missing ID');
+    this.db.run('UPDATE entries SET note_bookmark_id=? WHERE id=?',bookmark.id,row.id);
+    return bookmark;
+  }
+  async articleNote(id) {
+    const row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
+    if(!this.config.karakeepToken)return {entryId:id,configured:false,bookmarkId:null,note:'',unavailable:false};
+    try{
+      const bookmark=await this._articleNoteBookmark(row);
+      return {entryId:id,configured:true,bookmarkId:bookmark?.id||null,note:String(bookmark?.note||''),unavailable:false};
+    }catch{this.db.audit('article-note',id,'Note store unavailable while reading');return {entryId:id,configured:true,bookmarkId:row.note_bookmark_id||row.bookmark_id||null,note:'',unavailable:true};}
+  }
+  async saveArticleNote(id,note) {
+    if(typeof note!=='string'||note.length>50000)throw Object.assign(new Error('invalid article note'),{status:400});
+    const row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
+    if(!note&&!(row.note_bookmark_id||row.bookmark_id))return {entryId:id,configured:!!this.config.karakeepToken,bookmarkId:null,note:'',unavailable:false};
+    const bookmark=await this._articleNoteBookmark(row,{create:true});
+    const saved=await this.kk.call('/api/v1/bookmarks/'+encodeURIComponent(bookmark.id),'PATCH',{note});
+    this.db.audit('article-note',id,'saved');
+    return {entryId:id,configured:true,bookmarkId:bookmark.id,note:String(saved?.note??note),unavailable:false};
+  }
   async articleDetail(id,{prepare=false}={}) {
     let row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
     const source=this.db.sources().find(s=>s.id===row.source_id),channel=this.db.channels().find(c=>c.id===row.channel_id);
@@ -243,14 +276,14 @@ class ReaderService {
         }catch{this.db.audit('fulltext',id,'Native article-page extraction unavailable; existing content retained');}
       }
     }catch{contentUnavailable=true;html=row.summary?`<p>${escapeHTML(row.summary)}</p>`:'';}
-    const snapshot=meta.tagSnapshot(this.db,id),feedback=this.db.get('SELECT value FROM feedback WHERE entry_id=?',id)?.value||0;
+    const snapshot=meta.tagSnapshot(this.db,id),feedback=this.db.get('SELECT value FROM feedback WHERE entry_id=?',id)?.value||0,noteState=await this.articleNote(id);
     const safeOriginal=safeURL(row.url)||null,contentLimit=2*1024*1024,contentTruncated=html.length>contentLimit;
     const readerMode=row.bookmark_id||row.content_state!=='META'?'reader':canFetch?'fetchable':'original';
     return {id:row.id,title:row.title,author:row.author||source.name,source:source.name,sourceId:source.id,sourceUrl:safeURL(source.url)||null,platform:source.platform,readerMode,
       url:safeOriginal,published_at:row.published_at,discovered_at:row.discovered_at,status:row.status,tags:snapshot?.tags||source.tags||[],feedback,
       contentState:row.content_state,contentOrigin:row.content_origin,archiveState:row.archive_state,bookmarkId:row.bookmark_id||null,
       content:html.slice(0,contentLimit),contentTextLength:stripHTML(html).length,contentTruncated,contentUnavailable,canFetchFullText:canFetch,prepareAttempted,prepareImproved,
-      canAnnotate:!!this.config.karakeepToken&&row.content_state!=='META'};
+      canAnnotate:!!this.config.karakeepToken&&row.content_state!=='META',note:noteState.note,noteBookmarkId:noteState.bookmarkId,notesConfigured:noteState.configured,noteUnavailable:noteState.unavailable};
   }
   async readerStatus(id) {
     const row=this.db.get('SELECT * FROM entries WHERE id=?',id);

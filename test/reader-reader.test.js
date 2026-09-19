@@ -142,3 +142,60 @@ test('native article shell is addressable while article content APIs remain auth
   assert.equal((await fetch(base+'/desk/api/entries/1/prepare',{method:'POST',headers:auth,body:'{}'})).status,403);
   response=await fetch(base+'/desk/api/entries/1/prepare',{method:'POST',headers:write,body:'{}'});assert.equal(response.status,200);assert.equal((await response.json()).id,1);
 });
+test('metadata-only native note uses a separate Karakeep text bookmark without consuming content bookmark identity',async t=>{
+  const {db,service}=setup(t,{content:''});let note='';const calls=[];
+  service.kk.call=async(path,method='GET',payload)=>{calls.push({path,method,payload});
+    if(path==='/api/v1/bookmarks'&&method==='POST')return {id:'note-only-1',note:'',content:{type:'text',text:payload.text,sourceUrl:payload.sourceUrl}};
+    if(path==='/api/v1/bookmarks/note-only-1'&&method==='PATCH'){note=payload.note;return {id:'note-only-1',note,content:{type:'text'}};}
+    if(path==='/api/v1/bookmarks/note-only-1')return {id:'note-only-1',note,content:{type:'text'}};
+    throw new Error('unexpected Karakeep call '+method+' '+path);
+  };
+  const saved=await service.saveArticleNote(1,'我的站内笔记');
+  assert.equal(saved.bookmarkId,'note-only-1');assert.equal(saved.note,'我的站内笔记');
+  const row=db.get('SELECT bookmark_id,note_bookmark_id FROM entries WHERE id=1');
+  assert.equal(row.bookmark_id,null);assert.equal(row.note_bookmark_id,'note-only-1');
+  const create=calls.find(c=>c.path==='/api/v1/bookmarks'&&c.method==='POST');
+  assert.equal(create.payload.type,'text');assert.equal(create.payload.sourceUrl,'https://example.com/article');
+  const detail=await service.articleDetail(1);assert.equal(detail.note,'我的站内笔记');assert.equal(detail.noteBookmarkId,'note-only-1');
+});
+test('native note reuses an existing content bookmark and persists only the mapping reference locally',async t=>{
+  const {db,service}=setup(t,{content:'<p>full text</p>'});db.run("UPDATE entries SET bookmark_id='content-bookmark',archive_state='READY' WHERE id=1");
+  let note='';const calls=[];service.kk.call=async(path,method='GET',payload)=>{calls.push({path,method,payload});
+    if(path==='/api/v1/bookmarks/content-bookmark'&&method==='PATCH'){note=payload.note;return {id:'content-bookmark',note,content:{type:'link',crawlStatus:'success'}};}
+    if(path==='/api/v1/bookmarks/content-bookmark')return {id:'content-bookmark',note,content:{type:'link',crawlStatus:'success'}};
+    throw new Error('unexpected Karakeep call '+method+' '+path);
+  };
+  await service.saveArticleNote(1,'共享正文归档上的笔记');
+  const row=db.get('SELECT bookmark_id,note_bookmark_id FROM entries WHERE id=1');
+  assert.equal(row.bookmark_id,'content-bookmark');assert.equal(row.note_bookmark_id,'content-bookmark');
+  assert.equal(calls.some(c=>c.path==='/api/v1/bookmarks'&&c.method==='POST'),false);
+  assert.equal((await service.articleNote(1)).note,'共享正文归档上的笔记');
+});
+test('article note length is bounded before creating any Karakeep object',async t=>{
+  const {db,service}=setup(t,{content:''});let called=false;service.kk.call=async()=>{called=true;return {};};
+  await assert.rejects(service.saveArticleNote(1,'x'.repeat(50001)),e=>e.status===400);
+  assert.equal(called,false);assert.equal(db.get('SELECT note_bookmark_id FROM entries WHERE id=1').note_bookmark_id,null);
+});
+test('native article note endpoint is action-protected and round-trips through Karakeep',async t=>{
+  const {service}=setup(t,{content:''});let note='';service.kk.call=async(path,method='GET',payload)=>{
+    if(path==='/api/v1/bookmarks'&&method==='POST')return {id:'http-note-1',note:'',content:{type:'text'}};
+    if(path==='/api/v1/bookmarks/http-note-1'&&method==='PATCH'){note=payload.note;return {id:'http-note-1',note,content:{type:'text'}};}
+    if(path==='/api/v1/bookmarks/http-note-1')return {id:'http-note-1',note,content:{type:'text'}};
+    throw new Error('unexpected note call');
+  };
+  const app=createApp(service,{accessToken:'reader-test'});await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+  const base='http://127.0.0.1:'+app.address().port,auth={'X-Qr-Token':'reader-test','Content-Type':'application/json'},write={...auth,'X-QR-Action':'1'};
+  assert.equal((await fetch(base+'/desk/api/entries/1/note',{method:'POST',body:JSON.stringify({note:'x'})})).status,401);
+  assert.equal((await fetch(base+'/desk/api/entries/1/note',{method:'POST',headers:auth,body:JSON.stringify({note:'x'})})).status,403);
+  let response=await fetch(base+'/desk/api/entries/1/note',{method:'POST',headers:write,body:JSON.stringify({note:'round trip note'})});
+  assert.equal(response.status,200);assert.equal((await response.json()).note,'round trip note');
+  response=await fetch(base+'/desk/api/entries/1',{headers:{'X-Qr-Token':'reader-test'}});const detail=await response.json();
+  assert.equal(detail.note,'round trip note');assert.equal(detail.noteBookmarkId,'http-note-1');
+});
+test('saving an empty note on an untouched article does not create an empty bookmark',async t=>{
+  const {db,service}=setup(t,{content:''});let called=false;service.kk.call=async()=>{called=true;return {};};
+  const saved=await service.saveArticleNote(1,'');
+  assert.equal(saved.bookmarkId,null);assert.equal(saved.note,'');assert.equal(called,false);
+  const row=db.get('SELECT bookmark_id,note_bookmark_id FROM entries WHERE id=1');
+  assert.equal(row.bookmark_id,null);assert.equal(row.note_bookmark_id,null);
+});

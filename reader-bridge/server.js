@@ -97,6 +97,8 @@ function createApp(service,config,clients={}){
       if(articleDetail&&req.method==='GET')return reply(res,200,await service.articleDetail(Number(articleDetail[1])));
       const articlePrepare=/^\/desk\/api\/entries\/(\d+)\/prepare$/.exec(p);
       if(articlePrepare&&req.method==='POST')return reply(res,200,await service.articleDetail(Number(articlePrepare[1]),{prepare:true}));
+      const articleNote=/^\/desk\/api\/entries\/(\d+)\/note$/.exec(p);
+      if(articleNote&&req.method==='POST'){const b=await bodyJSON(req);return reply(res,200,await service.saveArticleNote(Number(articleNote[1]),b.note));}
       if(p==='/desk/api/refresh'&&req.method==='POST')return reply(res,202,service.refresh(await bodyJSON(req)));
       const run=/^\/desk\/api\/runs\/([a-f0-9]+)$/.exec(p);
       if(run&&req.method==='GET'){const result=service.db.runStatus(run[1]);return reply(res,result?200:404,result||{error:'任务不存在'});}
