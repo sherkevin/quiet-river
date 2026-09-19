@@ -145,7 +145,7 @@ function setupNativeEnrichment(shell,container,detail){
   const paint=state=>{
     detail.bodyEnrichment=state;const online=state.collector?.online;
     if(state.state==='RUNNING'){button.disabled=true;button.textContent='Shervin 正在读取正文…';}
-    else if(state.state==='QUEUED'){button.disabled=true;button.textContent=online?'正文已排队…':'正文已排队 · Shervin 离线';}
+    else if(state.state==='QUEUED'){const retry=Number(state.next_attempt)>Date.now()&&!!state.error;button.disabled=!retry;button.textContent=retry?'正文受限 · 点击立即重试':online?'正文已排队…':'正文已排队 · Shervin 离线';}
     else if(state.state==='AUTH_REQUIRED'){button.disabled=true;button.textContent='Shervin 需要重新登录';}
     else{button.disabled=false;button.textContent=online?'让 Shervin 补正文':'Shervin 离线 · 先排队补正文';}
     button.title=state.error||(!online?'任务会保留，Shervin 再次运行 collector 后继续':'正文凭证只在 Shervin 浏览器中使用');

@@ -80,7 +80,7 @@ class DesktopCollector {
   queueEnrichment(entryId,now=Date.now()){
     const ctx=this.enrichmentContext(entryId);if(ctx.entry.content_state==='TEXT')return this.enrichmentStatus(ctx.entry.id);
     const old=this.db.get('SELECT state FROM collector_enrichments WHERE entry_id=?',ctx.entry.id);
-    if(!old||!['QUEUED','RUNNING'].includes(old.state))this.db.run(`INSERT INTO collector_enrichments(entry_id,channel_id,state,created_at,updated_at,next_attempt,error)
+    if(old?.state!=='RUNNING')this.db.run(`INSERT INTO collector_enrichments(entry_id,channel_id,state,created_at,updated_at,next_attempt,error)
       VALUES(?,?,'QUEUED',?,?,0,'') ON CONFLICT(entry_id) DO UPDATE SET channel_id=excluded.channel_id,state='QUEUED',updated_at=excluded.updated_at,next_attempt=0,lease_id=NULL,expires_at=0,digest=NULL,ack=NULL,error=''`,ctx.entry.id,ctx.channel.id,now,now);
     this.db.audit('collector_enrichment',ctx.entry.id,'queued');return this.enrichmentStatus(ctx.entry.id);
   }

@@ -17,6 +17,15 @@ function normalize(job,rows){
     return {title:title.slice(0,1000),link:original.link,published,summary:''};
   });
 }
+function selectFreshXhsNoteUrl(job,rows){
+  if(job?.platform!=='xiaohongshu'||job?.kind!=='notes'||!Array.isArray(rows)||rows.length>100)throw new Error('Invalid Xiaohongshu refresh list');
+  const expected=originalLink(job,job.url);
+  for(const row of rows){
+    if(!row||typeof row.url!=='string')continue;
+    try{const actual=originalLink(job,row.url);if(actual.noteId===expected.noteId&&String(row.id||'').toLowerCase()===expected.noteId)return actual.link;}catch{}
+  }
+  return '';
+}
 function normalizeEnrichment(job,payload){
   if(!job||job.taskType!=='entry_body_v1'||!Number.isSafeInteger(Number(job.entryId))||!['zhihu','xiaohongshu'].includes(job.platform))throw new Error('Invalid enrichment job');
   const expected=originalLink(job,job.url),max=1024*1024;let content='';
@@ -39,4 +48,4 @@ function statusFor(code,text){
   if(code===75||/timeout|timed out/i.test(text))return 'TIMEOUT';
   return 'UPSTREAM_ERROR';
 }
-module.exports={normalize,normalizeEnrichment,statusFor};
+module.exports={normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor};

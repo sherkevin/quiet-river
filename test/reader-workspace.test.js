@@ -217,7 +217,7 @@ test('native article page exposes explicit Shervin body enrichment with persiste
  const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
  assert.match(ui,/data-native-enrich>让 Shervin 补正文<\/button>/);assert.match(ui,/function setupNativeEnrichment/);
  assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/enrichment',\{\}\)/);assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/enrichment'\)/);
- assert.match(ui,/Shervin 离线 · 先排队补正文/);assert.match(ui,/任务会保留，Shervin 再次运行 collector 后继续/);
+ assert.match(ui,/Shervin 离线 · 先排队补正文/);assert.match(ui,/正文受限 · 点击立即重试/);assert.match(ui,/任务会保留，Shervin 再次运行 collector 后继续/);
  assert.match(ui,/Shervin 需要重新登录/);assert.match(ui,/Shervin 已补充站内正文/);
  assert.match(ui,/detail\.bodyEnrichment=await api\('\/entries\/'\+id\+'\/enrichment'\)/);
 });

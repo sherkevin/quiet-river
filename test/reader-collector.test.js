@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
-const {normalize,normalizeEnrichment,statusFor}=require('../tools/windows/normalize.cjs');
+const {normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
 const {confirmedCollect,authRecovered,proxyTunnelArgs}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
@@ -233,7 +233,8 @@ test('successful desktop enrichment upgrades only article content and preserves 
 test('desktop enrichment failures keep old content and only confirmed auth failure freezes credentials',async t=>{
  const f=enrichmentFixture(t);f.collector.queueEnrichment(101);let claim=f.collector.claim(['zhihu'],['entry_body_v1']);
  let ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:101,status:'ACCESS_BLOCKED'});assert.equal(ack.updated,false);assert.equal(f.db.get('SELECT content_state FROM entries WHERE id=101').content_state,'META');assert.equal(f.db.get('SELECT state FROM groups').state,'UNKNOWN');
- f.collector.queueEnrichment(101);f.db.run('UPDATE collector_enrichments SET next_attempt=0');f.db.run('UPDATE groups SET next_allowed=0');claim=f.collector.claim(['zhihu'],['entry_body_v1']);
+ const waiting=f.db.get('SELECT next_attempt,error FROM collector_enrichments WHERE entry_id=101');assert.ok(waiting.next_attempt>Date.now());assert.ok(waiting.error);
+ f.collector.queueEnrichment(101);assert.equal(f.db.get('SELECT next_attempt FROM collector_enrichments WHERE entry_id=101').next_attempt,0);assert.equal(f.db.get('SELECT error FROM collector_enrichments WHERE entry_id=101').error,'');f.db.run('UPDATE groups SET next_allowed=0');claim=f.collector.claim(['zhihu'],['entry_body_v1']);
  ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:101,status:'AUTH_REQUIRED'});assert.equal(ack.state,'AUTH_REQUIRED');assert.equal(f.db.get('SELECT state FROM groups').state,'AUTH_REQUIRED');assert.equal(f.db.get('SELECT state FROM channels').state,'NEVER_CHECKED');
  const resumed=f.collector.resume('zhihu',Date.now()+86500000);assert.equal(resumed.resumed,true);assert.equal(f.db.get('SELECT state FROM collector_enrichments').state,'QUEUED');
 });
@@ -269,12 +270,19 @@ test('native body enrichment status is authenticated and queueing is action-gate
 });
 test('Windows collector advertises enrichment capability without changing normal source-list result shape',()=>{
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
- assert.match(src,/capabilities:\['entry_body_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
- assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
+ assert.match(src,/capabilities:\['entry_body_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
+ assert.match(src,/result\.entryId\?`ECS accepted article-body result/);assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
 });
 test('Windows enrichment normalizer rejects short login and challenge bodies before upload',()=>{
  const article={taskType:'entry_body_v1',entryId:10,platform:'zhihu',kind:'articles',authorId:'author',url:'https://zhuanlan.zhihu.com/p/789'};
  assert.throws(()=>normalizeEnrichment(article,'请登录后查看全文'),/login or challenge/);
  const xhs={taskType:'entry_body_v1',entryId:11,platform:'xiaohongshu',kind:'notes',authorId:'0123456789abcdef01234567',url:'https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01?xsec_token=signed'};
  assert.throws(()=>normalizeEnrichment(xhs,[{field:'content',value:'验证码 安全限制'}]),/login or challenge/);
+});
+test('Xiaohongshu enrichment refreshes the signed URL by exact author-list note identity',()=>{
+ const job={taskType:'entry_body_v1',entryId:12,platform:'xiaohongshu',kind:'notes',authorId:'0123456789abcdef01234567',url:'https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01?xsec_token=stale'};
+ const fresh='https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01?xsec_token=fresh';
+ const rows=[{id:'ffffffffffffffffffffffff',url:'https://www.xiaohongshu.com/explore/ffffffffffffffffffffffff?xsec_token=other'},{id:'abcdef0123456789abcdef01',url:fresh}];
+ assert.equal(selectFreshXhsNoteUrl(job,rows),fresh);
+ assert.equal(selectFreshXhsNoteUrl(job,[{id:'000000000000000000000000',url:fresh}]),'');
 });

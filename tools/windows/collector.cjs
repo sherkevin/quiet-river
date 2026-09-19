@@ -2,7 +2,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {spawnSync,spawn}=require('node:child_process');
-const {normalize,normalizeEnrichment,statusFor}=require('./normalize.cjs');
+const {normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor}=require('./normalize.cjs');
 const {originalLink}=require('./original-link.cjs');
 const root=process.env.QR_COLLECTOR_HOME||path.join(process.env.LOCALAPPDATA||os.homedir(),'QuietRiverCollector');
 const configPath=path.join(root,'config.json'),args=process.argv.slice(2);
@@ -73,7 +73,13 @@ function collectEnrichment(job){
   if(job.taskType!=='entry_body_v1'||!['zhihu','xiaohongshu'].includes(job.platform)||!['answers','articles','notes'].includes(job.kind))throw new Error('Invalid enrichment task');
   originalLink(job,job.url);let argv,payload;
   if(job.platform==='zhihu'&&job.kind==='answers')argv=[config.opencliMain,'zhihu','answer-detail',job.url,'--max-content','0','-f','json','--trace','off','--site-session','ephemeral'];
-  else if(job.platform==='xiaohongshu'&&job.kind==='notes')argv=[config.opencliMain,'xiaohongshu','note',job.url,'-f','json','--trace','off','--site-session','ephemeral'];
+  else if(job.platform==='xiaohongshu'&&job.kind==='notes'){
+    const refresh=spawnSync(process.execPath,[config.opencliMain,'xiaohongshu','user',job.authorId,'--limit','50','-f','json','--trace','off','--site-session','ephemeral'],{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
+    if(refresh.error||refresh.status!==0)return {leaseId:job.leaseId,entryId:job.entryId,status:refresh.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(refresh.status,refresh.stderr||refresh.error?.message||'')};
+    let fresh='';try{fresh=selectFreshXhsNoteUrl(job,JSON.parse(refresh.stdout.replace(/^\uFEFF/,'')));}catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};}
+    if(!fresh)return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};
+    argv=[config.opencliMain,'xiaohongshu','note',fresh,'-f','json','--trace','off','--site-session','ephemeral'];
+  }
   else if(job.platform==='zhihu'&&job.kind==='articles')argv=[config.opencliMain,'web','read','--url',job.url,'--download-images','false','--stdout','true','--frames','none','--wait','3','--trace','off','--site-session','ephemeral'];
   else throw new Error('Unsupported enrichment task');
   const r=spawnSync(process.execPath,argv,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
@@ -102,7 +108,7 @@ async function main(){
         const result=JSON.parse(fs.readFileSync(pending,'utf8'));
         try{const ack=transport({op:'submit',result});if(!ack.accepted)throw new Error('Missing acknowledgement');
           if(!['SUCCEEDED_PARTIAL','ENRICHED'].includes(ack.state))failures++;
-          fs.unlinkSync(pending);log(ack.state==='ENRICHED'?`ECS accepted enriched article body; ${ack.state}`:`ECS accepted ${ack.received} records; ${ack.state}`);done++;
+          fs.unlinkSync(pending);log(result.entryId?`ECS accepted article-body result; ${ack.state}`:`ECS accepted ${ack.received} records; ${ack.state}`);done++;
         }catch(e){if(e.status===409){fs.renameSync(pending,pending+'.expired-'+Date.now());log('Expired result retained locally; new collection required');}else throw e;}
         if(done>=max)break;
       }
