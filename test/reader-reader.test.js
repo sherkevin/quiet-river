@@ -7,13 +7,14 @@ const {createApp}=require('../reader-bridge/server');
 const {createReaderWebSession,safeBase}=require('../reader-bridge/reader-web-session');
 const source={id:'reader-source',name:'Reader source',platform:'blog',url:'https://example.com',tags:['Agent'],feeds:['https://example.com/feed']};
 const channel={id:'reader-channel',source_id:source.id,transport:'public',url:'https://example.com/feed',group_key:'example.com',enabled:true,interval_ms:1800000,min_gap_ms:0,feed_id:1};
-function setup(t,{content='',crawlStatus='success'}={}){
+function setup(t,{content='',fetchedContent,crawlStatus='success'}={}){
   const db=new Database(':memory:');t.after(()=>db.close());db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=1 WHERE id=?',channel.id);
   const entry={id:1,title:'Article',url:'https://example.com/article',author:'Author',published_at:'2026-09-17T00:00:00Z',content,status:'unread'};
-  const mf={call:async path=>path.includes('/fetch-content')?{content}:entry};let kkCalls=0;
+  const mfCalls=[],extracted=fetchedContent===undefined?content:fetchedContent;
+  const mf={call:async(path,method,value)=>{mfCalls.push({path,method,value});if(path.includes('/fetch-content'))return {content:extracted};if(method==='PUT')return {};return entry;}};let kkCalls=0;
   const kk={call:async()=>{kkCalls++;return {id:'bookmark-1',content:{crawlStatus}};}};
   const service=new ReaderService(db,{accessToken:'reader-test',miniflux:'http://unused',karakeep:'http://unused',karakeepToken:'reader-key',adapters:{}},{mf,kk});
-  service.project(entry,channel);return {db,service,kkCalls:()=>kkCalls};
+  service.project(entry,channel);return {db,service,kkCalls:()=>kkCalls,mfCalls};
 }
 test('metadata-only article falls back to original without creating a fake reader bookmark',async t=>{
   const {db,service,kkCalls}=setup(t,{content:''});
@@ -104,4 +105,40 @@ test('reader launch is QR-authenticated, keeps unread state and redirects throug
   assert.equal(response.headers.get('location'),'/dashboard/bookmarks');
   response=await fetch(base+'/desk/bookmark/bookmark-1',{headers:auth,redirect:'manual'});
   assert.equal(response.headers.get('location'),'/reader/bookmark-1');
+});
+test('native article detail reads current Miniflux body without creating a Karakeep archive',async t=>{
+  const {service,kkCalls}=setup(t,{content:'<p>Full <strong>body</strong></p>'});
+  const detail=await service.articleDetail(1);
+  assert.equal(detail.title,'Article');assert.equal(detail.source,'Reader source');assert.equal(detail.sourceId,'reader-source');
+  assert.equal(detail.content,'<p>Full <strong>body</strong></p>');assert.equal(detail.contentState,'TEXT');
+  assert.equal(detail.readerMode,'reader');assert.equal(detail.canFetchFullText,true);assert.equal(detail.canAnnotate,true);assert.equal(kkCalls(),0);
+});
+test('native article prepare keeps the same entry and upgrades public full text only when better',async t=>{
+  const full='<p>'+('expanded body '.repeat(220))+'</p>';
+  const {db,service,mfCalls}=setup(t,{content:'<p>short</p>',fetchedContent:full});
+  const detail=await service.articleDetail(1,{prepare:true});
+  assert.equal(detail.id,1);assert.equal(detail.prepareAttempted,true);assert.equal(detail.prepareImproved,true);assert.equal(detail.content,full);
+  assert.ok(detail.contentTextLength>1500);assert.equal(db.get('SELECT content_state FROM entries WHERE id=1').content_state,'TEXT');
+  assert.ok(mfCalls.some(c=>c.path.includes('/fetch-content')));assert.ok(mfCalls.some(c=>c.path==='/v1/entries/1'&&c.method==='PUT'));
+});
+test('restricted metadata-only article detail never uses ECS full-text extraction',async t=>{
+  const {db,service,mfCalls}=setup(t,{content:''});
+  const restricted={id:'xhs-native',name:'XHS native',platform:'xiaohongshu',url:'https://www.xiaohongshu.com/user/profile/0123456789abcdef01234567',tags:[]};
+  const c={id:'xhs-native-channel',source_id:restricted.id,transport:'desktop',url:'https://quiet-river.invalid/xhs',group_key:'credential:xiaohongshu',enabled:true,interval_ms:21600000,min_gap_ms:8000};
+  const entry2={id:2,title:'Restricted note',url:'https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01',author:'XHS',published_at:null,content:'',status:'unread'};
+  db.putSource(restricted,[c]);service.project(entry2,c);
+  service.mf.call=async(path,method,value)=>{mfCalls.push({path,method,value});if(path==='/v1/entries/2')return entry2;if(path.includes('/fetch-content'))throw new Error('must not fetch restricted content');return {};};
+  const detail=await service.articleDetail(2,{prepare:true});
+  assert.equal(detail.readerMode,'original');assert.equal(detail.canFetchFullText,false);assert.equal(detail.prepareAttempted,false);assert.equal(detail.contentState,'META');
+  assert.equal(mfCalls.some(c=>c.path.includes('/fetch-content')),false);
+});
+test('native article shell is addressable while article content APIs remain authenticated',async t=>{
+  const {service}=setup(t,{content:'<p>Readable in Quiet River</p>'});
+  const app=createApp(service,{accessToken:'reader-test'});await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+  const base='http://127.0.0.1:'+app.address().port,auth={'X-Qr-Token':'reader-test'},write={...auth,'X-QR-Action':'1','Content-Type':'application/json'};
+  let response=await fetch(base+'/desk/article/1');assert.equal(response.status,200);assert.match(await response.text(),/Quiet River/);
+  assert.equal((await fetch(base+'/desk/api/entries/1')).status,401);
+  response=await fetch(base+'/desk/api/entries/1',{headers:auth});assert.equal(response.status,200);assert.match((await response.json()).content,/Readable in Quiet River/);
+  assert.equal((await fetch(base+'/desk/api/entries/1/prepare',{method:'POST',headers:auth,body:'{}'})).status,403);
+  response=await fetch(base+'/desk/api/entries/1/prepare',{method:'POST',headers:write,body:'{}'});assert.equal(response.status,200);assert.equal((await response.json()).id,1);
 });

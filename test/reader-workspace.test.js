@@ -173,3 +173,17 @@ test('article feed, blogger catalog and blogger profile expose numbered paginati
  assert.match(app,/data-source-cards/);assert.match(app,/loadSourceProfileCards/);assert.match(app,/renderPager\(profilePage,result\.total/);
  assert.match(css,/\.pagination/);assert.match(css,/\.source-article-list/);
 });
+test('article cards default to the native Quiet River article route and keep original as secondary',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ const app=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/app.js'),'utf8');
+ assert.match(ui,/class="article-title" data-article/);assert.match(ui,/data-article>站内阅读<\/a>/);assert.match(ui,/data-original[^>]*>原文 ↗<\/a>/);
+ assert.match(ui,/link\.href='\/desk\/article\/'/);assert.match(ui,/a\.querySelector\('\.actions a\[data-article\]\[href\]'\)/);
+ assert.ok(app.includes("const article=/^\\/desk\\/article\\/(\\d+)\\/?$/"));assert.match(app,/renderArticleDetail\(articleId\)/);
+});
+test('native article rendering rebuilds an allowlisted DOM instead of trusting upstream HTML',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ assert.match(ui,/function renderSafeArticleHTML/);assert.match(ui,/new DOMParser\(\)/);assert.match(ui,/DROP_ARTICLE_TAGS/);
+ for(const tag of ['script','iframe','object','embed','form'])assert.ok(ui.includes("'"+tag+"'"));
+ assert.match(ui,/document\.createElement\(tag\)/);assert.doesNotMatch(ui,/\.innerHTML\s*=\s*detail\.content/);
+ assert.match(ui,/safeArticleURL/);assert.match(ui,/referrerPolicy='no-referrer'/);
+});

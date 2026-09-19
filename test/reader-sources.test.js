@@ -113,6 +113,6 @@ test('source-first landing preserves notes navigation but makes Latest the initi
  const html=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/index.html'),'utf8');
  const app=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/app.js'),'utf8');
  assert.match(html,/id="platform-filter"/);assert.match(html,/data-view="notes"/);
- assert.match(app,/return Object\.hasOwn\(titles,next\)\?next:'latest'/);assert.match(app,/await switchView\(initialView\(\)\);refresh\(\)/);
- assert.match(fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8'),/<a class="primary" data-original/);
+ assert.match(app,/return Object\.hasOwn\(titles,next\)\?next:'latest'/);assert.match(app,/await switchView\(initialView\(\)\);if\(view!=='article'\)refresh\(\)/);
+ assert.match(fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8'),/<a class="primary" data-article>站内阅读<\/a>/);
 });

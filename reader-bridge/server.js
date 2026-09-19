@@ -56,13 +56,14 @@ function createApp(service,config,clients={}){
         res.setHeader('Set-Cookie',`qr_token=${encodeURIComponent(config.accessToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
         return reply(res,200,{ok:true});
       }
-      const isStatic=['/desk','/desk/','/desk/app.js','/desk/workspace-ui.js','/desk/style.css'].includes(u.pathname);
+      const articleShell=/^\/desk\/article\/\d+\/?$/.test(u.pathname);
+      const isStatic=articleShell||['/desk','/desk/','/desk/app.js','/desk/workspace-ui.js','/desk/style.css'].includes(u.pathname);
       const token=String(req.headers['x-qr-token']||cookies(req.headers.cookie).qr_token||'');
       const authorized=secureEqual(token,config.accessToken);
       if(isStatic&&req.method==='GET'){
         const name=u.pathname.endsWith('/workspace-ui.js')?'workspace-ui.js':u.pathname.endsWith('.js')?'app.js':u.pathname.endsWith('.css')?'style.css':'index.html';
         const content=fs.readFileSync(path.join(__dirname,'public',name));
-        res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});return res.end(content);
+        res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});return res.end(content);
       }
       if(!authorized)return reply(res,401,{error:'请先输入现有 Quiet River 访问口令'});
       if(req.method==='POST'&&req.headers['x-qr-action']!=='1')return reply(res,403,{error:'缺少写入请求标识'});
@@ -92,6 +93,10 @@ function createApp(service,config,clients={}){
         const offset=Math.max(0,Number(u.searchParams.get('offset'))||0), limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit'))||30));
         return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,platform:u.searchParams.get('platform')||undefined,tags:u.searchParams.has('tag')?u.searchParams.getAll('tag'):[],order:u.searchParams.get('order')||'desc',unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
       }
+      const articleDetail=/^\/desk\/api\/entries\/(\d+)$/.exec(p);
+      if(articleDetail&&req.method==='GET')return reply(res,200,await service.articleDetail(Number(articleDetail[1])));
+      const articlePrepare=/^\/desk\/api\/entries\/(\d+)\/prepare$/.exec(p);
+      if(articlePrepare&&req.method==='POST')return reply(res,200,await service.articleDetail(Number(articlePrepare[1]),{prepare:true}));
       if(p==='/desk/api/refresh'&&req.method==='POST')return reply(res,202,service.refresh(await bodyJSON(req)));
       const run=/^\/desk\/api\/runs\/([a-f0-9]+)$/.exec(p);
       if(run&&req.method==='GET'){const result=service.db.runStatus(run[1]);return reply(res,result?200:404,result||{error:'任务不存在'});}

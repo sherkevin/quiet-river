@@ -33,9 +33,9 @@ Updated: 2026-09-19
 - Production source payload contains `推广搜老油条`; the obsolete `丁丁丁写字的地方` and `搜广推学习笔记` source names are absent.
 - DataFunTalk, Semantic Scholar, and Ed H. Chi are absent from the current manifest/source catalog.
 
-## Latest task
+## Active task
 
-- done — Article feed, blogger catalog, and individual blogger profile now use numbered pagination at 30 items per page. The blogger profile keeps its metadata/actions and renders all stored Cards for that blogger below it. Regression coverage includes a 65-Card fixture spanning 30/30/5 pages with 65 unique IDs; production verification also confirmed a real 212-Card blogger can page without overlap.
+- doing — Make Quiet River's native article detail page the default Card destination. The page must read the current article body from the Miniflux content master, render it safely inside `/desk/article/<entryId>`, preserve in-site blogger/tag/read/feedback controls, expose the external original only as a secondary action, and retain the existing Karakeep reader as the current highlight/annotation bridge. Public fetchable entries may explicitly request a full-text refresh; restricted metadata-only entries must not trigger ECS-side platform bypasses.
 
 ## Remaining follow-up
 

@@ -51,6 +51,54 @@ function drawQuickAddTags(container,tags,onAdd,ariaLabel='添加标签'){
   };
   container.append(plus);
 }
+const SAFE_ARTICLE_TAGS=new Set(['p','br','h1','h2','h3','h4','h5','h6','ul','ol','li','blockquote','pre','code','strong','b','em','i','del','s','u','sup','sub','table','thead','tbody','tfoot','tr','th','td','figure','figcaption','hr','a','img','details','summary','mark','kbd']);
+const DROP_ARTICLE_TAGS=new Set(['script','style','iframe','object','embed','form','input','textarea','button','select','option','template','meta','link','base','noscript']);
+function safeArticleURL(value,base,image=false){
+  if(image&&/^data:image\/(?:png|jpeg|jpg|gif|webp);base64,/i.test(String(value||'')))return String(value);
+  try{const u=new URL(value,base);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:'';}catch{return '';}
+}
+function renderSafeArticleHTML(container,html,base){
+  container.replaceChildren();const parsed=new DOMParser().parseFromString(String(html||''),'text/html'),budget={n:0,max:20000};
+  const copy=node=>{
+    if(++budget.n>budget.max)return null;if(node.nodeType===3)return document.createTextNode(node.nodeValue||'');if(node.nodeType!==1)return null;
+    const tag=node.localName.toLowerCase();if(DROP_ARTICLE_TAGS.has(tag))return null;
+    if(!SAFE_ARTICLE_TAGS.has(tag)){const frag=document.createDocumentFragment();for(const child of node.childNodes){const cloned=copy(child);if(cloned)frag.append(cloned);}return frag;}
+    const el=document.createElement(tag);
+    if(tag==='a'){const href=safeArticleURL(node.getAttribute('href'),base);if(href){el.href=href;el.target='_blank';el.rel='noopener noreferrer';el.referrerPolicy='no-referrer';}}
+    if(tag==='img'){const src=safeArticleURL(node.getAttribute('src'),base,true);if(src){el.src=src;el.loading='lazy';el.decoding='async';el.referrerPolicy='no-referrer';}el.alt=String(node.getAttribute('alt')||'').slice(0,500);if(node.getAttribute('title'))el.title=String(node.getAttribute('title')).slice(0,500);}
+    if(['td','th'].includes(tag))for(const name of ['colspan','rowspan']){const n=Math.max(1,Math.min(12,Number(node.getAttribute(name))||1));if(n>1)el.setAttribute(name,String(n));}
+    if(tag==='ol'&&node.hasAttribute('start')){const n=Number(node.getAttribute('start'));if(Number.isInteger(n)&&Math.abs(n)<100000)el.setAttribute('start',String(n));}
+    for(const child of node.childNodes){const cloned=copy(child);if(cloned)el.append(cloned);}return el;
+  };
+  for(const node of parsed.body.childNodes){const cloned=copy(node);if(cloned)container.append(cloned);}
+  if(budget.n>budget.max){const note=document.createElement('p');note.className='muted';note.textContent='正文节点过多，已在安全上限处停止渲染。';container.append(note);}
+}
+async function recordNativeArticleOpen(detail){
+  const eventId=crypto.randomUUID().replaceAll('-','');await api('/entries/'+detail.id+'/open',{eventId,target:'reader'});detail.status='read';
+  const mark=document.querySelector('[data-native-mark]');if(mark)mark.textContent='设为未读';
+}
+function drawNativeArticle(container,detail){
+  $('title').textContent='阅读';$('subtitle').textContent='站内正文 · 原文仅作为明确的外部入口';
+  container.innerHTML='<article class="native-article"><div class="native-article-top"><button data-native-back>← 返回</button><div class="native-article-actions"><a data-native-original target="_blank" rel="noopener noreferrer">查看原文 ↗</a><button data-native-prepare>尝试补全文</button><button data-native-annotate>高亮 / 批注</button></div></div><div class="native-article-meta"><a data-native-author></a><span data-native-platform></span><span data-native-time></span><span class="badge" data-native-state></span></div><h1 data-native-title></h1><div class="native-article-tags tag-chips"></div><div class="native-article-controls"><button data-native-tags>编辑标签</button><button data-native-mark></button><button data-native-like></button><button data-native-dislike></button><a href="/desk/?view=notes">我的笔记</a></div><p class="native-article-warning" data-native-warning hidden></p><div class="native-article-body"></div></article>';
+  const shell=container.querySelector('.native-article');shell.querySelector('[data-native-title]').textContent=detail.title;
+  const author=shell.querySelector('[data-native-author]');author.textContent=detail.source||detail.author||'未知博主';author.href='/desk/?view=sources&source='+encodeURIComponent(detail.sourceId);
+  shell.querySelector('[data-native-platform]').textContent=platforms[detail.platform]||detail.platform||'';shell.querySelector('[data-native-time]').textContent=detail.published_at?date(detail.published_at):'发布时间未知';
+  shell.querySelector('[data-native-state]').textContent=detail.contentState==='TEXT'?'已有正文':detail.contentState==='PARTIAL'?'部分内容':'仅元信息';
+  shell.querySelector('[data-native-back]').onclick=()=>{if(history.length>1)history.back();else location.assign('/desk/');};
+  const original=shell.querySelector('[data-native-original]');if(detail.url){original.href=detail.url;original.onclick=()=>{const eventId=crypto.randomUUID().replaceAll('-','');void api('/entries/'+detail.id+'/open',{eventId,target:'original'});};}else original.remove();
+  const tagBox=shell.querySelector('.native-article-tags'),drawTags=()=>drawQuickAddTags(tagBox,detail.tags||[],async value=>{const result=await api('/entries/'+detail.id+'/tags',{tags:[...(detail.tags||[]),value]});detail.tags=result.tags;drawTags();toast('已添加文章标签 '+value);},'给这篇文章添加标签');drawTags();
+  shell.querySelector('[data-native-tags]').onclick=()=>editTags(shell,detail.tags||[],async tags=>{const result=await api('/entries/'+detail.id+'/tags',{tags});detail.tags=result.tags;drawTags();toast('文章标签已保存');},'编辑文章标签（只影响这篇文章）');
+  const mark=shell.querySelector('[data-native-mark]');mark.textContent=detail.status==='read'?'设为未读':'标记已读';mark.onclick=async()=>{const status=detail.status==='read'?'unread':'read';mark.disabled=true;try{await api('/entries/'+detail.id+'/read',{status});detail.status=status;mark.textContent=status==='read'?'设为未读':'标记已读';}catch(e){error(e);}finally{mark.disabled=false;}};
+  const drawFeedback=()=>{shell.querySelector('[data-native-like]').textContent=detail.feedback===1?'已感兴趣':'感兴趣';shell.querySelector('[data-native-dislike]').textContent=detail.feedback===-1?'已降权':'不感兴趣';};for(const [key,value] of [['like',1],['dislike',-1]])shell.querySelector('[data-native-'+key+']').onclick=async()=>{const next=detail.feedback===value?0:value;await api('/entries/'+detail.id+'/feedback',{value:next});detail.feedback=next;drawFeedback();};drawFeedback();
+  const prepare=shell.querySelector('[data-native-prepare]');if(!detail.canFetchFullText||(detail.contentState==='TEXT'&&detail.contentTextLength>=1500))prepare.remove();else prepare.onclick=async()=>{prepare.disabled=true;prepare.textContent='正在补全文…';try{const next=await api('/entries/'+detail.id+'/prepare',{});drawNativeArticle(container,next);toast(next.prepareImproved?'已补充更完整正文':'没有取得比当前更完整的正文');}catch(e){error(e);prepare.disabled=false;prepare.textContent='尝试补全文';}};
+  const annotate=shell.querySelector('[data-native-annotate]');if(detail.readerMode==='original'&&detail.contentState==='META'){annotate.disabled=true;annotate.textContent='暂无可批注正文';}else annotate.onclick=async()=>{const tab=window.open('about:blank','_blank');if(tab)tab.opener=null;annotate.disabled=true;try{await openReader({id:detail.id,url:detail.url,content_state:detail.contentState,archive_state:detail.archiveState,readerMode:detail.readerMode,status:detail.status},annotate,tab);}catch(e){if(tab)tab.close();error(e);}finally{annotate.disabled=false;annotate.textContent='高亮 / 批注';}};
+  const warning=shell.querySelector('[data-native-warning]'),messages=[];if(detail.contentState==='PARTIAL')messages.push('当前保存的是部分内容，可继续阅读，也可以尝试补全文或查看原文。');if(detail.contentState==='META')messages.push('当前只有元信息；受限平台不会由 ECS 绕过平台获取正文。');if(detail.contentUnavailable)messages.push('正文主库暂不可用，当前仅展示本地摘要。');if(detail.contentTruncated)messages.push('正文超过站内单次渲染安全上限，当前展示前部内容。');if(messages.length){warning.hidden=false;warning.textContent=messages.join(' ');}
+  const body=shell.querySelector('.native-article-body');if(detail.content&&detail.contentTextLength){renderSafeArticleHTML(body,detail.content,detail.url||detail.sourceUrl||location.href);}else body.innerHTML='<div class="empty"><h2>暂时没有站内正文</h2><p>文章仍保留在 Quiet River；可使用上方“查看原文”进入原平台。</p></div>';
+}
+async function renderArticleDetail(id){
+  hidePager();const container=$('content');container.innerHTML='<div class="empty">正在读取站内正文…</div>';const detail=await api('/entries/'+id);if(view!=='article'||articleId!==id)return;drawNativeArticle(container,detail);
+  recordNativeArticleOpen(detail).catch(e=>error(new Error('文章已打开，但阅读状态未保存：'+e.message)));
+}
 function syncReadCards(entryId,status){
   for(const card of document.querySelectorAll('[data-entry-id="'+entryId+'"]')){
     card.dataset.status=status;const dot=card.querySelector('.unread-dot');if(dot)dot.hidden=status!=='unread';
@@ -106,6 +154,7 @@ async function renderBackend(){
   showActivity();
 }
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function annotationButtonState(entry,button){const enabled=readerButtonState(entry,button);button.textContent=enabled?'高亮 / 批注':'暂无可批注正文';return enabled;}
 function readerButtonState(entry,button){
   const state=entry.archive_state||'NONE';
   if(entry.readerMode==='original'&&!['READY','QUEUED','IMPORTING','METADATA_NOTE'].includes(state)){
@@ -135,14 +184,14 @@ async function openReader(entry,button,tab){
 function renderArticleCard(entry){
   const a=document.createElement('article');a.className='card article-card';a.dataset.entryId=entry.id;a.dataset.status=entry.status||'unread';
   const contentLabel=entry.content_state==='META'?'仅元信息':entry.content_state==='PARTIAL'?'部分内容':'已有内容';
-  a.innerHTML='<span class="unread-dot" role="img" aria-label="未读" title="未读"></span><div class="meta"><a data-author></a><span data-platform></span><span data-time></span><span class="badge" data-content></span></div><h2><a class="article-title" data-original target="_blank" rel="noopener noreferrer"></a></h2><div class="article-tags tag-chips"></div><p class="summary"></p><div class="reason"></div><div class="actions"><a class="primary" data-original target="_blank" rel="noopener noreferrer">打开原文</a><button data-action="read">阅读器</button><button data-action="tags">编辑标签</button><button data-action="mark"></button><button data-action="like"></button><button data-action="dislike"></button></div>';
+  a.innerHTML='<span class="unread-dot" role="img" aria-label="未读" title="未读"></span><div class="meta"><a data-author></a><span data-platform></span><span data-time></span><span class="badge" data-content></span></div><h2><a class="article-title" data-article></a></h2><div class="article-tags tag-chips"></div><p class="summary"></p><div class="reason"></div><div class="actions"><a class="primary" data-article>站内阅读</a><a data-original target="_blank" rel="noopener noreferrer">原文 ↗</a><button data-action="read">高亮 / 批注</button><button data-action="tags">编辑标签</button><button data-action="mark"></button><button data-action="like"></button><button data-action="dislike"></button></div>';
   const authorLink=a.querySelector('[data-author]');authorLink.textContent=entry.source||entry.author||'未知博主';
   if(entry.sourceId){authorLink.href='/desk/?view=sources&source='+encodeURIComponent(entry.sourceId);authorLink.onclick=e=>{if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();source=entry.sourceId;tag=[];platform='';void switchView('sources');};}
   else{authorLink.removeAttribute('href');authorLink.setAttribute('aria-disabled','true');authorLink.title='该条目缺少站内博主映射';}
   a.querySelector('[data-platform]').textContent=platforms[entry.platform]||entry.platform||'';
   a.querySelector('[data-time]').textContent=entry.published_at?date(entry.published_at):'发布时间未知';
   a.querySelector('[data-content]').textContent=contentLabel;
-  a.querySelector('.article-title').textContent=entry.title;
+  a.querySelector('.article-title').textContent=entry.title;for(const link of a.querySelectorAll('[data-article]'))link.href='/desk/article/'+encodeURIComponent(entry.id);
   a.querySelector('.summary').textContent=(entry.summary||'').slice(0,230)+((entry.summary||'').length>230?'…':'');
   a.querySelector('.reason').textContent=(entry.reasons||[]).join('；');
   a.querySelector('.unread-dot').hidden=entry.status!=='unread';
@@ -163,16 +212,16 @@ function renderArticleCard(entry){
   }
   a.addEventListener('click',e=>{
     if(e.target.closest('a,button,input,textarea,select,label,form,.tag-chips')||window.getSelection()?.toString())return;
-    a.querySelector('.actions a[data-original][href]')?.click();
+    a.querySelector('.actions a[data-article][href]')?.click();
   });
-  const read=a.querySelector('[data-action=read]');readerButtonState(entry,read);read.onclick=async()=>{
+  const read=a.querySelector('[data-action=read]');annotationButtonState(entry,read);read.onclick=async()=>{
     if(read.disabled)return;const tab=window.open('about:blank','_blank');if(tab)tab.opener=null;read.disabled=true;const before=read.textContent;
     try{await openReader(entry,read,tab);}
     catch(e){
       try{if(tab)tab.location.replace(entry.url);else window.location.assign(entry.url);await trackArticleOpen(entry,'original');toast('\u9605\u8bfb\u5668\u6682\u4e0d\u53ef\u7528\uff0c\u5df2\u6253\u5f00\u539f\u6587');}
       catch{if(tab)tab.close();error(e);}
     }
-    finally{read.textContent=before;readerButtonState(entry,read);}
+    finally{read.textContent=before;annotationButtonState(entry,read);}
   };
   const mark=a.querySelector('[data-action=mark]');
   mark.textContent=entry.status==='read'?'设为未读':'标记已读';
