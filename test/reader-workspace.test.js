@@ -195,3 +195,21 @@ test('native article page edits whole-article notes without injecting note text 
  assert.match(ui,/暂时无法读取已有笔记，为避免覆盖已禁止编辑/);assert.doesNotMatch(ui,/innerHTML\s*=\s*detail\.note/);
  assert.match(css,/\.native-article-note/);
 });
+test('native highlight composer mirrors Karakeep text-node offsets and refuses ambiguous quotes',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ const css=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/style.css'),'utf8');
+ assert.match(ui,/function textNodeSequence/);assert.match(ui,/SHOW_TEXT/);assert.match(ui,/function canonicalReaderText/);
+ assert.match(ui,/document\.implementation\.createHTMLDocument/);assert.match(ui,/holder\.innerHTML=String\(html\|\|''\)/);
+ assert.match(ui,/function uniqueQuoteOffset/);assert.match(ui,/if\(match\.count!==1\)/);
+ assert.match(ui,/highlights\/context/);assert.match(ui,/contextHash:ctx\.contextHash/);assert.match(ui,/startOffset:match\.start/);assert.match(ui,/endOffset:match\.end/);
+ assert.match(ui,/位置有歧义，未保存/);assert.match(ui,/与归档正文不完全一致，未保存/);
+ assert.match(css,/mark\[data-native-highlight\]/);assert.match(css,/\.native-highlight-composer/);
+});
+test('native highlight list edits and deletes Karakeep segment notes without trusting highlight HTML',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ assert.match(ui,/function renderNativeHighlights/);assert.match(ui,/quote\.textContent=h\.text/);assert.match(ui,/note\.value=h\.note\|\|''/);
+ assert.match(ui,/保存批注/);assert.match(ui,/删除高亮/);
+ assert.match(ui,/highlights\/'\+encodeURIComponent\(h\.id\)/);assert.match(ui,/\/delete'/);
+ assert.doesNotMatch(ui,/innerHTML\s*=\s*h\.text/);assert.doesNotMatch(ui,/innerHTML\s*=\s*h\.note/);
+ assert.match(ui,/已保存在 Karakeep；当前站内正文无法唯一定位，因此未强行回画/);
+});

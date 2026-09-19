@@ -99,6 +99,13 @@ function createApp(service,config,clients={}){
       if(articlePrepare&&req.method==='POST')return reply(res,200,await service.articleDetail(Number(articlePrepare[1]),{prepare:true}));
       const articleNote=/^\/desk\/api\/entries\/(\d+)\/note$/.exec(p);
       if(articleNote&&req.method==='POST'){const b=await bodyJSON(req);return reply(res,200,await service.saveArticleNote(Number(articleNote[1]),b.note));}
+      const articleHighlights=/^\/desk\/api\/entries\/(\d+)\/highlights$/.exec(p);
+      if(articleHighlights&&req.method==='GET')return reply(res,200,await service.articleHighlights(Number(articleHighlights[1])));
+      if(articleHighlights&&req.method==='POST')return reply(res,201,await service.createArticleHighlight(Number(articleHighlights[1]),await bodyJSON(req)));
+      const highlightContext=/^\/desk\/api\/entries\/(\d+)\/highlights\/context$/.exec(p);
+      if(highlightContext&&req.method==='POST')return reply(res,200,await service.articleHighlightContext(Number(highlightContext[1])));
+      const articleHighlight=/^\/desk\/api\/entries\/(\d+)\/highlights\/([A-Za-z0-9_-]{1,128})(\/delete)?$/.exec(p);
+      if(articleHighlight&&req.method==='POST')return reply(res,200,articleHighlight[3]?await service.deleteArticleHighlight(Number(articleHighlight[1]),articleHighlight[2]):await service.updateArticleHighlight(Number(articleHighlight[1]),articleHighlight[2],await bodyJSON(req)));
       if(p==='/desk/api/refresh'&&req.method==='POST')return reply(res,202,service.refresh(await bodyJSON(req)));
       const run=/^\/desk\/api\/runs\/([a-f0-9]+)$/.exec(p);
       if(run&&req.method==='GET'){const result=service.db.runStatus(run[1]);return reply(res,result?200:404,result||{error:'任务不存在'});}

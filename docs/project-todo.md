@@ -25,18 +25,19 @@ Updated: 2026-09-19
 
 ## Verification 2026-09-19
 
-- Production release: `93cf7c885b7d892b7897b6efc661c7063212ad33`.
+- Production release: `15a738da087bfbd6d7d6f1d0b09381cb119d936e`.
 - Production source count: 268; manifest/database parity is exact.
 - Source acceptance: `without_channel=0`; 16 WeChat adapter channels exist and are currently `NOT_CONFIGURED` because the WeRSS runtime is not configured.
-- Automated tests: `93cf7c8` exact-commit serial evidence: 257 passed, 0 failed, unchanged worktree.
-- Live HTTP smoke: passed on `93cf7c8`; production checks confirmed `/desk/article/<id>`, default Card routing, safe DOM reconstruction assets, a real public TEXT body rendered from Miniflux, and a real Xiaohongshu META entry with `canFetchFullText=false` / `readerMode=original`.
+- Automated tests: `15a738d` exact-commit serial evidence: 263 passed, 0 failed, unchanged worktree.
+- Live HTTP smoke: passed on `15a738d`; production checks confirmed the additive `note_bookmark_id` migration, native note editor assets, Karakeep note capability on article detail, and note write action gates without modifying a real note.
 - Production source payload contains `推广搜老油条`; the obsolete `丁丁丁写字的地方` and `搜广推学习笔记` source names are absent.
 - DataFunTalk, Semantic Scholar, and Ed H. Chi are absent from the current manifest/source catalog.
 
 ## Active task
 
 - done — `93cf7c8` makes `/desk/article/<entryId>` the default Card destination, reads current bodies from Miniflux, rebuilds upstream HTML through an explicit DOM/tag/URL allowlist, keeps original links secondary, and preserves Karakeep as the highlight bridge. Public full-text preparation is explicit; restricted META sources cannot use ECS extraction. Production smoke and real public/restricted article checks passed; pre-release recovery point: `/var/backups/quiet-river/platform-20260919T044929Z`.
-- doing — Bring whole-article note editing into the native article page while keeping Karakeep as the sole note store. Keep content bookmark and metadata-only note bookmark identities separate so note creation never blocks a later content archive/highlight upgrade. Native text-selection highlights remain gated until offset compatibility is proven.
+- done — `15a738d` adds whole-article note editing to the native article page while keeping Karakeep as the sole note store. Existing content bookmarks are reused; metadata-only articles get a separate Karakeep text-note bookmark referenced by `note_bookmark_id`, so note creation cannot consume the future content/highlight bookmark. Empty untouched notes create no bookmark. Pre-release recovery point: `/var/backups/quiet-river/platform-20260919T050229Z`.
+- doing — Implement native text-selection highlights/segment notes only after proving Karakeep character-offset compatibility. Read Karakeep's own readable content for the archived bookmark, map a selected quote only when it has a unique exact position in that canonical text, and refuse ambiguous/zero-match writes rather than guessing. Existing Karakeep reader remains the safe fallback.
 
 ## Remaining follow-up
 

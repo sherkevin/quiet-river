@@ -346,6 +346,70 @@ class ReaderService {
       return {bookmarkId:bookmark.id,path:`/desk/reader/${id}`,state:'QUEUED'};
     }catch(e){this.db.run("UPDATE entries SET archive_state='ERROR' WHERE id=?",id);throw e;}
   }
+  async articleHighlights(id) {
+    const row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
+    if(!this.config.karakeepToken)return {entryId:id,configured:false,bookmarkId:null,highlights:[],canCreate:false};
+    if(!row.bookmark_id)return {entryId:id,configured:true,bookmarkId:null,highlights:[],canCreate:row.content_state!=='META'};
+    let cursor='',all=[],guard=0;
+    do{
+      const page=await this.kk.call('/api/v1/highlights?bookmarkId='+encodeURIComponent(row.bookmark_id)+'&limit=100'+(cursor?'&cursor='+encodeURIComponent(cursor):''));
+      all.push(...(page.highlights||[]).filter(h=>h.bookmarkId===row.bookmark_id));cursor=page.nextCursor||'';
+      if(++guard>10)throw new Error('highlight pagination limit exceeded');
+    }while(cursor&&all.length<1000);
+    return {entryId:id,configured:true,bookmarkId:row.bookmark_id,highlights:all.slice(0,1000),canCreate:row.content_state!=='META'};
+  }
+  async articleHighlightContext(id) {
+    let row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
+    if(!this.config.karakeepToken)throw Object.assign(new Error('not configured: highlights'),{status:503});
+    if(row.content_state==='META')throw Object.assign(new Error('article has no local text to highlight'),{status:409});
+    if(!row.bookmark_id){
+      const archived=await this.archive(id);
+      if(!archived?.bookmarkId)throw Object.assign(new Error('article archive unavailable'),{status:409});
+      row=this.db.get('SELECT * FROM entries WHERE id=?',id);
+    }
+    let saved=null,html='';
+    for(let i=0;i<16;i++){
+      saved=await this.kk.call('/api/v1/bookmarks/'+encodeURIComponent(row.bookmark_id)+'?includeContent=true');
+      html=typeof saved?.content?.htmlContent==='string'?saved.content.htmlContent:'';
+      if(html)break;
+      if(saved?.content?.crawlStatus==='failure')throw Object.assign(new Error('reader archive failed'),{status:409});
+      await delay(500);
+    }
+    if(!html)throw Object.assign(new Error('reader archive is still preparing'),{status:409});
+    if(Buffer.byteLength(html)>4*1024*1024)throw Object.assign(new Error('reader archive exceeds native highlight limit'),{status:413});
+    return {entryId:id,bookmarkId:row.bookmark_id,htmlContent:html,contextHash:hash(html),canHighlight:true};
+  }
+  async createArticleHighlight(id,input={}) {
+    const row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
+    if(!this.config.karakeepToken)throw Object.assign(new Error('not configured: highlights'),{status:503});
+    if(!row.bookmark_id)throw Object.assign(new Error('highlight context is required first'),{status:409});
+    const start=Number(input.startOffset),end=Number(input.endOffset),text=String(input.text??''),note=input.note==null?null:String(input.note),color=String(input.color||'yellow'),contextHash=String(input.contextHash||'');
+    if(!Number.isInteger(start)||!Number.isInteger(end)||start<0||end<=start||end-start!==text.length||text.length<1||text.length>10000||note?.length>10000||!['yellow','red','green','blue'].includes(color)||!/^[a-f0-9]{64}$/.test(contextHash))throw Object.assign(new Error('invalid highlight'),{status:400});
+    const saved=await this.kk.call('/api/v1/bookmarks/'+encodeURIComponent(row.bookmark_id)+'?includeContent=true');
+    const html=typeof saved?.content?.htmlContent==='string'?saved.content.htmlContent:'';
+    if(!html||hash(html)!==contextHash)throw Object.assign(new Error('highlight context changed; select the text again'),{status:409});
+    if(end>html.length)throw Object.assign(new Error('highlight offset outside archive bounds'),{status:400});
+    const created=await this.kk.call('/api/v1/highlights','POST',{bookmarkId:row.bookmark_id,startOffset:start,endOffset:end,color,text,note});
+    if(created?.bookmarkId!==row.bookmark_id||created?.startOffset!==start||created?.endOffset!==end)throw new Error('highlight store returned inconsistent identity');
+    this.db.audit('article-highlight',id,'created');
+    return created;
+  }
+  async updateArticleHighlight(id,highlightId,input={}) {
+    if(!/^[A-Za-z0-9_-]{1,128}$/.test(String(highlightId)))throw Object.assign(new Error('invalid highlight id'),{status:400});
+    const current=await this.articleHighlights(id),existing=current.highlights.find(h=>h.id===highlightId);
+    if(!existing)throw Object.assign(new Error('highlight not found for article'),{status:404});
+    const patch={};
+    if(input.color!==undefined){const color=String(input.color);if(!['yellow','red','green','blue'].includes(color))throw Object.assign(new Error('invalid highlight color'),{status:400});patch.color=color;}
+    if(input.note!==undefined){if(input.note!==null&&typeof input.note!=='string'||typeof input.note==='string'&&input.note.length>10000)throw Object.assign(new Error('invalid highlight note'),{status:400});patch.note=input.note===null?null:String(input.note);}
+    if(!Object.keys(patch).length)return existing;
+    const updated=await this.kk.call('/api/v1/highlights/'+encodeURIComponent(highlightId),'PATCH',patch);this.db.audit('article-highlight',id,'updated');return updated;
+  }
+  async deleteArticleHighlight(id,highlightId) {
+    if(!/^[A-Za-z0-9_-]{1,128}$/.test(String(highlightId)))throw Object.assign(new Error('invalid highlight id'),{status:400});
+    const current=await this.articleHighlights(id),existing=current.highlights.find(h=>h.id===highlightId);
+    if(!existing)throw Object.assign(new Error('highlight not found for article'),{status:404});
+    await this.kk.call('/api/v1/highlights/'+encodeURIComponent(highlightId),'DELETE');this.db.audit('article-highlight',id,'deleted');return {ok:true};
+  }
   async highlights(cursor='') {
     if(!this.config.karakeepToken)return {highlights:[],nextCursor:null,notConfigured:true};
     const page=await this.kk.call('/api/v1/highlights?limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):''));

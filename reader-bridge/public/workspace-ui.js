@@ -73,13 +73,78 @@ function renderSafeArticleHTML(container,html,base){
   for(const node of parsed.body.childNodes){const cloned=copy(node);if(cloned)container.append(cloned);}
   if(budget.n>budget.max){const note=document.createElement('p');note.className='muted';note.textContent='正文节点过多，已在安全上限处停止渲染。';container.append(note);}
 }
+function textNodeSequence(root){
+  const walker=(root.ownerDocument||document).createTreeWalker(root,NodeFilter.SHOW_TEXT,null),nodes=[];let text='',node;
+  while((node=walker.nextNode())){nodes.push({node,start:text.length,end:text.length+(node.textContent?.length||0)});text+=node.textContent||'';}
+  return {text,nodes};
+}
+function canonicalReaderText(html){
+  const inert=document.implementation.createHTMLDocument(''),holder=inert.createElement('div');holder.innerHTML=String(html||'');return textNodeSequence(holder).text;
+}
+function uniqueQuoteOffset(text,quote){
+  if(!quote)return {count:0,start:-1,end:-1};let count=0,start=-1,from=0,at;
+  while((at=text.indexOf(quote,from))!==-1){count++;if(start<0)start=at;if(count>1)break;from=at+1;}
+  return {count,start,end:start<0?-1:start+quote.length};
+}
+function removeNativeHighlightMarks(root){
+  for(const mark of [...root.querySelectorAll('mark[data-native-highlight]')]){const parent=mark.parentNode;if(!parent)continue;while(mark.firstChild)parent.insertBefore(mark.firstChild,mark);mark.remove();}
+  root.normalize();
+}
+function wrapNativeTextRange(root,start,end,highlight){
+  const segments=textNodeSequence(root).nodes.filter(x=>x.start<end&&x.end>start);
+  for(const segment of segments){
+    let node=segment.node,localStart=Math.max(0,start-segment.start),localEnd=Math.min(segment.end-segment.start,end-segment.start);
+    if(localStart>0){node=node.splitText(localStart);localEnd-=localStart;}
+    if(localEnd<node.length)node.splitText(localEnd);
+    const mark=document.createElement('mark');mark.dataset.nativeHighlight='1';mark.dataset.highlightId=highlight.id;mark.dataset.color=highlight.color||'yellow';mark.title=highlight.note||'已高亮';
+    node.parentNode?.insertBefore(mark,node);mark.append(node);
+  }
+}
+function renderNativeHighlights(shell,body,detail){
+  removeNativeHighlightMarks(body);const list=shell.querySelector('[data-native-highlight-list]'),count=shell.querySelector('[data-native-highlight-count]'),highlights=detail.highlights||[];list.replaceChildren();count.textContent=highlights.length?highlights.length+' 条':'暂无高亮';
+  const nativeText=textNodeSequence(body).text;
+  for(const h of highlights){
+    const match=typeof h.text==='string'&&h.text?uniqueQuoteOffset(nativeText,h.text):{count:0,start:-1,end:-1};const mapped=match.count===1;
+    if(mapped)wrapNativeTextRange(body,match.start,match.end,h);
+    const card=document.createElement('article');card.className='native-highlight-item';card.dataset.highlightCard=h.id;
+    const quote=document.createElement('blockquote');quote.textContent=h.text||'（高亮文本不可用）';card.append(quote);
+    const state=document.createElement('p');state.className='muted';state.textContent=mapped?'已在当前站内正文中定位':'已保存在 Karakeep；当前站内正文无法唯一定位，因此未强行回画';card.append(state);
+    const editor=document.createElement('div');editor.className='native-highlight-editor-grid';
+    const colorLabel=document.createElement('label');colorLabel.textContent='颜色';const color=document.createElement('select');color.dataset.highlightColor=h.id;
+    for(const [value,label] of [['yellow','黄色'],['green','绿色'],['blue','蓝色'],['red','红色']]){const option=document.createElement('option');option.value=value;option.textContent=label;option.selected=(h.color||'yellow')===value;color.append(option);}colorLabel.append(color);
+    const noteLabel=document.createElement('label');noteLabel.textContent='段落批注';const note=document.createElement('textarea');note.rows=3;note.maxLength=10000;note.value=h.note||'';note.placeholder='给这段高亮添加批注';noteLabel.append(note);editor.append(colorLabel,noteLabel);card.append(editor);
+    const actions=document.createElement('div');actions.className='actions';const save=document.createElement('button');save.textContent='保存批注';const del=document.createElement('button');del.textContent='删除高亮';actions.append(save,del);card.append(actions);
+    save.onclick=async()=>{save.disabled=true;try{const updated=await api('/entries/'+detail.id+'/highlights/'+encodeURIComponent(h.id),{color:color.value,note:note.value||null});Object.assign(h,updated);renderNativeHighlights(shell,body,detail);toast('划线批注已保存');}catch(e){error(e);}finally{save.disabled=false;}};
+    del.onclick=async()=>{if(!confirm('删除这条高亮及其段落批注？'))return;del.disabled=true;try{await api('/entries/'+detail.id+'/highlights/'+encodeURIComponent(h.id)+'/delete',{});detail.highlights=highlights.filter(x=>x.id!==h.id);renderNativeHighlights(shell,body,detail);toast('高亮已删除');}catch(e){error(e);}finally{del.disabled=false;}};
+    list.append(card);
+  }
+  for(const mark of body.querySelectorAll('mark[data-native-highlight]'))mark.onclick=()=>shell.querySelector('[data-highlight-card="'+CSS.escape(mark.dataset.highlightId)+'"]')?.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function setupNativeHighlightComposer(shell,body,detail){
+  const panel=shell.querySelector('[data-native-highlight-composer]'),hint=shell.querySelector('[data-native-highlight-hint]'),quoteBox=shell.querySelector('[data-native-highlight-quote]'),note=shell.querySelector('[data-native-highlight-note]'),color=shell.querySelector('[data-native-highlight-color]'),save=shell.querySelector('[data-native-highlight-save]'),cancel=shell.querySelector('[data-native-highlight-cancel]'),status=shell.querySelector('[data-native-highlight-status]');let pendingQuote='';
+  if(detail.highlightUnavailable){hint.textContent='暂时无法读取 Karakeep 高亮，为避免错写已关闭站内划线；可使用右上角 Karakeep 阅读器。';return;}
+  if(!detail.highlightConfigured){hint.textContent='Karakeep 高亮服务尚未配置；可继续使用文章笔记。';return;}
+  if(!detail.highlightCanCreate){hint.textContent=detail.contentState==='META'?'当前只有元信息，不能创建划线；不会为了批注从 ECS 绕过平台获取正文。':'当前文章暂不支持站内划线。';return;}
+  const close=()=>{pendingQuote='';panel.hidden=true;quoteBox.textContent='';note.value='';status.textContent='';};
+  cancel.onclick=()=>{close();window.getSelection()?.removeAllRanges();};
+  const capture=()=>{const sel=window.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount)return;const range=sel.getRangeAt(0);if(!body.contains(range.commonAncestorContainer))return;const text=sel.toString();if(!text.trim())return;if(text.length>10000){toast('单条高亮最多 10000 个字符');return;}pendingQuote=text;quoteBox.textContent=text;status.textContent='保存前会与 Karakeep 归档正文做唯一精确对齐';panel.hidden=false;};
+  body.addEventListener('pointerup',()=>setTimeout(capture,0));body.addEventListener('keyup',()=>setTimeout(capture,0));
+  save.onclick=async()=>{if(!pendingQuote)return;save.disabled=true;status.textContent='正在准备归档并校验位置…';
+    try{
+      const ctx=await api('/entries/'+detail.id+'/highlights/context',{}),canonical=canonicalReaderText(ctx.htmlContent),match=uniqueQuoteOffset(canonical,pendingQuote);
+      if(match.count!==1){status.textContent=match.count===0?'选中文字与归档正文不完全一致，未保存；可调整选区或使用 Karakeep 阅读器。':'选中文字在归档正文中出现多次，位置有歧义，未保存；请扩大选区。';return;}
+      const created=await api('/entries/'+detail.id+'/highlights',{contextHash:ctx.contextHash,startOffset:match.start,endOffset:match.end,text:pendingQuote,note:note.value||null,color:color.value});
+      detail.highlights=[...(detail.highlights||[]),created];close();window.getSelection()?.removeAllRanges();renderNativeHighlights(shell,body,detail);toast('高亮已保存到 Karakeep');
+    }catch(e){status.textContent='高亮未保存';error(e);}finally{save.disabled=false;}
+  };
+}
 async function recordNativeArticleOpen(detail){
   const eventId=crypto.randomUUID().replaceAll('-','');await api('/entries/'+detail.id+'/open',{eventId,target:'reader'});detail.status='read';
   const mark=document.querySelector('[data-native-mark]');if(mark)mark.textContent='设为未读';
 }
 function drawNativeArticle(container,detail){
   $('title').textContent='阅读';$('subtitle').textContent='站内正文 · 原文仅作为明确的外部入口';
-  container.innerHTML='<article class="native-article"><div class="native-article-top"><button data-native-back>← 返回</button><div class="native-article-actions"><a data-native-original target="_blank" rel="noopener noreferrer">查看原文 ↗</a><button data-native-prepare>尝试补全文</button><button data-native-annotate>高亮 / 批注</button></div></div><div class="native-article-meta"><a data-native-author></a><span data-native-platform></span><span data-native-time></span><span class="badge" data-native-state></span></div><h1 data-native-title></h1><div class="native-article-tags tag-chips"></div><div class="native-article-controls"><button data-native-tags>编辑标签</button><button data-native-mark></button><button data-native-like></button><button data-native-dislike></button><a href="/desk/?view=notes">我的笔记</a></div><p class="native-article-warning" data-native-warning hidden></p><div class="native-article-body"></div><section class="native-article-note"><div class="native-article-note-head"><h2>我的笔记</h2><span class="muted" data-native-note-status></span></div><textarea data-native-note rows="8" maxlength="50000" placeholder="记录这篇文章的思考、结论或待办……"></textarea><div class="actions"><button class="primary" data-native-note-save>保存笔记</button></div></section></article>';
+  container.innerHTML='<article class="native-article"><div class="native-article-top"><button data-native-back>← 返回</button><div class="native-article-actions"><a data-native-original target="_blank" rel="noopener noreferrer">查看原文 ↗</a><button data-native-prepare>尝试补全文</button><button data-native-annotate>Karakeep 阅读器 ↗</button></div></div><div class="native-article-meta"><a data-native-author></a><span data-native-platform></span><span data-native-time></span><span class="badge" data-native-state></span></div><h1 data-native-title></h1><div class="native-article-tags tag-chips"></div><div class="native-article-controls"><button data-native-tags>编辑标签</button><button data-native-mark></button><button data-native-like></button><button data-native-dislike></button><a href="/desk/?view=notes">我的笔记</a></div><p class="native-article-warning" data-native-warning hidden></p><p class="native-highlight-hint muted" data-native-highlight-hint>选中正文即可添加站内高亮或段落批注；只有能与 Karakeep 归档正文唯一精确对齐时才会保存。</p><section class="native-highlight-composer" data-native-highlight-composer hidden><div class="native-highlight-head"><strong>新高亮</strong><button data-native-highlight-cancel>取消</button></div><blockquote data-native-highlight-quote></blockquote><div class="native-highlight-editor-grid"><label>颜色<select data-native-highlight-color><option value="yellow">黄色</option><option value="green">绿色</option><option value="blue">蓝色</option><option value="red">红色</option></select></label><label>段落批注<textarea data-native-highlight-note rows="3" maxlength="10000" placeholder="可选：给这段高亮添加批注"></textarea></label></div><div class="actions"><button class="primary" data-native-highlight-save>保存高亮</button><span class="muted" data-native-highlight-status></span></div></section><div class="native-article-body"></div><section class="native-highlights"><div class="native-highlight-head"><h2>划线批注</h2><span class="muted" data-native-highlight-count></span></div><div data-native-highlight-list></div></section><section class="native-article-note"><div class="native-article-note-head"><h2>我的笔记</h2><span class="muted" data-native-note-status></span></div><textarea data-native-note rows="8" maxlength="50000" placeholder="记录这篇文章的思考、结论或待办……"></textarea><div class="actions"><button class="primary" data-native-note-save>保存笔记</button></div></section></article>';
   const shell=container.querySelector('.native-article');shell.querySelector('[data-native-title]').textContent=detail.title;
   const author=shell.querySelector('[data-native-author]');author.textContent=detail.source||detail.author||'未知博主';author.href='/desk/?view=sources&source='+encodeURIComponent(detail.sourceId);
   shell.querySelector('[data-native-platform]').textContent=platforms[detail.platform]||detail.platform||'';shell.querySelector('[data-native-time]').textContent=detail.published_at?date(detail.published_at):'发布时间未知';
@@ -90,10 +155,10 @@ function drawNativeArticle(container,detail){
   shell.querySelector('[data-native-tags]').onclick=()=>editTags(shell,detail.tags||[],async tags=>{const result=await api('/entries/'+detail.id+'/tags',{tags});detail.tags=result.tags;drawTags();toast('文章标签已保存');},'编辑文章标签（只影响这篇文章）');
   const mark=shell.querySelector('[data-native-mark]');mark.textContent=detail.status==='read'?'设为未读':'标记已读';mark.onclick=async()=>{const status=detail.status==='read'?'unread':'read';mark.disabled=true;try{await api('/entries/'+detail.id+'/read',{status});detail.status=status;mark.textContent=status==='read'?'设为未读':'标记已读';}catch(e){error(e);}finally{mark.disabled=false;}};
   const drawFeedback=()=>{shell.querySelector('[data-native-like]').textContent=detail.feedback===1?'已感兴趣':'感兴趣';shell.querySelector('[data-native-dislike]').textContent=detail.feedback===-1?'已降权':'不感兴趣';};for(const [key,value] of [['like',1],['dislike',-1]])shell.querySelector('[data-native-'+key+']').onclick=async()=>{const next=detail.feedback===value?0:value;await api('/entries/'+detail.id+'/feedback',{value:next});detail.feedback=next;drawFeedback();};drawFeedback();
-  const prepare=shell.querySelector('[data-native-prepare]');if(!detail.canFetchFullText||(detail.contentState==='TEXT'&&detail.contentTextLength>=1500))prepare.remove();else prepare.onclick=async()=>{prepare.disabled=true;prepare.textContent='正在补全文…';try{const next=await api('/entries/'+detail.id+'/prepare',{});drawNativeArticle(container,next);toast(next.prepareImproved?'已补充更完整正文':'没有取得比当前更完整的正文');}catch(e){error(e);prepare.disabled=false;prepare.textContent='尝试补全文';}};
-  const annotate=shell.querySelector('[data-native-annotate]');if(detail.readerMode==='original'&&detail.contentState==='META'){annotate.disabled=true;annotate.textContent='暂无可批注正文';}else annotate.onclick=async()=>{const tab=window.open('about:blank','_blank');if(tab)tab.opener=null;annotate.disabled=true;try{await openReader({id:detail.id,url:detail.url,content_state:detail.contentState,archive_state:detail.archiveState,readerMode:detail.readerMode,status:detail.status},annotate,tab);}catch(e){if(tab)tab.close();error(e);}finally{annotate.disabled=false;annotate.textContent='高亮 / 批注';}};
+  const prepare=shell.querySelector('[data-native-prepare]');if(!detail.canFetchFullText||(detail.contentState==='TEXT'&&detail.contentTextLength>=1500))prepare.remove();else prepare.onclick=async()=>{prepare.disabled=true;prepare.textContent='正在补全文…';try{const next=await api('/entries/'+detail.id+'/prepare',{});next.highlights=detail.highlights||[];next.highlightConfigured=detail.highlightConfigured;next.highlightCanCreate=next.contentState!=='META'&&detail.highlightConfigured;drawNativeArticle(container,next);toast(next.prepareImproved?'已补充更完整正文':'没有取得比当前更完整的正文');}catch(e){error(e);prepare.disabled=false;prepare.textContent='尝试补全文';}};
+  const annotate=shell.querySelector('[data-native-annotate]');if(detail.readerMode==='original'&&detail.contentState==='META'){annotate.disabled=true;annotate.textContent='暂无 Karakeep 正文';}else annotate.onclick=async()=>{const tab=window.open('about:blank','_blank');if(tab)tab.opener=null;annotate.disabled=true;try{await openReader({id:detail.id,url:detail.url,content_state:detail.contentState,archive_state:detail.archiveState,readerMode:detail.readerMode,status:detail.status},annotate,tab);}catch(e){if(tab)tab.close();error(e);}finally{annotate.disabled=false;annotate.textContent='Karakeep 阅读器 ↗';}};
   const warning=shell.querySelector('[data-native-warning]'),messages=[];if(detail.contentState==='PARTIAL')messages.push('当前保存的是部分内容，可继续阅读，也可以尝试补全文或查看原文。');if(detail.contentState==='META')messages.push('当前只有元信息；受限平台不会由 ECS 绕过平台获取正文。');if(detail.contentUnavailable)messages.push('正文主库暂不可用，当前仅展示本地摘要。');if(detail.contentTruncated)messages.push('正文超过站内单次渲染安全上限，当前展示前部内容。');if(messages.length){warning.hidden=false;warning.textContent=messages.join(' ');}
-  const body=shell.querySelector('.native-article-body');if(detail.content&&detail.contentTextLength){renderSafeArticleHTML(body,detail.content,detail.url||detail.sourceUrl||location.href);}else body.innerHTML='<div class="empty"><h2>暂时没有站内正文</h2><p>文章仍保留在 Quiet River；可使用上方“查看原文”进入原平台。</p></div>';
+  const body=shell.querySelector('.native-article-body');if(detail.content&&detail.contentTextLength){renderSafeArticleHTML(body,detail.content,detail.url||detail.sourceUrl||location.href);}else body.innerHTML='<div class="empty"><h2>暂时没有站内正文</h2><p>文章仍保留在 Quiet River；可使用上方“查看原文”进入原平台。</p></div>';renderNativeHighlights(shell,body,detail);setupNativeHighlightComposer(shell,body,detail);
   const noteInput=shell.querySelector('[data-native-note]'),noteSave=shell.querySelector('[data-native-note-save]'),noteStatus=shell.querySelector('[data-native-note-status]');
   noteInput.value=detail.note||'';
   if(!detail.notesConfigured){noteInput.disabled=true;noteSave.disabled=true;noteStatus.textContent='笔记服务尚未配置';}
@@ -106,8 +171,10 @@ function drawNativeArticle(container,detail){
   }
 }
 async function renderArticleDetail(id){
-  hidePager();const container=$('content');container.innerHTML='<div class="empty">正在读取站内正文…</div>';const detail=await api('/entries/'+id);if(view!=='article'||articleId!==id)return;drawNativeArticle(container,detail);
-  recordNativeArticleOpen(detail).catch(e=>error(new Error('文章已打开，但阅读状态未保存：'+e.message)));
+  hidePager();const container=$('content');container.innerHTML='<div class="empty">正在读取站内正文…</div>';const detail=await api('/entries/'+id);let highlightState;
+  try{highlightState=await api('/entries/'+id+'/highlights');detail.highlights=highlightState.highlights||[];detail.highlightConfigured=highlightState.configured!==false;detail.highlightCanCreate=!!highlightState.canCreate;}
+  catch(e){detail.highlights=[];detail.highlightConfigured=!!detail.notesConfigured;detail.highlightCanCreate=false;detail.highlightUnavailable=true;}
+  if(view!=='article'||articleId!==id)return;drawNativeArticle(container,detail);recordNativeArticleOpen(detail).catch(e=>error(new Error('文章已打开，但阅读状态未保存：'+e.message)));
 }
 function syncReadCards(entryId,status){
   for(const card of document.querySelectorAll('[data-entry-id="'+entryId+'"]')){
@@ -164,7 +231,7 @@ async function renderBackend(){
   showActivity();
 }
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-function annotationButtonState(entry,button){const enabled=readerButtonState(entry,button);button.textContent=enabled?'高亮 / 批注':'暂无可批注正文';return enabled;}
+function annotationButtonState(entry,button){const enabled=readerButtonState(entry,button);button.textContent=enabled?'Karakeep 批注':'暂无可批注正文';return enabled;}
 function readerButtonState(entry,button){
   const state=entry.archive_state||'NONE';
   if(entry.readerMode==='original'&&!['READY','QUEUED','IMPORTING','METADATA_NOTE'].includes(state)){

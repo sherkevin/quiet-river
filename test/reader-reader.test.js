@@ -199,3 +199,65 @@ test('saving an empty note on an untouched article does not create an empty book
   const row=db.get('SELECT bookmark_id,note_bookmark_id FROM entries WHERE id=1');
   assert.equal(row.bookmark_id,null);assert.equal(row.note_bookmark_id,null);
 });
+test('native highlight context comes from the exact Karakeep htmlContent used by its reader',async t=>{
+  const {db,service}=setup(t,{content:'<p>Readable body</p>'});db.run("UPDATE entries SET bookmark_id='content-bookmark',archive_state='READY' WHERE id=1");
+  service.kk.call=async(path)=>{assert.equal(path,'/api/v1/bookmarks/content-bookmark?includeContent=true');return {id:'content-bookmark',content:{htmlContent:'<p>Alpha &amp; beta</p>',crawlStatus:'success'}};};
+  const ctx=await service.articleHighlightContext(1);
+  assert.equal(ctx.bookmarkId,'content-bookmark');assert.equal(ctx.htmlContent,'<p>Alpha &amp; beta</p>');assert.match(ctx.contextHash,/^[a-f0-9]{64}$/);assert.equal(ctx.canHighlight,true);
+});
+test('metadata-only articles cannot prepare a native highlight context',async t=>{
+  const {service}=setup(t,{content:''});let called=false;service.kk.call=async()=>{called=true;return {};};
+  await assert.rejects(service.articleHighlightContext(1),e=>e.status===409);assert.equal(called,false);
+});
+test('native highlight creation binds offsets to an unchanged Karakeep context hash',async t=>{
+  const {db,service}=setup(t,{content:'<p>Readable body</p>'});db.run("UPDATE entries SET bookmark_id='content-bookmark',archive_state='READY' WHERE id=1");
+  const html='<p>prefix unique quote suffix</p>',calls=[];service.kk.call=async(path,method='GET',payload)=>{calls.push({path,method,payload});
+    if(path==='/api/v1/bookmarks/content-bookmark?includeContent=true')return {id:'content-bookmark',content:{htmlContent:html,crawlStatus:'success'}};
+    if(path==='/api/v1/highlights'&&method==='POST')return {id:'highlight-1',bookmarkId:'content-bookmark',startOffset:7,endOffset:19,color:'yellow',text:'unique quote',note:'segment note'};
+    throw new Error('unexpected highlight call '+method+' '+path);
+  };
+  const ctx=await service.articleHighlightContext(1);
+  const created=await service.createArticleHighlight(1,{contextHash:ctx.contextHash,startOffset:7,endOffset:19,text:'unique quote',note:'segment note',color:'yellow'});
+  assert.equal(created.id,'highlight-1');const post=calls.find(c=>c.path==='/api/v1/highlights'&&c.method==='POST');assert.equal(post.payload.bookmarkId,'content-bookmark');assert.equal(post.payload.note,'segment note');
+});
+test('native highlight creation rejects stale context and offset/text length mismatch before writing',async t=>{
+  const {db,service}=setup(t,{content:'<p>Readable body</p>'});db.run("UPDATE entries SET bookmark_id='content-bookmark',archive_state='READY' WHERE id=1");
+  let posts=0;service.kk.call=async(path,method='GET')=>{if(path.startsWith('/api/v1/bookmarks/'))return {content:{htmlContent:'<p>changed</p>',crawlStatus:'success'}};if(method==='POST'){posts++;return {};};throw new Error('unexpected');};
+  await assert.rejects(service.createArticleHighlight(1,{contextHash:'0'.repeat(64),startOffset:1,endOffset:5,text:'test',note:null,color:'yellow'}),e=>e.status===409);
+  await assert.rejects(service.createArticleHighlight(1,{contextHash:'0'.repeat(64),startOffset:1,endOffset:6,text:'test',note:null,color:'yellow'}),e=>e.status===400);
+  assert.equal(posts,0);
+});
+test('article highlight update and delete verify ownership before Karakeep mutation',async t=>{
+  const {db,service}=setup(t,{content:'<p>Readable body</p>'});db.run("UPDATE entries SET bookmark_id='content-bookmark',archive_state='READY' WHERE id=1");
+  const calls=[];service.kk.call=async(path,method='GET',payload)=>{calls.push({path,method,payload});
+    if(path.startsWith('/api/v1/highlights?'))return {highlights:[{id:'owned-highlight',bookmarkId:'content-bookmark',startOffset:1,endOffset:5,text:'test',note:null,color:'yellow'}],nextCursor:null};
+    if(path==='/api/v1/highlights/owned-highlight'&&method==='PATCH')return {id:'owned-highlight',bookmarkId:'content-bookmark',...payload};
+    if(path==='/api/v1/highlights/owned-highlight'&&method==='DELETE')return null;
+    throw new Error('unexpected highlight ownership call '+method+' '+path);
+  };
+  const updated=await service.updateArticleHighlight(1,'owned-highlight',{note:'new note',color:'green'});assert.equal(updated.note,'new note');assert.equal(updated.color,'green');
+  await service.deleteArticleHighlight(1,'owned-highlight');
+  await assert.rejects(service.updateArticleHighlight(1,'foreign-highlight',{note:'x'}),e=>e.status===404);
+  assert.equal(calls.some(c=>c.path==='/api/v1/highlights/foreign-highlight'),false);
+});
+test('native highlight HTTP routes stay authenticated and action-gated',async t=>{
+  const {db,service}=setup(t,{content:'<p>Readable body</p>'});db.run("UPDATE entries SET bookmark_id='content-bookmark',archive_state='READY' WHERE id=1");
+  const html='<p>prefix unique quote suffix</p>';let highlight={id:'highlight-http',bookmarkId:'content-bookmark',startOffset:7,endOffset:19,color:'yellow',text:'unique quote',note:null};
+  service.kk.call=async(path,method='GET',payload)=>{
+    if(path==='/api/v1/bookmarks/content-bookmark?includeContent=true')return {id:'content-bookmark',content:{htmlContent:html,crawlStatus:'success'}};
+    if(path.startsWith('/api/v1/highlights?'))return {highlights:highlight?[highlight]:[],nextCursor:null};
+    if(path==='/api/v1/highlights'&&method==='POST'){highlight={id:'highlight-http',...payload};return highlight;}
+    if(path==='/api/v1/highlights/highlight-http'&&method==='PATCH'){highlight={...highlight,...payload};return highlight;}
+    if(path==='/api/v1/highlights/highlight-http'&&method==='DELETE'){highlight=null;return null;}
+    throw new Error('unexpected HTTP highlight call '+method+' '+path);
+  };
+  const app=createApp(service,{accessToken:'reader-test'});await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+  const base='http://127.0.0.1:'+app.address().port,auth={'X-Qr-Token':'reader-test'},write={...auth,'X-QR-Action':'1','Content-Type':'application/json'};
+  assert.equal((await fetch(base+'/desk/api/entries/1/highlights')).status,401);
+  let response=await fetch(base+'/desk/api/entries/1/highlights',{headers:auth});assert.equal(response.status,200);assert.equal((await response.json()).highlights.length,1);
+  assert.equal((await fetch(base+'/desk/api/entries/1/highlights/context',{method:'POST',headers:auth,body:'{}'})).status,403);
+  response=await fetch(base+'/desk/api/entries/1/highlights/context',{method:'POST',headers:write,body:'{}'});const ctx=await response.json();assert.equal(response.status,200);
+  response=await fetch(base+'/desk/api/entries/1/highlights',{method:'POST',headers:write,body:JSON.stringify({contextHash:ctx.contextHash,startOffset:7,endOffset:19,text:'unique quote',note:'n',color:'green'})});assert.equal(response.status,201);assert.equal((await response.json()).color,'green');
+  response=await fetch(base+'/desk/api/entries/1/highlights/highlight-http',{method:'POST',headers:write,body:JSON.stringify({note:'updated'})});assert.equal(response.status,200);assert.equal((await response.json()).note,'updated');
+  response=await fetch(base+'/desk/api/entries/1/highlights/highlight-http/delete',{method:'POST',headers:write,body:'{}'});assert.equal(response.status,200);assert.equal((await response.json()).ok,true);
+});
