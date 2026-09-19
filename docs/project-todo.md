@@ -25,11 +25,11 @@ Updated: 2026-09-19
 
 ## Verification 2026-09-19
 
-- Production release: `4e026030740a9f703cda365e66274e18237d36d2`.
+- Production release: `c23f838fda212351f787c67917279dccdb096150`.
 - Production source count: 268; manifest/database parity is exact.
 - Source acceptance: `without_channel=0`; 16 WeChat adapter channels exist and are currently `NOT_CONFIGURED` because the WeRSS runtime is not configured.
-- Automated tests: `4e02603` exact-commit serial evidence: 271 passed, 0 failed, unchanged worktree.
-- Live HTTP smoke: passed on `4e02603`; a real archived article exposed its existing highlight list and exact Karakeep `htmlContent` context without mutation. A deployed `ReaderService` using an in-memory Bridge DB completed a real Karakeep highlight create/list/update/delete round-trip on a synthetic SingleFile bookmark and then removed the fixture.
+- Automated tests: `c23f838` exact-commit serial evidence: 285 passed, 0 failed, unchanged worktree.
+- Live HTTP smoke: passed on `c23f838`. Real restricted-source canaries also passed: Zhihu entry 8682 upgraded `META -> TEXT` with 171 text characters; Xiaohongshu entry 8932 upgraded `META -> TEXT` with 997 text characters after refreshing its signed note URL and applying the bounded Chromium `Navigation rejected` retry. In both cases URL/title identity, publication time, read state, and source-channel health remained unchanged.
 - Production source payload contains `推广搜老油条`; the obsolete `丁丁丁写字的地方` and `搜广推学习笔记` source names are absent.
 - DataFunTalk, Semantic Scholar, and Ed H. Chi are absent from the current manifest/source catalog.
 
@@ -38,7 +38,7 @@ Updated: 2026-09-19
 - done — `93cf7c8` makes `/desk/article/<entryId>` the default Card destination, reads current bodies from Miniflux, rebuilds upstream HTML through an explicit DOM/tag/URL allowlist, keeps original links secondary, and preserves Karakeep as the highlight bridge. Public full-text preparation is explicit; restricted META sources cannot use ECS extraction. Production smoke and real public/restricted article checks passed; pre-release recovery point: `/var/backups/quiet-river/platform-20260919T044929Z`.
 - done — `15a738d` adds whole-article note editing to the native article page while keeping Karakeep as the sole note store. Existing content bookmarks are reused; metadata-only articles get a separate Karakeep text-note bookmark referenced by `note_bookmark_id`, so note creation cannot consume the future content/highlight bookmark. Empty untouched notes create no bookmark. Pre-release recovery point: `/var/backups/quiet-river/platform-20260919T050229Z`.
 - done — `4e02603` adds native text-selection highlights and segment notes. The implementation deliberately rejects Karakeep `/content?format=text` as an offset source after 0/6 real archives matched the Reader coordinate system; it instead uses the exact `bookmark.content.htmlContent` consumed by Karakeep 0.33.2 and mirrors its `TreeWalker(SHOW_TEXT)` offset algorithm in an inert document. New writes require an exact unique quote match plus an unchanged server-side context hash; ambiguous/zero-match selections are refused. Existing highlights are only painted on the Quiet River body when their quote is uniquely locatable there, otherwise they remain visible in the annotation list. Pre-release recovery point: `/var/backups/quiet-river/platform-20260919T060654Z`.
-- doing — Raise native-body coverage for restricted sources without moving credentials to ECS. Extend the existing Shervin desktop-collector protocol so a known Zhihu/Xiaohongshu article can be enriched with bounded full/partial body HTML under the user's logged-in browser session; validate article identity before upload, preserve the original URL/date/read state, and never let an empty/login/challenge page downgrade previously stored text.
+- done — `c23f838` completes explicit on-demand native-body enrichment for registered Zhihu/Xiaohongshu entries without moving credentials to ECS. `entry_body_v1` is capability-gated and uses a separate per-entry queue; Shervin only executes fixed read-only commands, uploads at most 1 MiB of normalized text, and ECS HTML-escapes it before Miniflux storage. Xiaohongshu refreshes the registered author's current list and requires exact author/note identity before using a fresh signed URL locally. Chrome 153 / OpenCLI's Chromium-152+ `Navigation rejected` bug is handled only by one exact-error read-only retry with `--trace retain-on-failure`; unrelated failures are not retried. Real Zhihu and Xiaohongshu canaries passed with source health/read metadata preserved. Pre-release recovery point: `/var/backups/quiet-river/platform-20260919T083622Z`.
 
 ## Remaining follow-up
 
