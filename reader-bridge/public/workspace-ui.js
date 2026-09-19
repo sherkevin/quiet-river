@@ -1,4 +1,15 @@
 'use strict';
+function renderPager(page,total,onPage,pageSize=30){
+  const p=document.getElementById('pager');p.replaceChildren();const pages=Math.max(1,Math.ceil(total/pageSize));
+  if(total<=pageSize){p.hidden=true;return;}p.hidden=false;
+  const button=(text,target,disabled=false,current=false)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.disabled=disabled;if(current)b.setAttribute('aria-current','page');b.onclick=()=>{if(!disabled&&target!==page)onPage(target);};p.append(b);};
+  const dots=()=>{const span=document.createElement('span');span.className='pagination-dots';span.textContent='…';p.append(span);};
+  button('上一页',page-1,page<=0);const start=Math.max(0,page-2),end=Math.min(pages-1,page+2);
+  if(start>0){button('1',0);if(start>1)dots();}for(let i=start;i<=end;i++)button(String(i+1),i,false,i===page);
+  if(end<pages-1){if(end<pages-2)dots();button(String(pages),pages-1);}
+  const info=document.createElement('span');info.className='pagination-info';info.textContent='第 '+(page+1)+' / '+pages+' 页 · 共 '+total+' 条';p.append(info);button('下一页',page+1,page>=pages-1);
+}
+function hidePager(){const p=document.getElementById('pager');p.replaceChildren();p.hidden=true;}
 function editTags(container,initial,onSave,heading) {
   if(container.querySelector('.tag-editor'))return;
   const form=document.createElement('form');form.className='tag-editor';

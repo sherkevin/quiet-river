@@ -31,9 +31,9 @@ Updated: 2026-09-19
 - Production source payload contains `推广搜老油条`; the obsolete `丁丁丁写字的地方` and `搜广推学习笔记` source names are absent.
 - DataFunTalk, Semantic Scholar, and Ed H. Chi are absent from the current manifest/source catalog.
 
-## Latest task
+## Active task
 
-- done — Article-card blogger navigation now opens the matching in-site blogger profile first; the profile provides the bound external homepage as `原地址`. Exact-commit serial tests: 249/249; platform smoke passed; production static/API checks confirmed internal source routing, sourceId/catalog parity, `原地址` exposure, and a working profile deep link. The optional `workspace-dom-check.js` was not used because `jsdom` is not installed on ECS; no production dependency was added for that auxiliary check.
+- doing — Add real pagination to the article feed, blogger catalog, and individual blogger profile. The individual blogger profile must retain the blogger metadata/actions and also render all stored article Cards for that blogger across pages; no historical Cards may be dropped.
 
 ## Remaining follow-up
 

@@ -153,3 +153,23 @@ test('article card opens the in-site blogger profile before any external homepag
  assert.match(app,/home\.href=u\.href/);
  assert.match(workspace,/closest\('a,button,input,textarea,select,label,form,\.tag-chips'\)/);
 });
+test('source-specific pagination retains every stored article card',t=>{
+ const {service}=setup(t);for(let i=1;i<=65;i++)service.project(article(i),channel);
+ const p1=service.list({sourceId:'author',limit:30,offset:0});
+ const p2=service.list({sourceId:'author',limit:30,offset:30});
+ const p3=service.list({sourceId:'author',limit:30,offset:60});
+ assert.equal(p1.total,65);assert.deepEqual([p1.items.length,p2.items.length,p3.items.length],[30,30,5]);
+ const ids=[...p1.items,...p2.items,...p3.items].map(x=>x.id);
+ assert.equal(new Set(ids).size,65);
+});
+test('article feed, blogger catalog and blogger profile expose numbered pagination',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/index.html'),'utf8');
+ const css=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/style.css'),'utf8');
+ const workspace=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ const app=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/app.js'),'utf8');
+ assert.match(html,/id="pager" class="pagination"/);assert.match(workspace,/function renderPager\(/);
+ assert.match(app,/offset=articlePage\*PAGE_SIZE/);assert.match(app,/renderPager\(articlePage,total/);
+ assert.match(app,/const sourceIndex=matched\+\+/);assert.match(app,/renderPager\(sourcePage,matched/);
+ assert.match(app,/data-source-cards/);assert.match(app,/loadSourceProfileCards/);assert.match(app,/renderPager\(profilePage,result\.total/);
+ assert.match(css,/\.pagination/);assert.match(css,/\.source-article-list/);
+});
