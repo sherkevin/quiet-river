@@ -57,14 +57,22 @@ function preflight(){
   if(doctor.status!==0||!/Extension: connected/.test(doctor.stdout))throw new Error('Open Chrome and connect the OpenCLI Browser Bridge extension');
   transport({op:'status'});log('OpenCLI extension and restricted ECS connection verified. Cookies stay in Windows.');
 }
+function runOpencliRead(cfg,argv,spawnFn=spawnSync){
+  const options={encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:cfg.profile||process.env.OPENCLI_PROFILE||''}};
+  let result=spawnFn(process.execPath,argv,options);
+  if((result.error||result.status!==0)&&/Navigation rejected/i.test(result.stderr||'')){
+    const retry=[...argv],i=retry.indexOf('--trace');if(i>=0&&retry[i+1]==='off')retry[i+1]='retain-on-failure';
+    result=spawnFn(process.execPath,retry,options);result.qrNavigationRetried=true;
+  }
+  return result;
+}
 function collect(job,limitOverride){
   if(!['zhihu','xiaohongshu','bilibili'].includes(job.platform)||!/^[-\w]+$/.test(job.authorId))throw new Error('Invalid job identity');
   const command=job.platform==='xiaohongshu'?'user':job.platform==='bilibili'?'user-videos':job.kind==='answers'?'user-answers':job.kind==='articles'?'user-articles':null;
   if(!command)throw new Error('Unsupported read-only command');
   const limit=Math.min(20,Math.max(1,Number(limitOverride??job.limit??20)||20));
   const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(limit),'-f','json','--trace','off','--site-session','ephemeral'];
-  const r=spawnSync(process.execPath,argv,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,
-    env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
+  const r=runOpencliRead(config,argv);
   if(r.error||r.status!==0){const diagnostic=/Navigation rejected/i.test(r.stderr||'')?'navigation_rejected':'upstream_rejected';log('OpenCLI check failed: '+diagnostic);return {leaseId:job.leaseId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),items:[]};}
   try{return {leaseId:job.leaseId,status:'OK',items:normalize(job,JSON.parse(r.stdout.replace(/^\uFEFF/,'')))};}
   catch{return {leaseId:job.leaseId,status:'UPSTREAM_ERROR',items:[]};}
@@ -74,7 +82,7 @@ function collectEnrichment(job){
   originalLink(job,job.url);let argv,payload;
   if(job.platform==='zhihu'&&job.kind==='answers')argv=[config.opencliMain,'zhihu','answer-detail',job.url,'--max-content','0','-f','json','--trace','off','--site-session','ephemeral'];
   else if(job.platform==='xiaohongshu'&&job.kind==='notes'){
-    const refresh=spawnSync(process.execPath,[config.opencliMain,'xiaohongshu','user',job.authorId,'--limit','50','-f','json','--trace','off','--site-session','ephemeral'],{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
+    const refresh=runOpencliRead(config,[config.opencliMain,'xiaohongshu','user',job.authorId,'--limit','50','-f','json','--trace','off','--site-session','ephemeral']);
     if(refresh.error||refresh.status!==0)return {leaseId:job.leaseId,entryId:job.entryId,status:refresh.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(refresh.status,refresh.stderr||refresh.error?.message||'')};
     let fresh='';try{fresh=selectFreshXhsNoteUrl(job,JSON.parse(refresh.stdout.replace(/^\uFEFF/,'')));}catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};}
     if(!fresh)return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};
@@ -82,7 +90,7 @@ function collectEnrichment(job){
   }
   else if(job.platform==='zhihu'&&job.kind==='articles')argv=[config.opencliMain,'web','read','--url',job.url,'--download-images','false','--stdout','true','--frames','none','--wait','3','--trace','off','--site-session','ephemeral'];
   else throw new Error('Unsupported enrichment task');
-  const r=spawnSync(process.execPath,argv,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
+  const r=runOpencliRead(config,argv);
   if(r.error||r.status!==0)return {leaseId:job.leaseId,entryId:job.entryId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||'')};
   try{payload=job.kind==='articles'?r.stdout:JSON.parse(r.stdout.replace(/^\uFEFF/,''));const normalized=normalizeEnrichment(job,payload);return {leaseId:job.leaseId,status:'OK',...normalized};}
   catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};}
@@ -141,4 +149,4 @@ async function main(){
   if(failures)process.exitCode=2;
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={normalize,normalizeEnrichment,statusFor,collectEnrichment,confirmedCollect,authRecovered,proxyTunnelArgs};
+module.exports={normalize,normalizeEnrichment,statusFor,collectEnrichment,runOpencliRead,confirmedCollect,authRecovered,proxyTunnelArgs};

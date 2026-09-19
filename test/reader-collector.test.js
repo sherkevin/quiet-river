@@ -4,7 +4,7 @@ const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
 const {normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
-const {confirmedCollect,authRecovered,proxyTunnelArgs}=require('../tools/windows/collector.cjs');
+const {confirmedCollect,authRecovered,proxyTunnelArgs,runOpencliRead}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
  const db=new Database(':memory:');t.after(()=>db.close());
@@ -285,4 +285,18 @@ test('Xiaohongshu enrichment refreshes the signed URL by exact author-list note 
  const rows=[{id:'ffffffffffffffffffffffff',url:'https://www.xiaohongshu.com/explore/ffffffffffffffffffffffff?xsec_token=other'},{id:'abcdef0123456789abcdef01',url:fresh}];
  assert.equal(selectFreshXhsNoteUrl(job,rows),fresh);
  assert.equal(selectFreshXhsNoteUrl(job,[{id:'000000000000000000000000',url:fresh}]),'');
+});
+test('read-only OpenCLI retries Chromium Navigation rejected exactly once with trace retention',()=>{
+ const calls=[],spawn=(node,argv,options)=>{calls.push({node,argv:[...argv],options});return calls.length===1?{status:1,stderr:'Navigation rejected.',stdout:''}:{status:0,stderr:'',stdout:'[]'};};
+ const argv=['opencli-main.js','xiaohongshu','user','author','--trace','off','-f','json'];
+ const result=runOpencliRead({profile:''},argv,spawn);
+ assert.equal(result.status,0);assert.equal(result.qrNavigationRetried,true);assert.equal(calls.length,2);
+ assert.equal(calls[0].argv[calls[0].argv.indexOf('--trace')+1],'off');
+ assert.equal(calls[1].argv[calls[1].argv.indexOf('--trace')+1],'retain-on-failure');
+ assert.equal(argv[argv.indexOf('--trace')+1],'off');
+});
+test('read-only OpenCLI does not retry unrelated failures',()=>{
+ let calls=0;const spawn=()=>{calls++;return {status:1,stderr:'HTTP 403 access denied',stdout:''};};
+ const result=runOpencliRead({profile:''},['opencli-main.js','xiaohongshu','user','author','--trace','off'],spawn);
+ assert.equal(result.status,1);assert.equal(calls,1);assert.equal(result.qrNavigationRetried,undefined);
 });
