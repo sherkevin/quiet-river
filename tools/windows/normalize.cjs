@@ -17,6 +17,21 @@ function normalize(job,rows){
     return {title:title.slice(0,1000),link:original.link,published,summary:''};
   });
 }
+function normalizeEnrichment(job,payload){
+  if(!job||job.taskType!=='entry_body_v1'||!Number.isSafeInteger(Number(job.entryId))||!['zhihu','xiaohongshu'].includes(job.platform))throw new Error('Invalid enrichment job');
+  const expected=originalLink(job,job.url),max=1024*1024;let content='';
+  if(job.platform==='zhihu'&&job.kind==='answers'){
+    const row=Array.isArray(payload)?payload[0]:payload;if(!row||typeof row!=='object'||typeof row.url!=='string')throw new Error('Invalid Zhihu answer detail');
+    const actual=originalLink(job,row.url);if(actual.guid!==expected.guid)throw new Error('Enrichment identity mismatch');content=String(row.content||'');
+  }else if(job.platform==='xiaohongshu'&&job.kind==='notes'){
+    if(!Array.isArray(payload))throw new Error('Invalid Xiaohongshu note detail');const fields=Object.fromEntries(payload.filter(x=>x&&typeof x.field==='string').map(x=>[x.field,String(x.value??'')]));content=fields.content||'';
+  }else if(job.platform==='zhihu'&&job.kind==='articles'&&typeof payload==='string')content=payload;
+  else throw new Error('Unsupported enrichment kind');
+  content=content.replace(/^\uFEFF/,'').trim();
+  if(!content||Buffer.byteLength(content,'utf8')>max)throw new Error('Enrichment body missing or too large');
+  if(content.length<4000&&/登录后查看|请登录|登录已失效|验证码|安全限制|访问链接异常|页面不见了|笔记不存在|access denied|security block/i.test(content))throw new Error('Enrichment returned a login or challenge page');
+  return {entryId:Number(job.entryId),content};
+}
 function statusFor(code,text){
   if(code===77||/ERR_TICKET_NOT_EXIST|not logged in|login required|请先登录|登录已失效/i.test(text))return 'AUTH_REQUIRED';
   if(/Navigation rejected|403|access denied|访问受限|验证码/i.test(text))return 'ACCESS_BLOCKED';
@@ -24,4 +39,4 @@ function statusFor(code,text){
   if(code===75||/timeout|timed out/i.test(text))return 'TIMEOUT';
   return 'UPSTREAM_ERROR';
 }
-module.exports={normalize,statusFor};
+module.exports={normalize,normalizeEnrichment,statusFor};

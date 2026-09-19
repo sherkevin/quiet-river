@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
-const {normalize,statusFor}=require('../tools/windows/normalize.cjs');
+const {normalize,normalizeEnrichment,statusFor}=require('../tools/windows/normalize.cjs');
 const {confirmedCollect,authRecovered,proxyTunnelArgs}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
@@ -203,4 +203,78 @@ test('Bilibili desktop validator rejects unrelated hosts',()=>{
  assert.match(joined,/127\.0\.0\.1:17890:127\.0\.0\.1:7890/);
  assert.match(joined,/qr-proxy-tunnel@ecs\.example/);
  assert.ok(!joined.includes('0.0.0.0'));assert.ok(!joined.includes('qr-collector@'));
+});
+function enrichmentFixture(t,{platform='zhihu',kind='answers'}={}){
+ const {ReaderService}=require('../reader-bridge/service');const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'enrich-source',name:'Enrich author',platform,url:platform==='zhihu'?'https://www.zhihu.com/people/enrich-author':'https://www.xiaohongshu.com/user/profile/0123456789abcdef01234567',tags:[],adapter:{id:platform==='zhihu'?'enrich-author':'0123456789abcdef01234567'}};
+ const config={adapters:{desktopPlatforms:[platform]}},channel=channelsFor(source,config.adapters).find(c=>c.label===kind);db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=17 WHERE id=?',channel.id);
+ const url=platform==='zhihu'?(kind==='answers'?'https://www.zhihu.com/question/123/answer/456':'https://zhuanlan.zhihu.com/p/789'):'https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01?xsec_token=signed';
+ let upstream={id:101,title:'Restricted article',url,author:'Author',published_at:'2026-09-19T00:00:00Z',content:'',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/101'&&method==='GET')return upstream;if(path==='/v1/entries/101'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const service=new ReaderService(db,{...config,miniflux:'http://unused',karakeep:'http://unused',karakeepToken:'',adapters:config.adapters},{mf});service.project(upstream,channel);
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,getUpstream:()=>upstream,puts};
+}
+test('desktop enrichment is capability-gated and does not starve behind scheduled list jobs',t=>{
+ const legacyFixture=enrichmentFixture(t);legacyFixture.collector.queueEnrichment(101);
+ const legacy=legacyFixture.collector.claim(['zhihu']);assert.ok(legacy.job);assert.equal(legacy.job.taskType,undefined);
+ const compatibleFixture=enrichmentFixture(t);compatibleFixture.collector.queueEnrichment(101);
+ const compatible=compatibleFixture.collector.claim(['zhihu'],['entry_body_v1']);assert.equal(compatible.job.taskType,'entry_body_v1');assert.equal(compatible.job.entryId,101);assert.equal(compatible.job.url,'https://www.zhihu.com/question/123/answer/456');
+ assert.deepEqual(Object.keys(compatible.job).sort(),['authorId','entryId','kind','leaseId','platform','sourceId','taskType','title','url'].sort());
+});
+test('successful desktop enrichment upgrades only article content and preserves source health/read metadata',async t=>{
+ const f=enrichmentFixture(t);f.collector.queueEnrichment(101);const claimed=f.collector.claim(['zhihu'],['entry_body_v1']);
+ const before=f.db.get('SELECT status,published_at FROM entries WHERE id=101'),channelBefore=f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id);
+ const result={leaseId:claimed.job.leaseId,entryId:101,status:'OK',content:'Full body <script>must stay text</script>\n\nSecond paragraph'};
+ const ack=await f.collector.submit(result);assert.equal(ack.state,'ENRICHED');assert.equal(ack.updated,true);assert.equal(f.puts.length,1);assert.match(f.puts[0].content,/&lt;script&gt;/);assert.doesNotMatch(f.puts[0].content,/<script>/);
+ const row=f.db.get('SELECT status,published_at,content_state,content_origin,archive_state FROM entries WHERE id=101');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.content_state,'TEXT');assert.equal(row.content_origin,'desktop_enrichment');
+ const channelAfter=f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id);assert.deepEqual(channelAfter,channelBefore);
+ assert.deepEqual(await f.collector.submit(result),ack);await assert.rejects(f.collector.submit({...result,content:'changed'}),/changed enrichment replay/);
+});
+test('desktop enrichment failures keep old content and only confirmed auth failure freezes credentials',async t=>{
+ const f=enrichmentFixture(t);f.collector.queueEnrichment(101);let claim=f.collector.claim(['zhihu'],['entry_body_v1']);
+ let ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:101,status:'ACCESS_BLOCKED'});assert.equal(ack.updated,false);assert.equal(f.db.get('SELECT content_state FROM entries WHERE id=101').content_state,'META');assert.equal(f.db.get('SELECT state FROM groups').state,'UNKNOWN');
+ f.collector.queueEnrichment(101);f.db.run('UPDATE collector_enrichments SET next_attempt=0');f.db.run('UPDATE groups SET next_allowed=0');claim=f.collector.claim(['zhihu'],['entry_body_v1']);
+ ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:101,status:'AUTH_REQUIRED'});assert.equal(ack.state,'AUTH_REQUIRED');assert.equal(f.db.get('SELECT state FROM groups').state,'AUTH_REQUIRED');assert.equal(f.db.get('SELECT state FROM channels').state,'NEVER_CHECKED');
+ const resumed=f.collector.resume('zhihu',Date.now()+86500000);assert.equal(resumed.resumed,true);assert.equal(f.db.get('SELECT state FROM collector_enrichments').state,'QUEUED');
+});
+test('desktop enrichment rejects challenge pages and oversize content before Miniflux write',async t=>{
+ const f=enrichmentFixture(t);f.collector.queueEnrichment(101);let claim=f.collector.claim(['zhihu'],['entry_body_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:101,status:'OK',content:'请登录后查看全文'}),/invalid enrichment body/);assert.equal(f.puts.length,0);
+ f.db.run("UPDATE collector_enrichments SET state='QUEUED',lease_id=NULL,expires_at=0,digest=NULL,next_attempt=0");f.db.run('UPDATE groups SET next_allowed=0');claim=f.collector.claim(['zhihu'],['entry_body_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:101,status:'OK',content:'x'.repeat(1024*1024+1)}),/invalid enrichment body/);assert.equal(f.puts.length,0);
+});
+test('Windows enrichment normalizer keeps only the known article body and verifies answer identity',()=>{
+ const job={taskType:'entry_body_v1',entryId:7,platform:'zhihu',kind:'answers',authorId:'author',url:'https://www.zhihu.com/question/123/answer/456'};
+ const result=normalizeEnrichment(job,[{id:'456',url:job.url,content:'complete answer',votes:99,cookie:'secret'}]);
+ assert.deepEqual(result,{entryId:7,content:'complete answer'});
+ assert.throws(()=>normalizeEnrichment(job,[{url:'https://www.zhihu.com/question/123/answer/999',content:'wrong'}]),/identity mismatch/);
+});
+test('Windows enrichment normalizer extracts only Xiaohongshu content rows and preserves signed target validation',()=>{
+ const job={taskType:'entry_body_v1',entryId:8,platform:'xiaohongshu',kind:'notes',authorId:'0123456789abcdef01234567',url:'https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01?xsec_token=signed'};
+ const payload=[{field:'title',value:'T'},{field:'content',value:'full note text'},{field:'likes',value:'88'},{field:'cookie',value:'never upload'}];
+ assert.deepEqual(normalizeEnrichment(job,payload),{entryId:8,content:'full note text'});
+});
+test('Windows enrichment normalizer accepts Zhihu article stdout but bounds the payload',()=>{
+ const job={taskType:'entry_body_v1',entryId:9,platform:'zhihu',kind:'articles',authorId:'author',url:'https://zhuanlan.zhihu.com/p/789'};
+ assert.deepEqual(normalizeEnrichment(job,'# Title\n\narticle markdown'),{entryId:9,content:'# Title\n\narticle markdown'});
+ assert.throws(()=>normalizeEnrichment(job,'x'.repeat(1024*1024+1)),/too large/);
+});
+test('native body enrichment status is authenticated and queueing is action-gated',async t=>{
+ const f=enrichmentFixture(t),app=createApp(f.service,{accessToken:'reader-test',collectorToken:'collector-test'});await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+ const base='http://127.0.0.1:'+app.address().port,auth={'X-Qr-Token':'reader-test','Content-Type':'application/json'},write={...auth,'X-QR-Action':'1'};
+ assert.equal((await fetch(base+'/desk/api/entries/101/enrichment')).status,401);
+ let response=await fetch(base+'/desk/api/entries/101/enrichment',{headers:auth});assert.equal(response.status,200);assert.equal((await response.json()).state,'NONE');
+ assert.equal((await fetch(base+'/desk/api/entries/101/enrichment',{method:'POST',headers:auth,body:'{}'})).status,403);
+ response=await fetch(base+'/desk/api/entries/101/enrichment',{method:'POST',headers:write,body:'{}'});assert.equal(response.status,202);assert.equal((await response.json()).state,'QUEUED');
+});
+test('Windows collector advertises enrichment capability without changing normal source-list result shape',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/capabilities:\['entry_body_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
+ assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
+});
+test('Windows enrichment normalizer rejects short login and challenge bodies before upload',()=>{
+ const article={taskType:'entry_body_v1',entryId:10,platform:'zhihu',kind:'articles',authorId:'author',url:'https://zhuanlan.zhihu.com/p/789'};
+ assert.throws(()=>normalizeEnrichment(article,'请登录后查看全文'),/login or challenge/);
+ const xhs={taskType:'entry_body_v1',entryId:11,platform:'xiaohongshu',kind:'notes',authorId:'0123456789abcdef01234567',url:'https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01?xsec_token=signed'};
+ assert.throws(()=>normalizeEnrichment(xhs,[{field:'content',value:'验证码 安全限制'}]),/login or challenge/);
 });

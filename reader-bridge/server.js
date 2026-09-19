@@ -16,7 +16,7 @@ const {createReaderWebSession}=require('./reader-web-session');
 
 function secureEqual(a,b){return typeof a==='string'&&typeof b==='string'&&crypto.timingSafeEqual(Buffer.from(hash(a)),Buffer.from(hash(b)));}
 function cookies(header){const out={};for(const s of String(header||'').split(';')){const i=s.indexOf('=');if(i<0)continue;try{out[s.slice(0,i).trim()]=decodeURIComponent(s.slice(i+1).trim());}catch{}}return out;}
-async function bodyJSON(req){let n=0;const parts=[];for await(const c of req){n+=c.length;if(n>262144)throw new Error('request too large');parts.push(c);}return parts.length?JSON.parse(Buffer.concat(parts)):{};}
+async function bodyJSON(req,maxBytes=262144){let n=0;const parts=[];for await(const c of req){n+=c.length;if(n>maxBytes)throw new Error('request too large');parts.push(c);}return parts.length?JSON.parse(Buffer.concat(parts)):{};}
 function reply(res,status,value){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
 function validPreferences(p){
   const clean={tags:{},authors:{},keywords:String(p.keywords||'').slice(0,2000),digestCount:Math.max(1,Math.min(50,Number(p.digestCount)||15)),timezone:p.timezone||'Asia/Shanghai'};
@@ -38,7 +38,7 @@ function createApp(service,config,clients={}){
         if(req.method!=='POST')return reply(res,405,{error:'POST required'});
         if(req.headers.origin||!config.collectorToken||!secureEqual(String(req.headers['x-qr-collector-token']||''),config.collectorToken))return reply(res,401,{error:'Collector authorization required'});
         if(!service.desktop)return reply(res,503,{error:'Collector not configured'});
-        return reply(res,200,await service.desktop.handle(await bodyJSON(req)));
+        return reply(res,200,await service.desktop.handle(await bodyJSON(req,2*1024*1024)));
       }
 
       const host=String(req.headers['x-forwarded-host']||req.headers.host||'').split(',')[0].trim();
@@ -95,6 +95,9 @@ function createApp(service,config,clients={}){
       }
       const articleDetail=/^\/desk\/api\/entries\/(\d+)$/.exec(p);
       if(articleDetail&&req.method==='GET')return reply(res,200,await service.articleDetail(Number(articleDetail[1])));
+      const bodyEnrichment=/^\/desk\/api\/entries\/(\d+)\/enrichment$/.exec(p);
+      if(bodyEnrichment&&req.method==='GET')return reply(res,200,service.bodyEnrichment(Number(bodyEnrichment[1])));
+      if(bodyEnrichment&&req.method==='POST')return reply(res,202,service.requestBodyEnrichment(Number(bodyEnrichment[1])));
       const articlePrepare=/^\/desk\/api\/entries\/(\d+)\/prepare$/.exec(p);
       if(articlePrepare&&req.method==='POST')return reply(res,200,await service.articleDetail(Number(articlePrepare[1]),{prepare:true}));
       const articleNote=/^\/desk\/api\/entries\/(\d+)\/note$/.exec(p);

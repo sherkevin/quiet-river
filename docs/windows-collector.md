@@ -6,7 +6,7 @@
 本方案使用本机已登录浏览器执行只读作者列表命令，不读取浏览器 Cookie 数据库，不导出浏览器会话。
 项目现状简报已说明小红书旧通道依赖本机浏览器；不能承诺把 Cookie 写进 ECS 环境变量即可迁移该能力。
 因此采用：Windows 采集元信息 → SSH 加密上传 → ECS 主动导入 Miniflux → 正常展示、继承标签与记录已读。
-正文抓取、图片下载、高亮开发不属于这批工作；现有阅读数据不修改。
+作者列表采集仍只负责发现条目；正文补全现在是独立的 `entry_body_v1` 低耦合任务，不把单篇正文失败放大成整个博主刷新失败。图片下载仍不做；高亮由 ECS/Karakeep 独立处理。
 
 ## 2. 运行方式
 
@@ -45,12 +45,12 @@ python3 tools/windows/install-ecs.py /path/to/collector-public-key.pub /path/to/
 
 - 博主/标签以 ECS 为准，Windows不自行添加博主或传递第三方推荐列表。
 - 网页刷新、自动更新、Windows一键执行共用 ECS 通道队列；普通 Feed 仍在服务器抓取。
-- Windows每次领取一个15分钟租约，只运行固定的四个只读命令（知乎回答/文章、小红书作者列表、B站投稿），不从服务端接收任意 shell。
+- Windows每次只领取一个15分钟浏览器租约。作者列表仍只运行固定的四个只读命令；声明 `entry_body_v1` capability 后，还可运行三种固定正文命令：知乎 `answer-detail`、小红书 `note`、知乎文章 `web read --stdout`。服务端不能下发任意 shell、argv 或输出路径。
 - 同一时间只允许一个浏览器任务；每个凭证组遵守至少8秒间隔、来源6小时重抓周期。
 - 登录失败暂停整组，导航拒绝/平台限制与凭证失效分开；不自动绕过验证码或授权确认。
 - 上传重试复用租约和相同消息；确认成功的消息不再次入库，不重置已读状态。
 - 网络中断时结果保留在Windows；租约过期的结果另存本地并明确提示，不当作上传成功。
-- ECS只接收规范化元信息，不接收原始浏览器输出、Cookie、任意HTML或本机日志。
+- 作者列表仍只上传规范化元信息。正文任务只上传已知 entry 的规范化文本正文（UTF-8 最多 1 MiB）；Cookie、任意浏览器 HTML、任意字段、命令参数和本机日志都不上传。ECS 将正文再次 HTML escape 后才写入 Miniflux。
 - Windows关闭或休眠时只能展示已同步内容；打开阅读器并不能唤醒离线电脑。
 
 ## 6. 当前验证事实与待办
@@ -122,3 +122,13 @@ Mihomo 仅监听 127.0.0.1:7890 和 Docker bridge 172.18.0.1:7891，公网网卡
 旧的 Shervin 127.0.0.1:7890 → reverse SSH → ECS 17890/17891 保留为短期回滚路径，但 Miniflux 已不再指向17891。Mihomo 配置与私有 provider 会进入 root-only 本地恢复点；provider 内容绝不提交公开仓库。
 
 Clash Party 当前订阅 URL 不能被普通 HTTP 客户端直接 GET，因此 ECS 不伪装成已完成订阅自动更新。当前节点集为已验证静态 bootstrap；后续节点变更需经受限同步流程更新，Shervin 离线不会影响 ECS 使用最后一次成功 provider。
+
+## 10. 按需正文补全 `entry_body_v1`（2026-09-19）
+
+站内文章页对仍是 `META/PARTIAL` 的知乎、小红书条目提供显式“让 Shervin 补正文”按钮。仅点击按钮才入队；打开文章页本身只读取任务状态，不暗中触发浏览器访问。Shervin 离线时任务保留，collector 再次运行后继续。
+
+正文任务与博主列表任务分表、分状态：手动来源刷新优先级最高，其次是用户正在阅读时请求的单篇正文，最后才是批量/定时来源刷新。单篇正文的超时、导航拒绝不会改写博主通道的 `last_success/state`；只有重复确认的 `AUTH_REQUIRED` 才冻结共享凭证组。
+
+固定只读命令为：知乎回答 `answer-detail`（完整纯文本）、小红书 `note`（正文描述文本）、知乎文章 `web read --stdout --download-images false`（Markdown 文本）。Windows 在启动 Browser Bridge 前再次校验服务端下发的已知原链；ECS 无法下发任意命令、参数数组或文件路径。
+
+正文上传只包含 `entryId + content`，最大 1 MiB。ECS 不信任该文本为 HTML，而是统一 escape 后按段落写入 Miniflux；更新请求不发送 read/unread 状态。原 URL、发布时间、文章标签和已读状态保留，空正文、登录页、短验证码/风控页不会覆盖已经保存的文本。

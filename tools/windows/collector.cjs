@@ -2,7 +2,8 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {spawnSync,spawn}=require('node:child_process');
-const {normalize,statusFor}=require('./normalize.cjs');
+const {normalize,normalizeEnrichment,statusFor}=require('./normalize.cjs');
+const {originalLink}=require('./original-link.cjs');
 const root=process.env.QR_COLLECTOR_HOME||path.join(process.env.LOCALAPPDATA||os.homedir(),'QuietRiverCollector');
 const configPath=path.join(root,'config.json'),args=process.argv.slice(2);
 const option=(name,fallback)=>args.includes(name)?args[args.indexOf(name)+1]:fallback;
@@ -28,7 +29,7 @@ function transport(message){
     '-o','UserKnownHostsFile='+config.knownHostsFile,'-o','ConnectTimeout=10',
     '-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3',config.user+'@'+config.host,'collector'];
   const result=spawnSync(config.ssh||'ssh.exe',argv,{input:JSON.stringify(message),encoding:'utf8',
-    timeout:150000,maxBuffer:1048576,windowsHide:true});
+    timeout:150000,maxBuffer:4*1024*1024,windowsHide:true});
   let parsed;try{parsed=JSON.parse(result.stdout||'');}catch{}
   if(result.error||result.status!==0||parsed?.error){
     const error=new Error('ECS transport failed; pending results kept for retry');
@@ -68,6 +69,18 @@ function collect(job,limitOverride){
   try{return {leaseId:job.leaseId,status:'OK',items:normalize(job,JSON.parse(r.stdout.replace(/^\uFEFF/,'')))};}
   catch{return {leaseId:job.leaseId,status:'UPSTREAM_ERROR',items:[]};}
 }
+function collectEnrichment(job){
+  if(job.taskType!=='entry_body_v1'||!['zhihu','xiaohongshu'].includes(job.platform)||!['answers','articles','notes'].includes(job.kind))throw new Error('Invalid enrichment task');
+  originalLink(job,job.url);let argv,payload;
+  if(job.platform==='zhihu'&&job.kind==='answers')argv=[config.opencliMain,'zhihu','answer-detail',job.url,'--max-content','0','-f','json','--trace','off','--site-session','ephemeral'];
+  else if(job.platform==='xiaohongshu'&&job.kind==='notes')argv=[config.opencliMain,'xiaohongshu','note',job.url,'-f','json','--trace','off','--site-session','ephemeral'];
+  else if(job.platform==='zhihu'&&job.kind==='articles')argv=[config.opencliMain,'web','read','--url',job.url,'--download-images','false','--stdout','true','--frames','none','--wait','3','--trace','off','--site-session','ephemeral'];
+  else throw new Error('Unsupported enrichment task');
+  const r=spawnSync(process.execPath,argv,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
+  if(r.error||r.status!==0)return {leaseId:job.leaseId,entryId:job.entryId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||'')};
+  try{payload=job.kind==='articles'?r.stdout:JSON.parse(r.stdout.replace(/^\uFEFF/,''));const normalized=normalizeEnrichment(job,payload);return {leaseId:job.leaseId,status:'OK',...normalized};}
+  catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};}
+}
 async function confirmedCollect(job,collectFn=collect,sleepFn=sleep){
   const first=collectFn(job);if(first.status!=='AUTH_REQUIRED')return first;
   await sleepFn(3000);return collectFn(job);
@@ -88,12 +101,12 @@ async function main(){
       if(fs.existsSync(pending)){
         const result=JSON.parse(fs.readFileSync(pending,'utf8'));
         try{const ack=transport({op:'submit',result});if(!ack.accepted)throw new Error('Missing acknowledgement');
-          if(ack.state!=='SUCCEEDED_PARTIAL')failures++;
-          fs.unlinkSync(pending);log(`ECS accepted ${ack.received} records; ${ack.state}`);done++;
+          if(!['SUCCEEDED_PARTIAL','ENRICHED'].includes(ack.state))failures++;
+          fs.unlinkSync(pending);log(ack.state==='ENRICHED'?`ECS accepted enriched article body; ${ack.state}`:`ECS accepted ${ack.received} records; ${ack.state}`);done++;
         }catch(e){if(e.status===409){fs.renameSync(pending,pending+'.expired-'+Date.now());log('Expired result retained locally; new collection required');}else throw e;}
         if(done>=max)break;
       }
-      const next=transport({op:'claim',platforms});
+      const next=transport({op:'claim',platforms,capabilities:['entry_body_v1']});
       if(!next.job){
         let resumed=false;
         if(next.authProbe){
@@ -111,8 +124,9 @@ async function main(){
         if(!args.includes('--watch')&&!next.waitForCooldown){log('No currently eligible task. Cooling down or waiting for browser authorization is not a successful source check.');break;}
         await sleep(Math.max(8,Math.min(60,next.retryAfter||30))*1000);continue;
       }
-      log('Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
-      const result=await confirmedCollect(next.job);
+      const enrichment=next.job.taskType==='entry_body_v1';
+      log(enrichment?'Reading one known '+next.job.platform+' article body for Quiet River':'Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
+      const result=await confirmedCollect(next.job,enrichment?collectEnrichment:collect);
       if(result.status==='AUTH_REQUIRED')log('Authentication failure repeated on the same subscribed route; shared group will pause.');
       persist(pending,result);await sleep(8000);
     }catch(e){log(e.message);if(!args.includes('--watch'))throw e;await sleep(30000);}
@@ -121,4 +135,4 @@ async function main(){
   if(failures)process.exitCode=2;
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={normalize,statusFor,confirmedCollect,authRecovered,proxyTunnelArgs};
+module.exports={normalize,normalizeEnrichment,statusFor,collectEnrichment,confirmedCollect,authRecovered,proxyTunnelArgs};
