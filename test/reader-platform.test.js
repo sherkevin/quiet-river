@@ -2,6 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+const http=require('node:http');
 const {Database}=require('../reader-bridge/database');
 const {ReaderService}=require('../reader-bridge/service');
 const {createApp,secureEqual,cookies,validPreferences}=require('../reader-bridge/server');
@@ -18,7 +19,7 @@ test('declared WeRSS IDs are bound to the blogger and do not need a side mapping
   const s={...source,platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'MP_WXS_1234567890'}};
   const c=channelsFor(s,{werss:'http://127.0.0.1:8001'});
   assert.equal(c.length,1);assert.equal(c[0].transport,'werss');assert.equal(c[0].mp_id,'MP_WXS_1234567890');
-  assert.equal(c[0].url,'http://127.0.0.1:8001/feed/MP_WXS_1234567890');assert.equal(c[0].enabled,true);
+  assert.equal(c[0].url,'http://127.0.0.1:8001/feed/MP_WXS_1234567890.xml');assert.equal(c[0].enabled,true);
 });
 test('invalid declared WeRSS IDs are not turned into executable channels',()=>{
   const c=channelsFor({...source,platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'guess-me'}},{werss:'http://127.0.0.1:8001'});
@@ -118,4 +119,36 @@ test('renamed WeChat blogger keeps the historical source id and the mistaken rep
   assert.equal(renamed?.adapter?.mp_id,'MP_WXS_3216764246');
   assert.equal(manifest.subscriptions.some(s=>s.name==='丁丁丁写字的地方'),false);
   assert.equal(manifest.subscriptions.some(s=>s.name==='搜广推学习笔记'),false);
+});
+test('WeRSS refresh uses the locked update API before reading the exact XML feed',async t=>{
+  const seen=[],server=http.createServer((req,res)=>{
+    seen.push(req.url);
+    if(req.url==='/api/v1/wx/mps/update/MP_WXS_1234567890?start_page=0&end_page=1'){
+      res.writeHead(200,{'Content-Type':'application/json'});return res.end('{"code":0,"data":{"total":1}}');
+    }
+    if(req.url==='/feed/MP_WXS_1234567890.xml'){
+      res.writeHead(200,{'Content-Type':'application/rss+xml'});
+      return res.end('<?xml version="1.0"?><rss version="2.0"><channel><title>W</title><item><guid>w1</guid><title>A</title><link>https://mp.weixin.qq.com/s/test</link><description>摘要</description></item></channel></rss>');
+    }
+    res.writeHead(404);res.end();
+  });
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+  const base='http://127.0.0.1:'+server.address().port,db=new Database(':memory:');t.after(()=>db.close());
+  const s={...source,id:'wx-source',platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'MP_WXS_1234567890'}};
+  const c=channelsFor(s,{werss:base})[0];db.putSource(s,[c]);db.run('UPDATE channels SET feed_id=1 WHERE id=?',c.id);
+  const service=new ReaderService(db,{miniflux:'http://unused',karakeep:'http://unused',adapters:{werss:base,browserEnabled:true}},{mf:{call:async()=>[]}});
+  const imported=[];service.importItem=async(ch,item)=>{imported.push({ch,item});return 1;};
+  const added=await service.refreshAdapter(c);
+  assert.equal(added,1);assert.deepEqual(seen,['/api/v1/wx/mps/update/MP_WXS_1234567890?start_page=0&end_page=1','/feed/MP_WXS_1234567890.xml']);
+  assert.equal(imported.length,1);assert.equal(imported[0].ch.id,c.id);assert.equal(imported[0].item.link,'https://mp.weixin.qq.com/s/test');
+});
+test('WeRSS explicit update failure stops before reading a cached feed',async t=>{
+  const seen=[],server=http.createServer((req,res)=>{seen.push(req.url);res.writeHead(200,{'Content-Type':'application/json'});res.end('{"code":50002,"message":"upstream failed"}');});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+  const base='http://127.0.0.1:'+server.address().port,db=new Database(':memory:');t.after(()=>db.close());
+  const s={...source,id:'wx-source',platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'MP_WXS_1234567890'}};
+  const c=channelsFor(s,{werss:base})[0];db.putSource(s,[c]);db.run('UPDATE channels SET feed_id=1 WHERE id=?',c.id);
+  const service=new ReaderService(db,{miniflux:'http://unused',karakeep:'http://unused',adapters:{werss:base,browserEnabled:true}},{mf:{call:async()=>[]}});
+  await assert.rejects(service.refreshAdapter(c),/did not confirm success/);
+  assert.deepEqual(seen,['/api/v1/wx/mps/update/MP_WXS_1234567890?start_page=0&end_page=1']);
 });

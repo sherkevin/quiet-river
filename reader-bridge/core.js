@@ -85,7 +85,7 @@ function channelsFor(source, options = {}) {
   } else if (source.platform === 'wechat') {
     const declaredMpId=source.adapter?.platform==='wechat'&&/^MP_WXS_\d+$/.test(String(source.adapter?.mp_id||''))?String(source.adapter.mp_id):'';
     const mpId=declaredMpId||options.werssMapping?.[source.id];
-    if(mpId)add('wechat', 'werss', (options.werss || 'http://127.0.0.1:8001') + '/feed/' + encodeURIComponent(mpId), {mp_id: mpId, group_key: 'credential:wechat', credential_group: 'wechat', browser: true, enabled: Boolean(options.werss)});
+    if(mpId)add('wechat', 'werss', (options.werss || 'http://127.0.0.1:8001') + '/feed/' + encodeURIComponent(mpId) + '.xml', {mp_id: mpId, group_key: 'credential:wechat', credential_group: 'wechat', browser: true, enabled: Boolean(options.werss)});
   } else if (source.platform === 'arxiv') {
     const category = id || safeURL(source.url)?.split('/').at(-2);
     if (/^[a-zA-Z0-9.-]+$/.test(category || '')) add('rss', 'public', `https://rss.arxiv.org/rss/${category}`, {enabled: true});

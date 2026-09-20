@@ -12,6 +12,8 @@ import urllib.request
 
 BASE=pathlib.Path('/var/lib/quiet-river-platform')
 CONTAINER='quiet-river-platform-karakeep-1'
+WERSS_CONTAINER='quiet-river-werss'
+WERSS_DATA=pathlib.Path('/opt/quiet-river-platform/werss-data')
 
 def run(args, **kwargs):
     return subprocess.run(args, check=True, stdout=subprocess.PIPE,
@@ -25,14 +27,23 @@ def main():
     dest.mkdir(mode=0o700)
     bridge=subprocess.run(['systemctl','is-active','--quiet','quiet-river-bridge']).returncode==0
     reader=json.loads(run(['docker','inspect','--format','{{json .State.Running}}',CONTAINER]).stdout)
+    werss=False
+    probe=subprocess.run(['docker','inspect','--format','{{json .State.Running}}',WERSS_CONTAINER],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    if probe.returncode==0: werss=json.loads(probe.stdout)
     try:
         if bridge: run(['systemctl','stop','quiet-river-bridge'])
         if reader: run(['docker','stop','--time','30',CONTAINER])
+        if werss: run(['docker','stop','--time','30',WERSS_CONTAINER])
         with (dest/'miniflux.dump').open('wb') as stream:
             subprocess.run(['runuser','-u','postgres','--','pg_dump','-Fc','qr_miniflux'],
                            check=True,stdout=stream,stderr=subprocess.PIPE)
         for name in ('bridge','karakeep'):
             shutil.copytree(BASE/name,dest/name,copy_function=shutil.copy2)
+        if WERSS_DATA.exists(): shutil.copytree(WERSS_DATA,dest/'werss',copy_function=shutil.copy2)
+        werss_compose=pathlib.Path('/opt/quiet-river-platform/werss.compose.yml')
+        werss_overrides=pathlib.Path('/opt/quiet-river-platform/werss-overrides')
+        if werss_compose.exists(): shutil.copy2(werss_compose,dest/'werss.compose.yml')
+        if werss_overrides.exists(): shutil.copytree(werss_overrides,dest/'werss-overrides',copy_function=shutil.copy2)
         shutil.copytree('/etc/quiet-river-platform',dest/'private-config')
         for directory,label in [('/etc/quiet-river-collector','collector-config'),('/etc/systemd/system/quiet-river-bridge.service.d','bridge-unit-overrides'),('/home/qr-collector/.ssh','collector-authorized-public-key'),('/home/qr-proxy-tunnel/.ssh','proxy-tunnel-authorized-public-key'),('/etc/mihomo','mihomo-config'),('/var/lib/mihomo/providers','mihomo-providers')]:
             if pathlib.Path(directory).exists():shutil.copytree(directory,dest/label)
@@ -41,7 +52,9 @@ def main():
             if unit.exists():shutil.copy2(unit,dest/filename)
         shutil.copy2('/etc/caddy/Caddyfile',dest/'Caddyfile')
         result={}
-        for name,relative in [('bridge','bridge/bridge.sqlite'),('reader','karakeep/db.db')]:
+        checks=[('bridge','bridge/bridge.sqlite'),('reader','karakeep/db.db')]
+        if (dest/'werss/we_mp_rss.db').exists(): checks.append(('werss','werss/we_mp_rss.db'))
+        for name,relative in checks:
             connection=sqlite3.connect(str(dest/relative))
             result[name]=connection.execute('PRAGMA quick_check').fetchone()[0]
             connection.close()
@@ -54,6 +67,7 @@ def main():
         print('Created and validated private recovery point:',dest)
     finally:
         if reader: run(['docker','start',CONTAINER])
+        if werss: run(['docker','start',WERSS_CONTAINER])
         if bridge: run(['systemctl','start','quiet-river-bridge'])
     print('Previous service activity restored; no credentials displayed')
 

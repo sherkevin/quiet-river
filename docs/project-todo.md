@@ -42,4 +42,4 @@ Updated: 2026-09-19
 
 ## Remaining follow-up
 
-- open — WeRSS runtime is still not configured, so the 16 newly identified WeChat sources are registered but not yet automatically refreshed.
+- doing — WeRSS runtime is now installed on ECS from pinned upstream revision `d8feb6a42c6773d7374e03c487d3ae3426084af8` using derived image `quiet-river/werss:d8feb6a4-sec1`, loopback-only `127.0.0.1:8001`, upstream schedulers disabled, 2 GiB host swap, and startup environment-dump removal. All 16 verified `MP_WXS_*` feeds are registered inside WeRSS. The runtime exposes only the explicit update and QR-login endpoints without app authentication because the whole service is loopback-only; other management APIs remain authenticated. Repository contracts now use `/feed/<mp_id>.xml` and synchronous update-before-feed. Static/focused/full tests pass (55/55 focused, 287/287 full). Final gate still open: complete WeRead QR login, run a real single-source update/feed/import canary, validate WeRSS-inclusive recovery backup, then release the Bridge commit and mark this done.

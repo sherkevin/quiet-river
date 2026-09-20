@@ -172,7 +172,8 @@ class ReaderService {
     const base=c.transport==='werss'?this.config.adapters?.werss:this.config.adapters?.rsshub;
     if(!base||new URL(c.url).origin!==new URL(base).origin)throw new Error('not configured: trusted adapter origin');
     if(c.transport==='werss') {
-      const wx=new ApiClient(base,{Authorization:`Bearer ${this.config.adapters.werssToken||''}`});
+      const a=this.config.adapters||{},auth=a.werssAK&&a.werssSK?`AK-SK ${a.werssAK}:${a.werssSK}`:a.werssToken?`Bearer ${a.werssToken}`:'';
+      const wx=new ApiClient(base,auth?{Authorization:auth}:{});
       const result=await wx.call(`/api/v1/wx/mps/update/${encodeURIComponent(c.mp_id)}?start_page=0&end_page=1`,'GET',undefined,{timeout:120000});
       if(result?.code && ![0,200].includes(result.code))throw new Error('WeRSS update did not confirm success');
       // Merely returning HTTP 200 is not a full-content guarantee; each entry below retains its content state.
