@@ -189,3 +189,32 @@ No direct backend is enabled in production yet. twitter-cli requires explicit us
 Shervin runs OpenCLI 1.8.7 with Browser Bridge extension 1.0.21. OpenCLI reports newer extension 1.0.24 is available. The current extension installation path could not be identified as a safe unpacked directory, so Quiet River does not mutate the daily Chrome extension installation automatically.
 
 Instagram remains **prepared but not verified**. Do not enable scheduled Instagram acquisition until a supported extension/runtime upgrade succeeds and the same NASA-style read-only canary returns stable author/post identities.
+
+## 2026-09-20 — P2 V2EX Community source preparation
+
+### Implemented
+
+- introduced the first non-Author Quiet River source identity: `sourceType=community`;
+- `https://www.v2ex.com/go/<node>` is a canonical V2EX Community source; topic/member pages are not accepted as source identities;
+- added `v2ex.community.posts -> v2ex-public-api` backend;
+- topic numeric ID is the stable item identity and canonical card URL is `https://www.v2ex.com/t/<id>`;
+- backend accepts only rows whose node exactly equals the subscribed node;
+- topic content is HTML-escaped before import;
+- replies are intentionally not fetched during discovery and remain a future article-detail enrichment;
+- HTTP and invalid-JSON failures throw acquisition errors rather than returning an empty timeline;
+- UI/state expose Community separately while preserving the existing Blogger semantics for Author sources;
+- channel defaults to disabled and requires `V2EX_READY=true` after a real connectivity canary.
+
+### Verification
+
+- focused V2EX/capability/source tests: 48/48 passed;
+- full regression: 334/334 passed;
+- ECS direct Node request: timeout;
+- ECS system curl direct: TCP 443 timeout;
+- ECS existing Mihomo loopback proxy: SSL connection timeout;
+- ECS Jina Reader route: connection timeout;
+- Shervin direct curl: connection timeout.
+
+### Gate
+
+The implementation is prepared but **not connected**. Current runtime networks cannot reach V2EX. No scheduler traffic is enabled and no V2EX source is claimed working. A future network-path change must first pass the same read-only node canary, then explicitly set `V2EX_READY=true`.

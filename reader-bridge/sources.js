@@ -1,7 +1,7 @@
 'use strict';
 const { safeURL } = require('./core');
 const PLATFORM_LABELS = { zhihu:'知乎', xiaohongshu:'小红书', wechat:'微信公众号',
-  blog:'博客', twitter:'X', instagram:'Instagram', bilibili:'B站', github:'GitHub', podcast:'播客',
+  blog:'博客', twitter:'X', instagram:'Instagram', v2ex:'V2EX', bilibili:'B站', github:'GitHub', podcast:'播客',
   juejin:'掘金', csdn:'CSDN', arxiv:'arXiv', semanticscholar:'Semantic Scholar', youtube:'YouTube' };
 const FAILURES = new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','UNSAFE_URL']);
 const OK = new Set(['SUCCEEDED_NEW','SUCCEEDED_NO_NEW']);
@@ -15,6 +15,13 @@ function authorIdentity(value) {
   if ((host==='instagram.com'||host==='www.instagram.com') &&
       (match=/^\/([A-Za-z0-9._]{1,30})\/?$/.exec(u.pathname)) && !['accounts','direct','explore','p','reel','reels','stories'].includes(match[1].toLowerCase())) return {platform:'instagram',id:match[1]};
   if (host==='juejin.cn' && (match=/^\/user\/(\d+)\/?$/.exec(u.pathname))) return {platform:'juejin',id:match[1]};
+  return null;
+}
+function sourceIdentity(value) {
+  const author=authorIdentity(value);if(author)return {...author,sourceType:'author'};
+  const normalized=safeURL(value);if(!normalized)return null;
+  const u=new URL(normalized),host=u.hostname.toLowerCase();let match;
+  if((host==='v2ex.com'||host==='www.v2ex.com')&&(match=/^\/go\/([A-Za-z0-9_-]{1,64})\/?$/.exec(u.pathname)))return {platform:'v2ex',id:match[1],sourceType:'community'};
   return null;
 }
 function blockers(source, channels, config={}) {
@@ -34,4 +41,4 @@ function blockers(source, channels, config={}) {
 }
 
 // No source-coverage endpoint is introduced in this change.
-module.exports = { PLATFORM_LABELS, authorIdentity, blockers };
+module.exports = { PLATFORM_LABELS, authorIdentity, sourceIdentity, blockers };

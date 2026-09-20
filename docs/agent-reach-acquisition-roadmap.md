@@ -222,10 +222,12 @@ Tasks:
 Agent-Reach has a public API implementation with no login requirement.
 
 Tasks:
-- [ ] add Community source type
-- [ ] support node timeline
+- [x] add Community source type and V2EX /go/<node> identity
+- [x] implement node timeline through the bounded public API backend with stable numeric topic identity
+- [x] reject cross-node rows and escape topic content before import
+- [x] test HTTP/JSON failures as acquisition failures rather than no-new-posts
 - [ ] article detail + replies as enrichment
-- [ ] test API errors do not look like no-new-posts
+- [ ] real network canary — BLOCKED: V2EX TCP 443 is unreachable from both ECS and Shervin; ECS direct curl, existing loopback Mihomo, and Jina Reader routes also fail. The channel therefore stays disabled unless V2EX_READY=true is explicitly set after a future successful canary.
 
 ### J. P2 — LinkedIn Company source
 

@@ -161,3 +161,13 @@ test('Twitter direct backend can outrank xgo only after its own probe passes',()
   assert.equal(after.candidates[1].status,'off');
   assert.equal(after.candidates[2].status,'ok');
 });
+
+test('V2EX community capability maps to its dedicated public API backend',()=>{
+ const community={id:'v2',name:'V2EX Python',platform:'v2ex',sourceType:'community',enabled:true};
+ const channel={id:'v2c',source_id:'v2',label:'community.posts',transport:'v2ex',enabled:true,state:'SUCCEEDED_NO_NEW',v2ex_node:'python'};
+ const [cap]=sourceCapabilities(community,[channel],{});
+ assert.equal(cap.id,'v2ex.community.posts');
+ assert.equal(cap.activeBackend,'v2ex-public-api');
+ assert.equal(cap.status,'ok');
+ assert.equal(cap.candidates[0].name,'V2EX Public API');
+});

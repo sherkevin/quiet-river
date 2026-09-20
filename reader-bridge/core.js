@@ -70,6 +70,11 @@ function channelsFor(source, options = {}) {
       enabled:true,group_key:'credential:'+source.platform,credential_group:source.platform,
       author_id:id,desktop_kind:kind,windowNote:'Shervin浏览器采集，单次最多20条；电脑离线时等待连接',min_gap_ms:8000,interval_ms:6*3600000
     });
+  } else if (source.platform === 'v2ex' && /^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    add('community.posts','v2ex',`https://www.v2ex.com/api/topics/show.json?node_name=${encodeURIComponent(id)}&page=1`,{
+      enabled:Boolean(options.v2exReady),group_key:'api.v2ex.com',v2ex_node:id,source_type:'community',interval_ms:30*60000,min_gap_ms:2000,
+      windowNote:'V2EX 公开 API 节点首页；只导入主题，回复留给详情增强'
+    });
   } else if (source.platform === 'juejin' && /^\d+$/.test(id)) {
     add('metadata', 'native', 'https://api.juejin.cn/content_api/v1/article/query_list', {
       native_adapter:'juejin',author_id:id,enabled:true,group_key:'api.juejin.cn',

@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {authorIdentity,blockers}=require('../reader-bridge/sources');
+const {authorIdentity,sourceIdentity,blockers}=require('../reader-bridge/sources');
 const {channelsFor}=require('../reader-bridge/core');
 const {fetchNativeMetadata}=require('../reader-bridge/native-metadata');
 const {Database}=require('../reader-bridge/database');
@@ -133,4 +133,29 @@ test('Instagram authorization blocker disappears only after a real successful ch
  const [channel]=channelsFor(s,{desktopPlatforms:['instagram']});
  assert.ok(blockers(s,[{...channel,state:'NEVER_CHECKED'}],{}).some(x=>/Instagram/.test(x)));
  assert.equal(blockers(s,[{...channel,state:'SUCCEEDED_NO_NEW'}],{}).some(x=>/Instagram/.test(x)),false);
+});
+
+test('V2EX node URL becomes a Community source while topics and member pages are not source identities',()=>{
+ assert.deepEqual(sourceIdentity('https://www.v2ex.com/go/python'),{platform:'v2ex',id:'python',sourceType:'community'});
+ assert.deepEqual(sourceIdentity('https://v2ex.com/go/tech/'),{platform:'v2ex',id:'tech',sourceType:'community'});
+ assert.equal(sourceIdentity('https://www.v2ex.com/t/12345'),null);
+ assert.equal(sourceIdentity('https://www.v2ex.com/member/example'),null);
+ assert.equal(sourceIdentity('https://v2ex.com.evil.example/go/python'),null);
+});
+test('V2EX community produces one public-API backend channel without a feed URL',()=>{
+ const s={...base,id:'v2',name:'V2EX Python',platform:'v2ex',url:'https://www.v2ex.com/go/python',sourceType:'community',adapter:{platform:'v2ex',id:'python'}};
+ const channels=channelsFor(s,{v2exReady:true});
+ assert.equal(channels.length,1);
+ assert.equal(channels[0].transport,'v2ex');
+ assert.equal(channels[0].label,'community.posts');
+ assert.equal(channels[0].v2ex_node,'python');
+ assert.equal(channels[0].source_type,'community');
+ assert.equal(channels[0].enabled,true);
+});
+
+test('V2EX community stays NOT_CONFIGURED until a real network canary enables it',()=>{
+ const s={...base,id:'v2-off',name:'V2EX Python',platform:'v2ex',url:'https://www.v2ex.com/go/python',sourceType:'community',adapter:{platform:'v2ex',id:'python'}};
+ const [channel]=channelsFor(s,{});
+ assert.equal(channel.transport,'v2ex');
+ assert.equal(channel.enabled,false);
 });

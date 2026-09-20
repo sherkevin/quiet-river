@@ -6,7 +6,7 @@
 // becomes replaceable behind a small registry contract.
 
 const {ApiClient}=require('./network');
-const {parseFullFeed,safeURL}=require('./core');
+const {parseFullFeed,safeURL,escapeHTML}=require('./core');
 const {backendForTransport}=require('./capabilities');
 
 const runners=new Map(),probes=new Map();
@@ -73,8 +73,29 @@ async function adapterFeed(service,channel,{werss=false}={}){
   return added;
 }
 
+async function v2exCommunity(service,channel){
+  const node=String(channel.v2ex_node||'');if(!/^[A-Za-z0-9_-]{1,64}$/.test(node))throw new Error('invalid V2EX node identity');
+  const url='https://www.v2ex.com/api/topics/show.json?node_name='+encodeURIComponent(node)+'&page=1';
+  const response=await service.internalFetch(url,{trusted:false,timeout:10000,maxBytes:1024*1024,headers:{'User-Agent':'quiet-river/1.0'}});
+  if(response.status!==200){const error=new Error('V2EX API HTTP error');error.status=response.status;throw error;}
+  let rows;try{rows=JSON.parse(response.body.toString('utf8'));}catch{throw new Error('V2EX API returned invalid JSON');}
+  if(!Array.isArray(rows))throw new Error('V2EX API returned invalid topic list');
+  let added=0;
+  for(const row of rows.slice(0,50)){
+    const id=Number(row?.id),rowNode=String(row?.node?.name||''),title=String(row?.title||'').trim(),author=String(row?.member?.username||'').trim();
+    if(!Number.isSafeInteger(id)||id<=0||rowNode!==node||!title||title.length>1000)continue;
+    const canonical='https://www.v2ex.com/t/'+id,content=String(row?.content||'').trim(),created=Number(row?.created);
+    added+=await service.importItem(channel,{guid:'v2ex:'+id,link:canonical,title,author:author||('V2EX / '+node),
+      published:Number.isFinite(created)&&created>0?Math.floor(created*1000):null,
+      content:content?'<p>'+escapeHTML(content).replace(/\n/g,'<br>')+'</p>':'',
+      content_state:content?'TEXT':'META'});
+  }
+  return added;
+}
+
 registerBackend('rsshub-ecs',(service,channel)=>adapterFeed(service,channel));
 registerBackend('werss-ecs',(service,channel)=>adapterFeed(service,channel,{werss:true}));
+registerBackend('v2ex-public-api',v2exCommunity);
 
 // Desktop work is intentionally pull-owned by the Shervin collector. Keeping
 // it in the registry makes the ownership boundary explicit and prevents the
@@ -87,5 +108,6 @@ registerProbe('opencli-twitter-shervin',async service=>service.desktop?.backendS
 registerProbe('rsshub-ecs',service=>probeLocalHttp(service,service.config.adapters?.rsshub));
 registerProbe('werss-ecs',service=>probeLocalHttp(service,service.config.adapters?.werss));
 registerProbe('xiaohongshu-mcp-ecs',service=>probeLocalHttp(service,service.config.adapters?.xiaohongshuMcp));
+registerProbe('v2ex-public-api',async()=>({status:'warn',reason:'public API backend is built in; real availability is measured by scheduled/source checks, doctor does not fetch platform content',state:'UNVERIFIED'}));
 
 module.exports={registerBackend,registerProbe,backendIdForChannel,runBackend,listBackends,probeBackend,doctorBackends};
