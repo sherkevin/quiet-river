@@ -333,3 +333,94 @@ This is an important Agent-Reach lesson in practice: doctor/runtime availability
 ### Production status
 
 Feature branch only. No production deployment and no production DB transcript mutation was performed during the canary.
+
+## 2026-09-20 — P2 Podcast local transcription
+
+### Decision
+
+Do not use Agent-Reach's Groq Whisper default for Quiet River Podcast transcription. A local Shervin CPU benchmark proved that faster-whisper is fast enough while keeping the complete audio local.
+
+Podcast RSS remains the only discovery/scheduler owner. Transcription is explicit per-entry enrichment.
+
+### Implemented
+
+- extended feed parsing to expose safe audio enclosure metadata from RSS/Atom and JSON Feed;
+- Podcast transcript queue is derived only from the entry's already-registered feed and exact episode URL match;
+- ECS validates the enclosure with its existing SSRF-safe network client before queueing;
+- known feed length over 512 MiB is rejected before the worker receives a task;
+- queue schema was extended additively with transcript kind/media URL/media length; old YouTube rows remain compatible;
+- Podcast and YouTube keep separate transcript capability kinds and identity validation;
+- Podcast tasks receive a 60-minute lease and include only the already-validated audio URL/size, never the source RSS URL;
+- Shervin advertises podcast_transcript_v1 only when ffmpeg, the isolated faster-whisper venv and the fixed wrapper are present;
+- added local-only podcast-local-whisper.py:
+  - validates public HTTP(S) DNS addresses and every redirect;
+  - rejects loopback/private/reserved targets;
+  - uses fixed ffmpeg argv with shell disabled;
+  - caps decoded audio at four hours;
+  - mono 16 kHz temporary WAV;
+  - faster-whisper base, CPU int8, VAD;
+  - max 10k segments and 1 MiB transcript text;
+  - TemporaryDirectory deletes audio after completion;
+  - no Groq/OpenAI/cloud ASR code;
+- worker uploads only normalized transcript metadata/text plus SHA-256 of the audio URL string;
+- ECS verifies that hash against the queued media URL before accepting the result;
+- transcript is appended to the existing article body and records podcast_local_transcript_enrichment provenance;
+- entry_enrichments stores backend/model/language/segment count and only media URL hash;
+- native article UI explicitly states that Podcast transcription happens locally on Shervin and audio is not uploaded to third parties.
+
+### Local runtime
+
+Shervin:
+- no CUDA GPU;
+- torch CPU-only;
+- ffmpeg already installed;
+- isolated runtime installed at D:\QuietRiverTools\faster-whisper\.venv;
+- faster-whisper 1.2.1 / CTranslate2 4.8.2;
+- model cache retained locally for future tasks.
+
+30-second benchmark:
+- model base.en;
+- CPU int8;
+- 3.41 s transcription;
+- RTF 0.114;
+- benchmark WAV deleted.
+
+### Full real canary
+
+Source: existing Quiet River Recsperts Podcast feed.
+Episode:
+- Quiet River entry 4333;
+- audio enclosure about 82.4 MiB;
+- decoded audio duration 5076.15 s (84.6 min).
+
+Canary used the same local wrapper contract but did not write the production Quiet River DB and did not print transcript content.
+
+Result:
+- exit 0;
+- backend faster-whisper-local;
+- multilingual base model;
+- detected language en;
+- 409 segments;
+- 75,605 transcript characters;
+- total elapsed 756.9 s (12.6 min);
+- full-episode RTF about 0.149;
+- memory remained around 500 MiB;
+- media URL hash returned;
+- 0 Quiet River Podcast temp directories after completion;
+- 0 temp WAV files after completion;
+- temporary canary scripts removed;
+- no external ASR provider was contacted.
+
+The retained model cache is approximately 296 MiB total because the earlier base.en feasibility model and multilingual base model are both present. It is local tooling, not repository/runtime data.
+
+### Verification
+
+- focused media/collector/platform/workspace tests: 152/152;
+- final full regression before docs-only changes: 358/358;
+- Podcast success tests preserve entry URL/publication/read/source health;
+- media substitution and cloud backend IDs are rejected before Miniflux writes;
+- unsafe enclosure URLs and oversized known media are rejected before queueing.
+
+### Production status
+
+Feature branch only. No production database transcript was written and no production deployment was performed.

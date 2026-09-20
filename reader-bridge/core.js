@@ -117,6 +117,8 @@ function parseFullFeed(body, base) {
     result.items.forEach((item, i) => {
       item.content = raw[i]?.content_html || (raw[i]?.content_text ? `<p>${escapeHTML(raw[i].content_text)}</p>` : '');
       item.content_state = item.content ? 'TEXT' : item.summary ? 'PARTIAL' : 'META';
+      const attachment=(raw[i]?.attachments||[]).find(a=>a&&/^audio\//i.test(String(a.mime_type||''))&&safeURL(a.url,base));
+      item.enclosure=attachment?{url:safeURL(attachment.url,base),type:String(attachment.mime_type||''),length:Number(attachment.size_in_bytes)||null}:null;
     });
   } else {
     const doc = xml.parseXML(body);
@@ -134,6 +136,9 @@ function parseFullFeed(body, base) {
       const partial = xml.child(n, 'description') || xml.child(n, 'summary');
       item.content = full?.text || partial?.text || '';
       item.content_state = full?.text ? 'TEXT' : item.content ? 'PARTIAL' : 'META';
+      const enclosure=xml.child(n,'enclosure')||xml.children(n,'link').find(c=>xml.attr(c,'rel')==='enclosure');
+      const enclosureURL=enclosure&&safeURL(xml.attr(enclosure,'url')||xml.attr(enclosure,'href'),base),enclosureType=String(enclosure?xml.attr(enclosure,'type')||'':'');
+      item.enclosure=enclosureURL&&(!enclosureType||/^audio\//i.test(enclosureType))?{url:enclosureURL,type:enclosureType,length:Number(xml.attr(enclosure,'length'))||null}:null;
       // XHTML with mixed children cannot be reconstructed by the legacy lightweight parser.
       if (full?.children?.length) item.content_state = 'PARTIAL';
     });

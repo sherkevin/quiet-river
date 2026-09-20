@@ -165,3 +165,12 @@ test('HTTP acquisition doctor is authenticated, read-only and does not require m
     assert.ok(Array.isArray(doctor.capabilities));
   }finally{await new Promise(r=>app.close(r));db.close();}
 });
+
+test('RSS and JSON Feed expose bounded audio enclosure metadata for transcript enrichment',()=>{
+ const rss=parseFullFeed('<rss><channel><title>T</title><item><guid>1</guid><title>A</title><link>https://example.com/e1</link><enclosure url="https://cdn.example.com/a.mp3" type="audio/mpeg" length="12345"/></item></channel></rss>','https://example.com/feed');
+ assert.deepEqual(rss.items[0].enclosure,{url:'https://cdn.example.com/a.mp3',type:'audio/mpeg',length:12345});
+ const jsonFeed=parseFullFeed(JSON.stringify({version:'https://jsonfeed.org/version/1',items:[{id:'2',url:'https://example.com/e2',attachments:[{url:'https://cdn.example.com/a.jpg',mime_type:'image/jpeg'},{url:'https://cdn.example.com/a.m4a',mime_type:'audio/mp4',size_in_bytes:456}]}]}),'https://example.com/feed');
+ assert.deepEqual(jsonFeed.items[0].enclosure,{url:'https://cdn.example.com/a.m4a',type:'audio/mp4',length:456});
+ const unsafe=parseFullFeed('<rss><channel><title>T</title><item><guid>3</guid><title>A</title><link>https://example.com/e3</link><enclosure url="file:///etc/passwd" type="audio/mpeg"/></item></channel></rss>','https://example.com/feed');
+ assert.equal(unsafe.items[0].enclosure,null);
+});

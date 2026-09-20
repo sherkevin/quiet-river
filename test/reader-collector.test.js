@@ -270,7 +270,7 @@ test('native body enrichment status is authenticated and queueing is action-gate
 });
 test('Windows collector advertises enrichment capability without changing normal source-list result shape',()=>{
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
- assert.match(src,/capabilities:\['entry_body_v1','youtube_transcript_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
+ assert.match(src,/function workerCapabilities\(\)/);assert.match(src,/out\.push\('podcast_transcript_v1'\)/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
  assert.match(src,/result\.entryId\?`ECS accepted article-body result/);assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
 });
 test('Windows enrichment normalizer rejects short login and challenge bodies before upload',()=>{
@@ -542,4 +542,62 @@ test('native YouTube transcript status is authenticated and queueing is action-g
  let response=await fetch(base+'/desk/api/entries/901/transcript',{headers:auth});assert.equal(response.status,200);assert.equal((await response.json()).state,'NONE');
  assert.equal((await fetch(base+'/desk/api/entries/901/transcript',{method:'POST',headers:auth,body:'{}'})).status,403);
  response=await fetch(base+'/desk/api/entries/901/transcript',{method:'POST',headers:write,body:'{}'});assert.equal(response.status,202);assert.equal((await response.json()).state,'QUEUED');
+});
+
+function podcastTranscriptFixture(t,{length=82430062}={}){
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const feed='https://feeds.transistor.fm/recsperts-recommender-systems-experts',episode='https://share.transistor.fm/s/c07c7bf6',audio='https://media.transistor.fm/c07c7bf6/8a10e95d.mp3';
+ const source={id:'pod-source',name:'Recsperts',platform:'podcast',url:'https://podcasts.apple.com/us/podcast/id1587222271',tags:[],feeds:[feed],enabled:true};
+ const channel={id:'pod-channel',source_id:source.id,label:feed,transport:'public',url:feed,enabled:true,group_key:'feeds.transistor.fm',interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=24,last_success=?,state=? WHERE id=?',1234567890,'SUCCEEDED_NO_NEW',channel.id);
+ let upstream={id:902,title:'Episode',url:episode,author:'Recsperts',published_at:'2026-09-20T00:00:00Z',content:'<p>Feed notes</p>',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/902'&&method==='GET')return upstream;if(path==='/v1/entries/902'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const xml='<rss><channel><title>R</title><item><guid>g</guid><title>Episode</title><link>'+episode+'</link><enclosure url="'+audio+'" type="audio/mpeg" length="'+length+'"/></item></channel></rss>';
+ const calls=[],internalFetch=async(url,opts={})=>{calls.push({url,opts});if(url===feed)return {status:200,body:Buffer.from(xml),headers:{},url};if(url===audio&&opts.method==='HEAD')return {status:200,body:Buffer.alloc(0),headers:{'content-type':'audio/mpeg'},url};throw new Error('unexpected fetch '+url);};
+ const service=new ReaderService(db,{karakeep:'http://unused',karakeepToken:'',adapters:{}},{mf,internalFetch});service.project(upstream,channel);
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,feed,episode,audio,calls,puts,getUpstream:()=>upstream};
+}
+
+test('Podcast transcript request resolves audio only from the registered feed before queueing',async t=>{
+ const f=podcastTranscriptFixture(t);const state=await f.service.requestTranscript(902);
+ assert.equal(state.state,'QUEUED');assert.equal(state.kind,'podcast_transcript_v1');
+ const task=f.db.get('SELECT kind,media_url,media_length FROM collector_transcripts WHERE entry_id=902');
+ assert.equal(task.kind,'podcast_transcript_v1');assert.equal(task.media_url,f.audio);assert.equal(task.media_length,82430062);
+ assert.deepEqual(f.calls.map(x=>[x.url,x.opts.method||'GET']),[[f.feed,'GET'],[f.audio,'HEAD']]);
+ const claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ assert.equal(claim.job.taskType,'podcast_transcript_v1');assert.equal(claim.job.audioUrl,f.audio);assert.equal(claim.job.mediaLength,82430062);
+ assert.equal(f.db.get('SELECT expires_at FROM collector_transcripts WHERE entry_id=902').expires_at>Date.now()+50*60*1000,true);
+});
+
+test('Podcast audio larger than the local-transcription limit is refused before worker queueing',async t=>{
+ const f=podcastTranscriptFixture(t,{length:513*1024*1024});
+ await assert.rejects(f.service.requestTranscript(902),e=>e.status===413);
+ assert.equal(f.db.get('SELECT count(*) n FROM collector_transcripts').n,0);
+});
+
+test('successful local Podcast transcript preserves entry identity, read state and source health',async t=>{
+ const f=podcastTranscriptFixture(t);await f.service.requestTranscript(902);const claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ const before=f.db.get('SELECT status,published_at,url FROM entries WHERE id=902'),channelBefore=f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id);
+ const mediaSha256=require('../reader-bridge/core').hash(f.audio),result={leaseId:claim.job.leaseId,entryId:902,status:'OK',backendId:'faster-whisper-local',mediaSha256,model:'base',language:'en',segmentCount:2,content:'[0:00] hello\n[0:05] world'};
+ const ack=await f.collector.submit(result);assert.equal(ack.state,'TRANSCRIPT_ENRICHED');assert.equal(ack.backendId,'faster-whisper-local');
+ const row=f.db.get('SELECT status,published_at,url,content_origin FROM entries WHERE id=902');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.url,before.url);assert.equal(row.content_origin,'podcast_local_transcript_enrichment');
+ assert.deepEqual(f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id),channelBefore);
+ assert.equal(f.puts.length,1);assert.match(f.puts[0].content,/data-qr-podcast-transcript="902"/);assert.match(f.puts[0].content,/\[0:00\] hello/);
+ const detail=JSON.parse(f.db.get("SELECT detail FROM entry_enrichments WHERE entry_id=902 AND kind='podcast_transcript_v1'").detail);assert.equal(detail.backend,'faster-whisper-local');assert.equal(detail.model,'base');assert.equal(detail.language,'en');assert.equal(detail.mediaUrlHash,mediaSha256);
+ assert.deepEqual(await f.collector.submit(result),ack);
+});
+
+test('Podcast transcript rejects worker media substitution and cloud backends before Miniflux write',async t=>{
+ const f=podcastTranscriptFixture(t);await f.service.requestTranscript(902);let claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:902,status:'OK',backendId:'faster-whisper-local',mediaSha256:'0'.repeat(64),model:'base',language:'en',segmentCount:1,content:'x'}),/media mismatch/);assert.equal(f.puts.length,0);
+ f.db.run("UPDATE collector_transcripts SET state='QUEUED',lease_id=NULL,expires_at=0,digest=NULL,next_attempt=0 WHERE entry_id=902");claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:902,status:'OK',backendId:'groq-whisper',mediaSha256:require('../reader-bridge/core').hash(f.audio),model:'base',language:'en',segmentCount:1,content:'x'}),/invalid transcript backend/);assert.equal(f.puts.length,0);
+});
+
+test('Podcast local wrapper is local-only, SSRF-aware and deletes temporary audio',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/podcast-local-whisper.py'),'utf8');
+ assert.match(src,/ipaddress\.ip_address/);assert.match(src,/ip\.is_global/);assert.match(src,/HTTPRedirectHandler/);assert.match(src,/TemporaryDirectory/);assert.match(src,/shell=False/);
+ assert.match(src,/faster_whisper/);assert.match(src,/compute_type="int8"/);assert.match(src,/MODEL = "base"/);assert.match(src,/faster-whisper-local/);
+ assert.doesNotMatch(src,/groq|openai|requests\.post|api_key/i);
 });

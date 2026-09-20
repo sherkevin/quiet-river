@@ -224,11 +224,20 @@ test('native article page exposes explicit Shervin body enrichment with persiste
 
 test('native YouTube transcript control is platform-gated and uses explicit queue/status APIs',()=>{
  const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
- assert.match(ui,/data-native-transcript>补充视频字幕<\/button>/);assert.match(ui,/function setupNativeTranscript/);
- assert.match(ui,/if\(detail\.platform!=='youtube'\|\|!initial\?\.eligible\)\{button\.remove\(\)/);
+ assert.match(ui,/data-native-transcript>补充媒体转录<\/button>/);assert.match(ui,/function setupNativeTranscript/);
+ assert.match(ui,/isYoutube=detail\.platform==='youtube',isPodcast=detail\.platform==='podcast'/);assert.match(ui,/\(!isYoutube&&!isPodcast\)/);
  assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript'\)/);
  assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript',\{\}\)/);
  assert.match(ui,/优先使用 yt-dlp；失败后按既定链路回退到 OpenCLI。不会下载视频。/);
  assert.match(ui,/detail\.platform==='youtube'/);
  assert.match(ui,/setupNativeTranscript\(shell,container,detail\)/);
+});
+
+test('native Podcast transcript control promises local-only audio processing and shares the explicit transcript queue',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ assert.match(ui,/isPodcast=detail\.platform==='podcast'/);
+ assert.match(ui,/本地转录播客/);assert.match(ui,/faster-whisper/);assert.match(ui,/音频不会上传第三方/);assert.match(ui,/临时音频完成后删除/);
+ assert.match(ui,/maxPolls=isPodcast\?1200:120/);
+ assert.match(ui,/\['youtube','podcast'\]\.includes\(detail\.platform\)/);
+ assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript',\{\}\)/);
 });

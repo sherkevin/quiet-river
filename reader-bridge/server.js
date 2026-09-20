@@ -99,9 +99,9 @@ function createApp(service,config,clients={}){
       const bodyEnrichment=/^\/desk\/api\/entries\/(\d+)\/enrichment$/.exec(p);
       if(bodyEnrichment&&req.method==='GET')return reply(res,200,service.bodyEnrichment(Number(bodyEnrichment[1])));
       if(bodyEnrichment&&req.method==='POST')return reply(res,202,service.requestBodyEnrichment(Number(bodyEnrichment[1])));
-      const youtubeTranscript=/^\/desk\/api\/entries\/(\d+)\/transcript$/.exec(p);
-      if(youtubeTranscript&&req.method==='GET')return reply(res,200,service.youtubeTranscript(Number(youtubeTranscript[1])));
-      if(youtubeTranscript&&req.method==='POST')return reply(res,202,service.requestYoutubeTranscript(Number(youtubeTranscript[1])));
+      const mediaTranscript=/^\/desk\/api\/entries\/(\d+)\/transcript$/.exec(p);
+      if(mediaTranscript&&req.method==='GET')return reply(res,200,service.transcriptStatus(Number(mediaTranscript[1])));
+      if(mediaTranscript&&req.method==='POST')return reply(res,202,await service.requestTranscript(Number(mediaTranscript[1])));
       const articlePrepare=/^\/desk\/api\/entries\/(\d+)\/prepare$/.exec(p);
       if(articlePrepare&&req.method==='POST')return reply(res,200,await service.articleDetail(Number(articlePrepare[1]),{prepare:true}));
       const articleNote=/^\/desk\/api\/entries\/(\d+)\/note$/.exec(p);

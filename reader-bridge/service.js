@@ -1,6 +1,6 @@
 'use strict';
 const fs = require('node:fs');
-const {hash,json,escapeHTML,opmlFor,channelsFor,rankEntries,buildArchive,stripHTML,safeURL,classifyError,articleKey} = require('./core');
+const {hash,json,escapeHTML,opmlFor,channelsFor,parseFullFeed,rankEntries,buildArchive,stripHTML,safeURL,classifyError,articleKey} = require('./core');
 const {ApiClient,request} = require('./network');
 const {fetchNativeMetadata}=require('./native-metadata');
 const {normalizeTags,containsAllTags,requestedTags}=require('./tags');
@@ -215,8 +215,34 @@ class ReaderService {
   backend() {return require('./article-actions').backend(this);}
   bodyEnrichment(id){return this.desktop?this.desktop.enrichmentStatus(id):{entryId:Number(id),eligible:false,state:'UNAVAILABLE',error:'Shervin collector is not configured',collector:null};}
   requestBodyEnrichment(id){if(!this.desktop)throw Object.assign(new Error('Shervin collector is not configured'),{status:503});return this.desktop.queueEnrichment(id);}
-  youtubeTranscript(id){return this.desktop?this.desktop.transcriptStatus(id):{entryId:Number(id),eligible:false,state:'UNAVAILABLE',error:'Shervin collector is not configured',collector:null};}
-  requestYoutubeTranscript(id){if(!this.desktop)throw Object.assign(new Error('Shervin collector is not configured'),{status:503});return this.desktop.queueTranscript(id);}
+  transcriptStatus(id){return this.desktop?this.desktop.transcriptStatus(id):{entryId:Number(id),eligible:false,state:'UNAVAILABLE',error:'Shervin collector is not configured',collector:null};}
+  youtubeTranscript(id){return this.transcriptStatus(id);}
+  async requestTranscript(id){
+    if(!this.desktop)throw Object.assign(new Error('Shervin collector is not configured'),{status:503});
+    const ctx=this.desktop.transcriptContext(id),media=ctx.kind==='podcast_transcript_v1'?await this.resolvePodcastAudio(id):null;
+    return this.desktop.queueTranscript(id,Date.now(),media);
+  }
+  requestYoutubeTranscript(id){return this.requestTranscript(id);}
+  async resolvePodcastAudio(id){
+    const entry=this.db.get('SELECT * FROM entries WHERE id=?',Number(id));if(!entry)throw Object.assign(new Error('entry not found'),{status:404});
+    const source=this.db.sources().find(s=>s.id===entry.source_id);if(source?.platform!=='podcast')throw Object.assign(new Error('entry is not a podcast episode'),{status:409});
+    const target=safeURL(entry.url);if(!target)throw Object.assign(new Error('podcast episode URL is invalid'),{status:409});
+    let matched=false;
+    for(const feed of source.feeds||[]){
+      const feedURL=safeURL(feed);if(!feedURL)continue;
+      const response=await this.internalFetch(feedURL,{timeout:20000,maxBytes:8*1024*1024});
+      if(response.status!==200)continue;
+      const parsed=parseFullFeed(response.body.toString('utf8'),feedURL),item=parsed.items.find(x=>safeURL(x.link,feedURL)===target);
+      if(!item)continue;matched=true;
+      const audio=item.enclosure,audioURL=safeURL(audio?.url);
+      if(!audioURL)throw Object.assign(new Error('podcast episode has no public audio enclosure'),{status:409});
+      const length=Number(audio.length)||0;if(length>512*1024*1024)throw Object.assign(new Error('podcast audio exceeds 512 MiB limit'),{status:413});
+      const probe=await this.internalFetch(audioURL,{method:'HEAD',timeout:10000,maxBytes:4096});
+      if([401,403,404].includes(probe.status)||probe.status>=500)throw Object.assign(new Error('podcast audio enclosure is not publicly readable'),{status:409});
+      return {url:safeURL(probe.url)||audioURL,length,type:String(audio.type||probe.headers?.['content-type']||'').slice(0,120)};
+    }
+    throw Object.assign(new Error(matched?'podcast audio enclosure is unavailable':'podcast episode is not present in its registered feed'),{status:409});
+  }
   feedback(id,value){if(![-1,0,1].includes(value)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid feedback');this.db.run('INSERT INTO feedback VALUES(?,?,?) ON CONFLICT(entry_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',id,value,Date.now());}
   async _articleNoteBookmark(row,{create=false}={}) {
     if(!this.config.karakeepToken){if(create)throw Object.assign(new Error('not configured: notes'),{status:503});return null;}

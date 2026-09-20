@@ -1,13 +1,13 @@
 'use strict';
 const crypto=require('node:crypto');
-const {channelsFor,escapeHTML,hash,stripHTML}=require('./core');
+const {channelsFor,escapeHTML,hash,stripHTML,safeURL}=require('./core');
 const {originalLink}=require('../tools/windows/original-link.cjs');
 const {sourceCapabilities}=require('./capabilities');
 const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter','instagram']);
 const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','instagram']);
 const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu','instagram']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
-const ENRICH_CAP='entry_body_v1',YOUTUBE_TRANSCRIPT_CAP='youtube_transcript_v1',MAX_BODY_BYTES=1024*1024;
+const ENRICH_CAP='entry_body_v1',YOUTUBE_TRANSCRIPT_CAP='youtube_transcript_v1',PODCAST_TRANSCRIPT_CAP='podcast_transcript_v1',MAX_BODY_BYTES=1024*1024;
 const BLOCK_PAGE_RE=/登录后查看|请登录|登录已失效|验证码|安全限制|访问链接异常|页面不见了|笔记不存在|access denied|security block/i;
 function fail(message,status=400){throw Object.assign(new Error(message),{status});}
 function bodyToSafeHTML(text){
@@ -21,6 +21,12 @@ function transcriptToSafeHTML(text,videoId){
   if(!value||Buffer.byteLength(value)>MAX_BODY_BYTES||!/^[A-Za-z0-9_-]{11}$/.test(String(videoId||'')))fail('invalid transcript body');
   const lines=value.split('\n').filter(Boolean);if(!lines.length||lines.length>5000)fail('invalid transcript body');
   return '<hr><section data-qr-youtube-transcript="'+videoId+'"><h2>视频字幕</h2><p>'+escapeHTML(lines.join('\n')).replace(/\n/g,'<br>')+'</p></section>';
+}
+function podcastTranscriptToSafeHTML(text,entryId){
+  const value=String(text||'').replace(/\r\n?/g,'\n').trim(),id=Number(entryId);
+  if(!Number.isSafeInteger(id)||id<1||!value||Buffer.byteLength(value)>MAX_BODY_BYTES)fail('invalid podcast transcript body');
+  const lines=value.split('\n').filter(Boolean);if(!lines.length||lines.length>10000)fail('invalid podcast transcript body');
+  return '<hr><section data-qr-podcast-transcript="'+id+'"><h2>播客转录</h2><p>'+escapeHTML(lines.join('\n')).replace(/\n/g,'<br>')+'</p></section>';
 }
 function validateItems(channel,items){
   if(!Array.isArray(items)||items.length>50)fail('invalid collector item list');
@@ -49,7 +55,7 @@ class DesktopCollector {
       CREATE UNIQUE INDEX IF NOT EXISTS collector_enrichment_lease ON collector_enrichments(lease_id) WHERE lease_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS collector_enrichment_state ON collector_enrichments(state,next_attempt,created_at);
       CREATE TABLE IF NOT EXISTS collector_transcripts(
-      entry_id INTEGER PRIMARY KEY,channel_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'QUEUED',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
+      entry_id INTEGER PRIMARY KEY,channel_id TEXT NOT NULL,kind TEXT NOT NULL DEFAULT 'youtube_transcript_v1',media_url TEXT NOT NULL DEFAULT '',media_length INTEGER NOT NULL DEFAULT 0,state TEXT NOT NULL DEFAULT 'QUEUED',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
       attempts INTEGER NOT NULL DEFAULT 0,next_attempt INTEGER NOT NULL DEFAULT 0,lease_id TEXT,expires_at INTEGER NOT NULL DEFAULT 0,digest TEXT,ack TEXT,error TEXT NOT NULL DEFAULT '');
       CREATE UNIQUE INDEX IF NOT EXISTS collector_transcript_lease ON collector_transcripts(lease_id) WHERE lease_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS collector_transcript_state ON collector_transcripts(state,next_attempt,created_at);
@@ -58,6 +64,10 @@ class DesktopCollector {
       failures INTEGER NOT NULL DEFAULT 0,error TEXT NOT NULL DEFAULT '');`);
     const leaseColumns=new Set(this.db.all('PRAGMA table_info(collector_leases)').map(c=>c.name));
     if(!leaseColumns.has('backend_id'))this.db.db.exec("ALTER TABLE collector_leases ADD COLUMN backend_id TEXT NOT NULL DEFAULT ''");
+    const transcriptColumns=new Set(this.db.all('PRAGMA table_info(collector_transcripts)').map(c=>c.name));
+    if(!transcriptColumns.has('kind'))this.db.db.exec("ALTER TABLE collector_transcripts ADD COLUMN kind TEXT NOT NULL DEFAULT 'youtube_transcript_v1'");
+    if(!transcriptColumns.has('media_url'))this.db.db.exec("ALTER TABLE collector_transcripts ADD COLUMN media_url TEXT NOT NULL DEFAULT ''");
+    if(!transcriptColumns.has('media_length'))this.db.db.exec("ALTER TABLE collector_transcripts ADD COLUMN media_length INTEGER NOT NULL DEFAULT 0");
     for(const channel of this.db.channels()){
       if(channel.transport==='desktop'&&['SUCCEEDED_PARTIAL','SUCCEEDED_NEW','SUCCEEDED_NO_NEW'].includes(channel.state)&&channel.error){
         this.db.run("UPDATE channels SET error='' WHERE id=?",channel.id);
@@ -149,24 +159,37 @@ class DesktopCollector {
     const id=Number(entryId),entry=Number.isSafeInteger(id)?this.db.get('SELECT * FROM entries WHERE id=?',id):null;
     if(!entry)fail('article not found',404);
     const source=this.db.sources().find(s=>s.id===entry.source_id),channel=this.db.channels().find(c=>c.id===entry.channel_id);
-    if(!source?.enabled||!channel?.enabled||source.platform!=='youtube')fail('article does not support YouTube transcript enrichment',409);
-    let original;try{original=originalLink({platform:'youtube',kind:'transcript'},entry.url);}catch{fail('YouTube article URL is not a supported video',409);}
-    return {entry,source,channel,original};
+    if(!source?.enabled||!channel?.enabled)fail('article does not support transcript enrichment',409);
+    if(source.platform==='youtube'){
+      let original;try{original=originalLink({platform:'youtube',kind:'transcript'},entry.url);}catch{fail('YouTube article URL is not a supported video',409);}
+      return {entry,source,channel,kind:YOUTUBE_TRANSCRIPT_CAP,original};
+    }
+    if(source.platform==='podcast'){
+      const original=safeURL(entry.url);if(!original)fail('Podcast episode URL is not supported',409);
+      return {entry,source,channel,kind:PODCAST_TRANSCRIPT_CAP,original:{link:original}};
+    }
+    fail('article does not support transcript enrichment',409);
   }
   transcriptStatus(entryId){
     let ctx;try{ctx=this.transcriptContext(entryId);}catch(e){if(e.status===404)throw e;return {entryId:Number(entryId),eligible:false,state:'UNAVAILABLE',error:e.message,collector:this.status()};}
-    const done=this.db.get("SELECT state,updated_at,detail FROM entry_enrichments WHERE entry_id=? AND kind='youtube_transcript_v1'",ctx.entry.id);
-    if(done?.state==='DONE')return {entryId:ctx.entry.id,eligible:true,state:'DONE',updated_at:done.updated_at,collector:this.status()};
-    const row=this.db.get('SELECT state,created_at,updated_at,attempts,next_attempt,error FROM collector_transcripts WHERE entry_id=?',ctx.entry.id);
-    return {entryId:ctx.entry.id,eligible:true,state:row?.state||'NONE',...(row||{}),collector:this.status()};
+    const done=this.db.get('SELECT state,updated_at,detail FROM entry_enrichments WHERE entry_id=? AND kind=?',ctx.entry.id,ctx.kind);
+    if(done?.state==='DONE')return {entryId:ctx.entry.id,eligible:true,kind:ctx.kind,state:'DONE',updated_at:done.updated_at,detail:done.detail?JSON.parse(done.detail):{},collector:this.status()};
+    const row=this.db.get('SELECT kind,state,created_at,updated_at,attempts,next_attempt,error FROM collector_transcripts WHERE entry_id=?',ctx.entry.id);
+    return {entryId:ctx.entry.id,eligible:true,kind:ctx.kind,state:row?.state||'NONE',...(row||{}),collector:this.status()};
   }
-  queueTranscript(entryId,now=Date.now()){
-    const ctx=this.transcriptContext(entryId),done=this.db.get("SELECT state FROM entry_enrichments WHERE entry_id=? AND kind='youtube_transcript_v1'",ctx.entry.id);
+  queueTranscript(entryId,now=Date.now(),media=null){
+    const ctx=this.transcriptContext(entryId),done=this.db.get('SELECT state FROM entry_enrichments WHERE entry_id=? AND kind=?',ctx.entry.id,ctx.kind);
     if(done?.state==='DONE')return this.transcriptStatus(ctx.entry.id);
+    let mediaURL='',mediaLength=0;
+    if(ctx.kind===PODCAST_TRANSCRIPT_CAP){
+      mediaURL=safeURL(media?.url);mediaLength=Number(media?.length)||0;
+      if(!mediaURL)fail('podcast audio must be resolved from its registered feed before queueing',409);
+      if(mediaLength<0||mediaLength>512*1024*1024)fail('invalid podcast media length',400);
+    }
     const old=this.db.get('SELECT state FROM collector_transcripts WHERE entry_id=?',ctx.entry.id);
-    if(old?.state!=='RUNNING')this.db.run(`INSERT INTO collector_transcripts(entry_id,channel_id,state,created_at,updated_at,next_attempt,error)
-      VALUES(?,?,'QUEUED',?,?,0,'') ON CONFLICT(entry_id) DO UPDATE SET channel_id=excluded.channel_id,state='QUEUED',updated_at=excluded.updated_at,next_attempt=0,lease_id=NULL,expires_at=0,digest=NULL,ack=NULL,error=''`,ctx.entry.id,ctx.channel.id,now,now);
-    this.db.audit('youtube-transcript',ctx.entry.id,'queued');return this.transcriptStatus(ctx.entry.id);
+    if(old?.state!=='RUNNING')this.db.run(`INSERT INTO collector_transcripts(entry_id,channel_id,kind,media_url,media_length,state,created_at,updated_at,next_attempt,error)
+      VALUES(?,?,?,?,?,'QUEUED',?,?,0,'') ON CONFLICT(entry_id) DO UPDATE SET channel_id=excluded.channel_id,kind=excluded.kind,media_url=excluded.media_url,media_length=excluded.media_length,state='QUEUED',updated_at=excluded.updated_at,next_attempt=0,lease_id=NULL,expires_at=0,digest=NULL,ack=NULL,error=''`,ctx.entry.id,ctx.channel.id,ctx.kind,mediaURL,mediaLength,now,now);
+    this.db.audit(ctx.kind,ctx.entry.id,'queued');return this.transcriptStatus(ctx.entry.id);
   }
   authProbe(platforms){
     const configured=this.s.config.adapters?.desktopPlatforms||[];
@@ -226,12 +249,16 @@ class DesktopCollector {
     return nearCooldown===null?null:{job:null,retryAfter:Math.max(8,Math.min(60,nearCooldown)),waitForCooldown:true};
   }
   claimTranscript(platforms,capabilities,now){
-    if(!platforms.includes('youtube')||!capabilities.includes(YOUTUBE_TRANSCRIPT_CAP)||this.hasActiveLease(now))return null;
+    if(this.hasActiveLease(now))return null;
     for(const task of this.db.all("SELECT * FROM collector_transcripts WHERE state='QUEUED' AND next_attempt<=? ORDER BY created_at,entry_id LIMIT 50",now)){
       let ctx;try{ctx=this.transcriptContext(task.entry_id);}catch(e){this.db.run("UPDATE collector_transcripts SET state='FAILED',updated_at=?,error=? WHERE entry_id=?",now,String(e.message).slice(0,200),task.entry_id);continue;}
-      const done=this.db.get("SELECT state FROM entry_enrichments WHERE entry_id=? AND kind='youtube_transcript_v1'",ctx.entry.id);if(done?.state==='DONE'){this.db.run("UPDATE collector_transcripts SET state='DONE',updated_at=?,error='' WHERE entry_id=?",now,ctx.entry.id);continue;}
-      const leaseId=crypto.randomBytes(24).toString('hex');
-      this.db.run("UPDATE collector_transcripts SET state='RUNNING',lease_id=?,expires_at=?,attempts=attempts+1,updated_at=?,digest=NULL,ack=NULL,error='' WHERE entry_id=?",leaseId,now+900000,now,ctx.entry.id);
+      if(!platforms.includes(ctx.source.platform)||!capabilities.includes(ctx.kind))continue;
+      const done=this.db.get('SELECT state FROM entry_enrichments WHERE entry_id=? AND kind=?',ctx.entry.id,ctx.kind);
+      if(done?.state==='DONE'){this.db.run("UPDATE collector_transcripts SET state='DONE',updated_at=?,error='' WHERE entry_id=?",now,ctx.entry.id);continue;}
+      if(ctx.kind===PODCAST_TRANSCRIPT_CAP&&!safeURL(task.media_url)){this.db.run("UPDATE collector_transcripts SET state='FAILED',updated_at=?,error='podcast audio was not resolved before claim' WHERE entry_id=?",now,ctx.entry.id);continue;}
+      const leaseId=crypto.randomBytes(24).toString('hex'),expires=now+(ctx.kind===PODCAST_TRANSCRIPT_CAP?3600000:900000);
+      this.db.run("UPDATE collector_transcripts SET state='RUNNING',lease_id=?,expires_at=?,attempts=attempts+1,updated_at=?,digest=NULL,ack=NULL,error='' WHERE entry_id=?",leaseId,expires,now,ctx.entry.id);
+      if(ctx.kind===PODCAST_TRANSCRIPT_CAP)return {job:{taskType:PODCAST_TRANSCRIPT_CAP,leaseId,entryId:ctx.entry.id,sourceId:ctx.source.id,platform:'podcast',kind:'transcript',url:ctx.original.link,audioUrl:task.media_url,mediaLength:Number(task.media_length)||0,title:ctx.entry.title},retryAfter:8};
       return {job:{taskType:YOUTUBE_TRANSCRIPT_CAP,leaseId,entryId:ctx.entry.id,sourceId:ctx.source.id,platform:'youtube',kind:'transcript',url:ctx.original.link,title:ctx.entry.title},retryAfter:8};
     }
     return null;
@@ -317,25 +344,39 @@ class DesktopCollector {
     if(task.expires_at<Date.now()||task.state!=='RUNNING')fail('expired transcript lease',409);
     if(task.digest&&task.digest!==digest)fail('changed transcript payload on retry',409);
     const ctx=this.transcriptContext(task.entry_id);if(Number(input.entryId)!==ctx.entry.id)fail('transcript entry mismatch',409);
+    if(task.kind!==ctx.kind)fail('transcript capability mismatch',409);
     if(!['OK',...STATES].includes(input.status))fail('invalid transcript status');
     const now=Date.now();
     if(input.status==='OK'){
-      if(String(input.videoId||'')!==ctx.original.youtubeId)fail('YouTube transcript video mismatch',409);
-      const backendId=String(input.backendId||'');if(!['yt-dlp-shervin','opencli-youtube-shervin'].includes(backendId))fail('invalid transcript backend',400);
-      const segments=Number(input.segmentCount);if(!Number.isSafeInteger(segments)||segments<1||segments>5000)fail('invalid transcript segment count');
-      const transcriptHTML=transcriptToSafeHTML(input.content,ctx.original.youtubeId),upstream=await this.s.mf.call('/v1/entries/'+ctx.entry.id),base=String(upstream?.content||''),marker='data-qr-youtube-transcript="'+ctx.original.youtubeId+'"',combined=base.includes(marker)?base:base+'\n'+transcriptHTML;
+      const segments=Number(input.segmentCount);if(!Number.isSafeInteger(segments)||segments<1||segments>(ctx.kind===PODCAST_TRANSCRIPT_CAP?10000:5000))fail('invalid transcript segment count');
+      let backendId='',transcriptHTML='',marker='',origin='',detail={segments};
+      if(ctx.kind===YOUTUBE_TRANSCRIPT_CAP){
+        if(String(input.videoId||'')!==ctx.original.youtubeId)fail('YouTube transcript video mismatch',409);
+        backendId=String(input.backendId||'');if(!['yt-dlp-shervin','opencli-youtube-shervin'].includes(backendId))fail('invalid transcript backend',400);
+        transcriptHTML=transcriptToSafeHTML(input.content,ctx.original.youtubeId);marker='data-qr-youtube-transcript="'+ctx.original.youtubeId+'"';origin='youtube_transcript_enrichment';
+        detail={segments,videoId:ctx.original.youtubeId,backend:backendId};
+      }else{
+        backendId=String(input.backendId||'');if(backendId!=='faster-whisper-local')fail('invalid transcript backend',400);
+        if(String(input.mediaSha256||'')!==hash(task.media_url))fail('podcast transcript media mismatch',409);
+        if(String(input.model||'')!=='base')fail('invalid podcast transcript model',400);
+        const language=String(input.language||'');if(!/^[A-Za-z]{2,3}$/.test(language))fail('invalid podcast transcript language',400);
+        transcriptHTML=podcastTranscriptToSafeHTML(input.content,ctx.entry.id);marker='data-qr-podcast-transcript="'+ctx.entry.id+'"';origin='podcast_local_transcript_enrichment';
+        detail={segments,backend:backendId,model:'base',language:language.toLowerCase(),mediaUrlHash:hash(task.media_url)};
+      }
+      const upstream=await this.s.mf.call('/v1/entries/'+ctx.entry.id),base=String(upstream?.content||''),combined=base.includes(marker)?base:base+'\n'+transcriptHTML;
       if(Buffer.byteLength(combined)>2*1024*1024)fail('transcript enrichment body too large');
       this.db.run('UPDATE collector_transcripts SET digest=?,updated_at=? WHERE entry_id=?',digest,now,ctx.entry.id);
       await this.s.mf.call('/v1/entries/'+ctx.entry.id,'PUT',{title:upstream.title||ctx.entry.title,content:combined});
-      this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='youtube_transcript_enrichment' WHERE entry_id=?",hash(combined),ctx.entry.id);
-      this.s.project({...upstream,content:combined},ctx.channel,Date.now());this.db.run("UPDATE entries SET content_origin='youtube_transcript_enrichment' WHERE id=?",ctx.entry.id);
-      this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",ctx.entry.id,YOUTUBE_TRANSCRIPT_CAP,'DONE',now,JSON.stringify({segments,videoId:ctx.original.youtubeId,backend:backendId}));
+      this.db.run('UPDATE imports SET content_hash=?,content_state=\'TEXT\',content_origin=? WHERE entry_id=?',hash(combined),origin,ctx.entry.id);
+      this.s.project({...upstream,content:combined},ctx.channel,Date.now());this.db.run('UPDATE entries SET content_origin=? WHERE id=?',origin,ctx.entry.id);
+      this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",ctx.entry.id,ctx.kind,'DONE',now,JSON.stringify(detail));
       const ack={accepted:true,entryId:ctx.entry.id,state:'TRANSCRIPT_ENRICHED',updated:true,segments,backendId};
       this.db.run("UPDATE collector_transcripts SET state='DONE',updated_at=?,expires_at=0,ack=?,error='' WHERE entry_id=?",now,JSON.stringify(ack),ctx.entry.id);
-      this.db.audit('youtube-transcript',ctx.entry.id,'transcript appended');return ack;
+      this.db.audit(ctx.kind,ctx.entry.id,'transcript appended');return ack;
     }
     this.db.run('UPDATE collector_transcripts SET digest=?,updated_at=? WHERE entry_id=?',digest,now,ctx.entry.id);
-    const message=input.status==='BROWSER_OFFLINE'?'Shervin浏览器或OpenCLI扩展未连接':input.status==='ACCESS_BLOCKED'?'YouTube字幕访问受限，未绕过限制':input.status==='TIMEOUT'?'YouTube字幕读取超时':input.status==='AUTH_REQUIRED'?'YouTube字幕路径要求额外登录，未使用账号绕过':'YouTube字幕暂不可用，原有正文保留';
+    const label=ctx.kind===PODCAST_TRANSCRIPT_CAP?'播客本地转录':'YouTube字幕';
+    const message=input.status==='BROWSER_OFFLINE'?'Shervin本地转录运行时未连接':input.status==='ACCESS_BLOCKED'?label+'访问受限，未绕过限制':input.status==='TIMEOUT'?label+'读取或转录超时':input.status==='AUTH_REQUIRED'?label+'路径要求额外登录，未使用账号绕过':label+'暂不可用，原有正文保留';
     const retry=now+(input.status==='ACCESS_BLOCKED'||input.status==='AUTH_REQUIRED'?1800000:600000);
     this.db.run("UPDATE collector_transcripts SET state='QUEUED',updated_at=?,next_attempt=?,lease_id=NULL,expires_at=0,error=? WHERE entry_id=?",now,retry,message,ctx.entry.id);
     return {accepted:true,entryId:ctx.entry.id,state:input.status,updated:false};

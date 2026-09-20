@@ -271,18 +271,60 @@ Tasks:
 - [ ] community posts may become a feed only with stable item identity
 - [ ] explicit credential boundary if logged-in cookie is needed
 
-### L. P2 — Xiaoyuzhou / Podcast transcription
+### L. P2 — Podcast local transcription — DONE ON FEATURE BRANCH
 
-Current podcast RSS remains discovery.
+Current podcast RSS remains the only discovery/scheduler owner.
 
-Add enrichment:
-- audio -> ffmpeg -> Whisper/Groq transcript
-- transcript -> Quiet River native article body
+Privacy decision:
+- use Shervin-local faster-whisper;
+- do not send podcast audio to Groq/OpenAI or another cloud ASR provider;
+- temporary PCM audio exists only inside a TemporaryDirectory and is deleted when the task exits;
+- cloud ASR remains disabled unless explicitly approved as a separate future backend.
 
-Tasks:
-- [ ] no automatic audio retention after successful transcription unless explicitly enabled
-- [ ] transcript provenance recorded
-- [ ] bounded file size/duration
+Pipeline:
+
+registered Podcast RSS
+-> exact entry URL match
+-> validated public audio enclosure
+-> Shervin ffmpeg (mono 16 kHz, max 4h)
+-> faster-whisper base / CPU int8
+-> normalized timestamped text only
+-> existing Quiet River article body
+
+Completed:
+- [x] RSS/Atom/JSON Feed expose bounded audio enclosure metadata
+- [x] enclosure must come from the entry's already-registered Podcast feed
+- [x] enclosure URL is SSRF-checked on ECS and revalidated on Shervin, including redirects
+- [x] audio larger than 512 MiB is rejected before queueing when feed length is known
+- [x] local worker capability is advertised only when ffmpeg + isolated faster-whisper venv + wrapper exist
+- [x] Podcast gets a 60-minute worker lease; YouTube transcript behavior remains separate
+- [x] local wrapper uses fixed ffmpeg argv with shell disabled and deletes temporary audio
+- [x] no cloud-ASR SDK/API call exists in the wrapper
+- [x] worker returns only normalized transcript metadata/text; audio is never uploaded to ECS
+- [x] ECS verifies SHA-256 of the queued audio URL before accepting the result
+- [x] transcript appends to the existing article rather than creating a second card
+- [x] URL/publication/read/source-health state is preserved
+- [x] entry_enrichments records backend/model/language/segments and only a media URL hash
+- [x] native article UI explicitly says processing is local and audio is not uploaded
+
+Local feasibility evidence:
+- Shervin has no CUDA GPU; PyTorch is CPU-only
+- isolated runtime: faster-whisper 1.2.1 + CTranslate2 4.8.2
+- 30-second benchmark with base.en / CPU int8: 3.41 s transcription, RTF 0.114
+- full real Recsperts episode: 5076.15 s (84.6 min) audio
+- multilingual base / CPU int8 full canary: 756.9 s (12.6 min), RTF about 0.149
+- output: 409 segments / 75,605 characters, detected language en
+- working memory stayed around 500 MiB
+- after completion: 0 Quiet River Podcast temp directories and 0 temp WAV files
+- no production Quiet River data was mutated during the canary
+
+Verification:
+- focused media/collector/platform/workspace suite: 152/152
+- full regression on final worktree bytes before documentation-only updates: 358/358
+
+Remaining:
+- [ ] optional Xiaoyuzhou-specific discovery only if a concrete subscription source is added later; standard Podcast RSS already solves the current source
+- [ ] cloud Whisper/Groq backend stays explicitly disabled unless privacy/provider policy changes
 
 ### M. Existing integrations that should remain primary
 
