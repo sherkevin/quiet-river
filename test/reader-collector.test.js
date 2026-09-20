@@ -445,13 +445,23 @@ test('Instagram item author and shortcode mismatch are rejected on both worker a
  assert.throws(()=>normalize(job,[{id:'1',code:'DIFFERENT1',author:'nasa',caption:'x',taken_at:1789700000,url:'https://www.instagram.com/p/ABC_def-12/'}]),/shortcode mismatch/);
  assert.throws(()=>validateItems({platform:'instagram',label:'posts',authorId:'nasa'},[{title:'x',link:'https://www.instagram.com/p/ABC_def-12/',published:1789900000000,summary:'x',author:'other'}]),/author/);
 });
-test('Instagram desktop source is claimable through the existing single-browser lease queue',t=>{
+test('Instagram desktop source is only claimable after its platform backend passes an explicit canary',t=>{
  const db=new Database(':memory:');t.after(()=>db.close());
  const source={id:'ig-source',name:'NASA',platform:'instagram',url:'https://www.instagram.com/nasa/',tags:[],adapter:{platform:'instagram',id:'nasa'},enabled:true};
  const config={adapters:{desktopPlatforms:['instagram']}},channel=channelsFor(source,config.adapters)[0];
  db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=19 WHERE id=?',channel.id);
  const service={db,config,provisionChannels:async()=>{},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=? WHERE id=?',state,error,job.id)};
  const collector=new DesktopCollector(service);service.desktop=collector;db.createRun([channel],'manual');
- const claimed=collector.claim(['instagram']);
- assert.ok(claimed.job);assert.equal(claimed.job.platform,'instagram');assert.equal(claimed.job.authorId,'nasa');assert.equal(claimed.job.kind,'posts');assert.equal(claimed.job.backendId,'opencli-shervin');
+ const blocked=collector.claim(['instagram'],[],{'opencli-instagram-shervin':{status:'off',reason:'login canary not verified',state:'UNVERIFIED'}});
+ assert.equal(blocked.job,null);
+ const claimed=collector.claim(['instagram'],[],{'opencli-instagram-shervin':{status:'ok',reason:'read-only canary passed',state:'READY'}});
+ assert.ok(claimed.job);assert.equal(claimed.job.platform,'instagram');assert.equal(claimed.job.authorId,'nasa');assert.equal(claimed.job.kind,'posts');assert.equal(claimed.job.backendId,'opencli-instagram-shervin');
+});
+
+test('Instagram auth recovery probe names the platform backend and is explicitly read-only',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'ig-source',name:'NASA',platform:'instagram',url:'https://www.instagram.com/nasa/',tags:[],adapter:{platform:'instagram',id:'nasa'},enabled:true};
+ const config={adapters:{desktopPlatforms:['instagram']}},channel=channelsFor(source,config.adapters)[0];db.putSource(source,[channel]);db.run("UPDATE channels SET feed_id=19,state='AUTH_REQUIRED' WHERE id=?",channel.id);db.run("INSERT OR REPLACE INTO groups(id,state,next_allowed,last_success,failures) VALUES('credential:instagram','AUTH_REQUIRED',0,0,1)");
+ const service={db,config,provisionChannels:async()=>{},finish:()=>{}};const collector=new DesktopCollector(service);service.desktop=collector;
+ const probe=collector.authProbe(['instagram']);assert.equal(probe.platform,'instagram');assert.equal(probe.authorId,'nasa');assert.equal(probe.kind,'posts');assert.equal(probe.backendId,'opencli-instagram-shervin');assert.equal(probe.authProbe,true);
 });

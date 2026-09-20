@@ -105,6 +105,8 @@ registerBackend('opencli-shervin',async()=>{throw new Error('desktop acquisition
 registerProbe('opencli-shervin',async service=>{const status=service.desktop?.status?.();return status?.online?{status:'ok',reason:'Shervin collector heartbeat is current',state:'READY'}:{status:'warn',reason:'Shervin collector is offline or has not checked in',state:'OFFLINE'};});
 registerProbe('twitter-cli-shervin',async service=>service.desktop?.backendStatus?.()['twitter-cli-shervin']||{status:'off',reason:'Shervin has not reported a verified twitter-cli backend',state:'NOT_CONFIGURED'});
 registerProbe('opencli-twitter-shervin',async service=>service.desktop?.backendStatus?.()['opencli-twitter-shervin']||{status:'off',reason:'Shervin has not reported a verified OpenCLI Twitter backend',state:'NOT_CONFIGURED'});
+registerProbe('opencli-instagram-shervin',async service=>service.desktop?.backendStatus?.()['opencli-instagram-shervin']||{status:'off',reason:'Shervin has not reported a verified Instagram author backend',state:'NOT_CONFIGURED'});
+registerProbe('bili-cli-shervin',async service=>service.desktop?.backendStatus?.()['bili-cli-shervin']||{status:'off',reason:'Shervin has not reported a usable bili-cli runtime',state:'NOT_CONFIGURED'});
 registerProbe('rsshub-ecs',service=>probeLocalHttp(service,service.config.adapters?.rsshub));
 registerProbe('werss-ecs',service=>probeLocalHttp(service,service.config.adapters?.werss));
 registerProbe('xiaohongshu-mcp-ecs',service=>probeLocalHttp(service,service.config.adapters?.xiaohongshuMcp));

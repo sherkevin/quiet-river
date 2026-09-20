@@ -224,3 +224,23 @@ The implementation is prepared but **not connected**. Current runtime networks c
 The user has no Instagram account and does not want an Instagram integration that requires account creation, cookies or a logged-in browser session. Agent-Reach's pinned Instagram channel explicitly depends on OpenCLI using the user's logged-in Chrome session. Quiet River's no-account NASA canary returned no rows and did not establish a zero-account path.
 
 Decision: mark Instagram **SKIPPED**, not merely blocked. Do not request Instagram credentials, do not automate login, and do not enable the prepared feature-branch code in production. Revisit only if a stable no-account public acquisition path is independently verified.
+
+
+## 2026-09-20 — Instagram fail-closed hardening after skip decision
+
+Instagram remains SKIPPED by product/credential policy; this work does not reopen the integration.
+
+Hardening completed so dormant feature-branch code cannot accidentally become active merely because Shervin is online:
+
+- introduced explicit backend identity opencli-instagram-shervin;
+- capability health now consumes the platform-specific Shervin backend report instead of generic desktop heartbeat;
+- unverified Instagram reports off, not healthy;
+- scheduler ownership requires backend status ok from a recent explicit author canary;
+- added --verify-instagram HANDLE for a bounded read-only canary, but no login is automated;
+- AUTH_REQUIRED recovery uses two successful read-only probes before refreshing Instagram verification state;
+- acquisition doctor reports the platform backend separately;
+- a successful channel check is still required before capability status becomes fully healthy.
+
+Real environment remains unchanged: Shervin has no usable Instagram login state, OpenCLI profile/user canaries return AUTH_OR_LOGIN, and no Instagram content was imported.
+
+Verification after hardening: focused 112/112; full regression 337/337.

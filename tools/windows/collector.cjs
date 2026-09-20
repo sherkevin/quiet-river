@@ -66,7 +66,8 @@ function localBackendStatus(now=Date.now()){
   const script=path.join(__dirname,'twitter-explicit.py'),python=discoverTwitterPython(),hasExplicit=!!(process.env.TWITTER_AUTH_TOKEN&&process.env.TWITTER_CT0),verified=Number(config.twitterCliVerifiedAt)||0;
   const twitterCli=!python||!fs.existsSync(script)?{status:'off',reason:'twitter-cli explicit wrapper is not installed',state:'NOT_CONFIGURED'}:!hasExplicit?{status:'off',reason:'explicit TWITTER_AUTH_TOKEN + TWITTER_CT0 are not present; browser cookies will not be scanned',state:'NO_EXPLICIT_CREDENTIALS'}:verified&&now-verified<86400000?{status:'ok',reason:'explicit twitter-cli author-timeline canary passed within 24h',state:'READY'}:{status:'warn',reason:'explicit Twitter credentials exist but a current read-only canary has not passed',state:'UNVERIFIED'};
   const opencliTwitter=opencliReady&&Number(config.opencliTwitterVerifiedAt)&&now-Number(config.opencliTwitterVerifiedAt)<86400000?{status:'ok',reason:'OpenCLI Twitter author-timeline canary passed within 24h',state:'READY'}:opencliReady?{status:'warn',reason:'OpenCLI bridge is connected but the Twitter adapter has not passed a current canary',state:'UNVERIFIED'}:{status:'off',reason:'OpenCLI Browser Bridge is not connected',state:'OFFLINE'};
-  return {'twitter-cli-shervin':twitterCli,'opencli-twitter-shervin':opencliTwitter};
+  const instagram=opencliReady&&Number(config.instagramVerifiedAt)&&now-Number(config.instagramVerifiedAt)<86400000?{status:'ok',reason:'OpenCLI Instagram author-post canary passed within 24h',state:'READY'}:opencliReady?{status:'off',reason:'Instagram login/runtime has not passed an explicit author canary',state:'UNVERIFIED'}:{status:'off',reason:'OpenCLI Browser Bridge is not connected',state:'OFFLINE'};
+  return {'twitter-cli-shervin':twitterCli,'opencli-twitter-shervin':opencliTwitter,'opencli-instagram-shervin':instagram};
 }
 function saveConfig(){fs.writeFileSync(configPath,JSON.stringify(config,null,2),{encoding:'utf8'});}
 function verifyTwitterCli(handle){
@@ -85,6 +86,14 @@ function verifyOpencliTwitter(handle){
   const items=normalize({platform:'twitter',kind:'tweets',authorId:handle,name:handle},rows);if(!items.length)throw new Error('OpenCLI Twitter canary returned no original posts');
   config.opencliTwitterVerifiedAt=Date.now();config.opencliTwitterVerifiedHandle=handle;saveConfig();return {backend:'opencli-twitter-shervin',verifiedAt:config.opencliTwitterVerifiedAt,count:items.length};
 }
+function verifyInstagram(handle){
+  if(!/^[A-Za-z0-9._]{1,30}$/.test(handle))throw new Error('Invalid Instagram handle');if(!opencliReady)throw new Error('OpenCLI Browser Bridge is not connected');
+  const script=path.join(__dirname,'instagram-user.cjs');if(!fs.existsSync(script))throw new Error('Instagram read-only wrapper is missing');
+  const r=spawnSync(process.execPath,[script,handle,'1'],{encoding:'utf8',timeout:180000,maxBuffer:2*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});if(r.error||r.status!==0)throw new Error('Instagram author canary failed');
+  let rows;try{rows=JSON.parse(r.stdout.replace(/^\uFEFF/,''));}catch{throw new Error('Instagram author canary returned invalid JSON');}
+  const items=normalize({platform:'instagram',kind:'posts',authorId:handle,name:handle},rows);if(!items.length)throw new Error('Instagram author canary returned no posts');
+  config.instagramVerifiedAt=Date.now();config.instagramVerifiedHandle=handle;saveConfig();return {backend:'opencli-instagram-shervin',verifiedAt:config.instagramVerifiedAt,count:items.length};
+}
 function runOpencliRead(cfg,argv,spawnFn=spawnSync){
   const options={encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:cfg.profile||process.env.OPENCLI_PROFILE||''}};
   let result=spawnFn(process.execPath,argv,options);
@@ -99,7 +108,8 @@ function collect(job,limitOverride){
   const limit=Math.min(20,Math.max(1,Number(limitOverride??job.limit??20)||20));
   let r;
   if(job.platform==='instagram'){
-    if(job.kind!=='posts')throw new Error('Unsupported Instagram read-only backend');if(!opencliReady)return {leaseId:job.leaseId,status:'BROWSER_OFFLINE',items:[]};
+    if(job.kind!=='posts'||job.backendId!=='opencli-instagram-shervin')throw new Error('Unsupported Instagram read-only backend');
+    if(!job.authProbe&&localBackendStatus()['opencli-instagram-shervin'].status!=='ok')return {leaseId:job.leaseId,status:'AUTH_REQUIRED',items:[]};
     const script=path.join(__dirname,'instagram-user.cjs');if(!fs.existsSync(script))throw new Error('Instagram read-only wrapper is missing');
     r=spawnSync(process.execPath,[script,job.authorId,String(limit)],{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
   }else if(job.platform==='twitter'){
@@ -144,11 +154,13 @@ async function confirmedCollect(job,collectFn=collect,sleepFn=sleep){
 }
 async function authRecovered(probe,collectFn=collect,sleepFn=sleep){
   const first=collectFn(probe,1);if(first.status!=='OK')return false;
-  await sleepFn(2000);return collectFn(probe,1).status==='OK';
+  await sleepFn(2000);const recovered=collectFn(probe,1).status==='OK';
+  if(recovered&&probe.platform==='instagram'){config.instagramVerifiedAt=Date.now();config.instagramVerifiedHandle=probe.authorId;saveConfig();}
+  return recovered;
 }
 async function main(){
-  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili|twitter|instagram] [--doctor] [--verify-twitter HANDLE] [--verify-twitter-opencli HANDLE]');return;}
-  preflight();if(args.includes('--verify-twitter')){const handle=option('--verify-twitter','');const result=verifyTwitterCli(handle);log('Verified '+result.backend+' with an explicit read-only author canary; no browser cookie discovery was used.');return;}if(args.includes('--verify-twitter-opencli')){const handle=option('--verify-twitter-opencli','');const result=verifyOpencliTwitter(handle);log('Verified '+result.backend+' with an explicit read-only author canary.');return;}if(args.includes('--doctor')){for(const [id,s] of Object.entries(localBackendStatus()))log(id+': '+s.status+' · '+s.reason);return;}acquire();if(args.includes('--watch'))startProxyTunnel();
+  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili|twitter|instagram] [--doctor] [--verify-twitter HANDLE] [--verify-twitter-opencli HANDLE] [--verify-instagram HANDLE]');return;}
+  preflight();if(args.includes('--verify-twitter')){const handle=option('--verify-twitter','');const result=verifyTwitterCli(handle);log('Verified '+result.backend+' with an explicit read-only author canary; no browser cookie discovery was used.');return;}if(args.includes('--verify-twitter-opencli')){const handle=option('--verify-twitter-opencli','');const result=verifyOpencliTwitter(handle);log('Verified '+result.backend+' with an explicit read-only author canary.');return;}if(args.includes('--verify-instagram')){const handle=option('--verify-instagram','');const result=verifyInstagram(handle);log('Verified '+result.backend+' with an explicit read-only author canary.');return;}if(args.includes('--doctor')){for(const [id,s] of Object.entries(localBackendStatus()))log(id+': '+s.status+' · '+s.reason);return;}acquire();if(args.includes('--watch'))startProxyTunnel();
   const platforms=option('--platform','zhihu,xiaohongshu,bilibili,twitter,instagram').split(',').filter(p=>['zhihu','xiaohongshu','bilibili','twitter','instagram'].includes(p));
   if(!platforms.length)throw new Error('Choose a supported platform');
   const max=Math.max(1,Math.min(1000,Number(option('--max-jobs',args.includes('--watch')?'1000':'20'))||20));

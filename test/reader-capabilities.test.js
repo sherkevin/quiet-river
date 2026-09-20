@@ -171,3 +171,19 @@ test('V2EX community capability maps to its dedicated public API backend',()=>{
  assert.equal(cap.status,'ok');
  assert.equal(cap.candidates[0].name,'V2EX Public API');
 });
+
+test('Instagram capability is platform-gated instead of inheriting generic Shervin health',()=>{
+  const ig={id:'ig',name:'NASA',platform:'instagram',enabled:true};
+  const channel={...baseChannel,id:'ig-c',source_id:'ig',label:'posts',group_key:'credential:instagram',state:'NEVER_CHECKED'};
+  const [blocked]=sourceCapabilities(ig,[channel],{collector:{online:true},backendStatus:{'opencli-instagram-shervin':{status:'off',reason:'login canary missing',state:'UNVERIFIED'}}});
+  assert.equal(blocked.id,'instagram.posts');assert.equal(blocked.activeBackend,null);assert.equal(blocked.status,'off');assert.equal(blocked.candidates[0].id,'opencli-instagram-shervin');
+  const [ready]=sourceCapabilities(ig,[channel],{collector:{online:true},backendStatus:{'opencli-instagram-shervin':{status:'ok',reason:'read-only canary passed',state:'READY'}}});
+  assert.equal(ready.activeBackend,'opencli-instagram-shervin');assert.equal(ready.status,'warn');assert.match(ready.reason,/not completed a check/);
+});
+
+test('Instagram becomes healthy only after both backend canary and a real channel success',()=>{
+  const ig={id:'ig',name:'NASA',platform:'instagram',enabled:true};
+  const channel={...baseChannel,id:'ig-c',source_id:'ig',label:'posts',group_key:'credential:instagram',state:'SUCCEEDED_NO_NEW'};
+  const [cap]=sourceCapabilities(ig,[channel],{collector:{online:true},backendStatus:{'opencli-instagram-shervin':{status:'ok',reason:'read-only canary passed',state:'READY'}}});
+  assert.equal(cap.activeBackend,'opencli-instagram-shervin');assert.equal(cap.status,'ok');
+});

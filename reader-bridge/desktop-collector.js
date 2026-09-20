@@ -70,7 +70,7 @@ class DesktopCollector {
       note:'Windows运行时接收更新任务；登录态留在本机，离线不代表博主无更新'};
   }
   recordBackendStatus(input,now=Date.now()){
-    const allowed=new Set(['twitter-cli-shervin','opencli-twitter-shervin']),backends={};
+    const allowed=new Set(['twitter-cli-shervin','opencli-twitter-shervin','opencli-instagram-shervin']),backends={};
     if(input&&typeof input==='object')for(const [id,value] of Object.entries(input)){
       if(!allowed.has(id)||!value||!['ok','warn','error','off'].includes(value.status))continue;
       backends[id]={status:value.status,reason:String(value.reason||value.status).slice(0,200),state:String(value.state||'LOCAL').slice(0,64)};
@@ -87,12 +87,13 @@ class DesktopCollector {
     return backends;
   }
   activeBackend(channel,source,now=Date.now()){
-    if(channel.transport==='desktop')return 'opencli-shervin';
+    if(channel.transport==='desktop'&&source?.platform!=='instagram')return 'opencli-shervin';
     const [cap]=sourceCapabilities(source,[channel],{collector:this.status(),backendStatus:this.backendStatus(now)});
     return cap?.activeBackend||null;
   }
   ownsChannel(channel,source,now=Date.now()){
-    if(channel.transport==='desktop')return true;
+    if(channel.transport==='desktop'&&source?.platform!=='instagram')return true;
+    if(source?.platform==='instagram')return this.activeBackend(channel,source,now)==='opencli-instagram-shervin'&&this.backendStatus(now)['opencli-instagram-shervin']?.status==='ok';
     return ['twitter-cli-shervin','opencli-twitter-shervin'].includes(this.activeBackend(channel,source,now));
   }
   twitterIdentity(source){
@@ -143,7 +144,7 @@ class DesktopCollector {
       const candidates=this.db.channels().filter(c=>c.transport==='desktop'&&c.group_key==='credential:'+platform&&c.enabled);
       const c=candidates.find(c=>c.state==='AUTH_REQUIRED')||candidates[0];
       const source=c&&sources.find(s=>s.id===c.source_id&&s.enabled&&s.adapter?.id);
-      if(source)return {platform,sourceId:source.id,authorId:source.adapter.id,kind:c.label,limit:1};
+      if(source)return {platform,sourceId:source.id,authorId:source.adapter.id,kind:c.label,limit:1,...(platform==='instagram'?{backendId:'opencli-instagram-shervin',authProbe:true}:{})};
     }
     return null;
   }

@@ -148,6 +148,7 @@ Evidence:
 
 Status:
 - preparation code exists in feature-branch history but is not a verified/approved acquisition backend;
+- dormant code is fail-closed: opencli-instagram-shervin requires its own recent explicit canary before scheduler ownership, so generic Shervin heartbeat can never activate it;
 - do not enable Instagram in production and do not spend further integration time unless a stable zero-account public path appears later;
 - if that happens, restart from a fresh no-cookie canary instead of reviving the logged-in-session design.
 

@@ -19,8 +19,10 @@ const BACKENDS = Object.freeze({
   werss: {id:'werss-ecs', name:'WeRSS @ ECS', kind:'service', description:'Pinned WeRSS runtime for WeChat official accounts'},
   xiaohongshu_mcp: {id:'xiaohongshu-mcp-ecs', name:'xiaohongshu-mcp @ ECS', kind:'service', description:'Agent-Reach-style server fallback for Xiaohongshu using an explicitly configured local MCP service'},
   v2ex: {id:'v2ex-public-api', name:'V2EX Public API', kind:'network', description:'Agent-Reach-derived public V2EX node/topic API backend'},
+  bili_cli: {id:'bili-cli-shervin', name:'bili-cli @ Shervin', kind:'desktop', description:'Agent-Reach preferred Bilibili video detail/search backend; read-only and no login required for detail'},
   twitter_cli: {id:'twitter-cli-shervin', name:'twitter-cli @ Shervin', kind:'desktop', description:'Agent-Reach preferred Twitter author-timeline backend; requires explicit TWITTER_AUTH_TOKEN + TWITTER_CT0'},
   opencli_twitter: {id:'opencli-twitter-shervin', name:'OpenCLI Twitter @ Shervin', kind:'desktop', description:'Twitter/X browser-session fallback using the user-controlled Shervin Chrome session'},
+  opencli_instagram: {id:'opencli-instagram-shervin', name:'OpenCLI Instagram @ Shervin', kind:'desktop', description:'Instagram author-post backend using the user-controlled Shervin browser session'},
   xgo_twitter: {id:'xgo-twitter-feed', name:'api.xgo.ing Twitter Feed', kind:'network', description:'Existing third-party Twitter RSS feed retained as migration fallback'},
 });
 
@@ -30,6 +32,7 @@ const BACKENDS = Object.freeze({
 const CAPABILITY_POLICIES=Object.freeze({
   'xiaohongshu.notes':['opencli-shervin','xiaohongshu-mcp-ecs'],
   'twitter.author.posts':['twitter-cli-shervin','opencli-twitter-shervin','xgo-twitter-feed'],
+  'instagram.posts':['opencli-instagram-shervin'],
 });
 
 function backendForTransport(transport) {
@@ -46,6 +49,7 @@ function backendForChannel(source,channel){
   if(source?.platform==='twitter'&&channel.transport==='public'){
     try{if(new URL(channel.url).hostname==='api.xgo.ing')return BACKENDS.xgo_twitter;}catch{}
   }
+  if(source?.platform==='instagram'&&channel.transport==='desktop')return BACKENDS.opencli_instagram;
   return backendForTransport(channel.transport);
 }
 
@@ -64,11 +68,13 @@ function applyPolicy(capability,context={}){
 }
 
 function candidateStatus(channel, context={},source=null) {
-  const backend=backendForChannel(source,channel),collector=context.collector||null,state=channel.state||'UNKNOWN';
+  const backend=backendForChannel(source,channel),collector=context.collector||null,state=channel.state||'UNKNOWN',runtime=context.backendStatus?.[backend.id];
   let status='warn',reason=channel.error||state||'health not yet established';
   if(!channel.enabled||state==='NOT_CONFIGURED'){status='off';reason='backend is not configured/enabled';}
   else if(state==='AUTH_REQUIRED'){status='error';reason=channel.error||'credential group requires user re-authentication';}
+  else if(runtime&&['off','error'].includes(runtime.status)){status=runtime.status;reason=String(runtime.reason||runtime.status);}
   else if(channel.transport==='desktop'&&!collector?.online){status='warn';reason='Shervin collector is offline; queued work is retained';}
+  else if(runtime?.status==='warn'){status='warn';reason=String(runtime.reason||'backend runtime is not yet verified');}
   else if(HARD_FAILURES.has(state)){status='warn';reason=channel.error||state;}
   else if(SUCCESS_STATES.has(state)){status='ok';reason='last acquisition check completed successfully';}
   else if(DEGRADED_STATES.has(state)){status='warn';reason=state==='SUCCEEDED_PARTIAL'?'last check returned only a partial upstream window':state==='NEVER_CHECKED'?'backend is configured but has not completed a check yet':state==='RUNNING'?'backend is currently checking':'backend is waiting for its cooldown window';}
