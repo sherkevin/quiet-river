@@ -53,8 +53,24 @@ function selectFreshXhsNoteUrl(job,rows){
   return '';
 }
 function normalizeEnrichment(job,payload){
-  if(!job||job.taskType!=='entry_body_v1'||!Number.isSafeInteger(Number(job.entryId))||!['zhihu','xiaohongshu'].includes(job.platform))throw new Error('Invalid enrichment job');
-  const expected=originalLink(job,job.url),max=1024*1024;let content='';
+  if(!job||!Number.isSafeInteger(Number(job.entryId)))throw new Error('Invalid enrichment job');
+  const max=1024*1024;
+  if(job.taskType==='entry_transcript_v1'){
+    if(job.platform!=='bilibili'||job.kind!=='videos'||!Array.isArray(payload)||payload.length>20000)throw new Error('Invalid Bilibili transcript job');
+    originalLink(job,job.url);const lines=[];let last='';
+    for(const row of payload){
+      if(!row||typeof row!=='object')throw new Error('Invalid Bilibili subtitle row');
+      const from=String(row.from||''),to=String(row.to||''),fm=/^(\d+(?:\.\d+)?)s$/.exec(from),tm=/^(\d+(?:\.\d+)?)s$/.exec(to);
+      if(!fm||!tm||Number(tm[1])<Number(fm[1]))throw new Error('Invalid Bilibili subtitle timestamp');
+      const text=String(row.content??'').replace(/\s+/g,' ').trim();if(!text||text===last)continue;
+      lines.push('['+from+' - '+to+'] '+text);last=text;
+    }
+    const content=lines.join('\n').trim();
+    if(!content||content.length<40||Buffer.byteLength(content,'utf8')>max)throw new Error('Bilibili transcript missing or too large');
+    return {entryId:Number(job.entryId),content};
+  }
+  if(job.taskType!=='entry_body_v1'||!['zhihu','xiaohongshu'].includes(job.platform))throw new Error('Invalid enrichment job');
+  const expected=originalLink(job,job.url);let content='';
   if(job.platform==='zhihu'&&job.kind==='answers'){
     const row=Array.isArray(payload)?payload[0]:payload;if(!row||typeof row!=='object'||typeof row.url!=='string')throw new Error('Invalid Zhihu answer detail');
     const actual=originalLink(job,row.url);if(actual.guid!==expected.guid)throw new Error('Enrichment identity mismatch');content=String(row.content||'');

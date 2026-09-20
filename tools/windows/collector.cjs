@@ -131,9 +131,12 @@ function collect(job,limitOverride){
   catch{return {leaseId:job.leaseId,status:'UPSTREAM_ERROR',items:[]};}
 }
 function collectEnrichment(job){
-  if(job.taskType!=='entry_body_v1'||!['zhihu','xiaohongshu'].includes(job.platform)||!['answers','articles','notes'].includes(job.kind))throw new Error('Invalid enrichment task');
+  const bodyTask=job.taskType==='entry_body_v1'&&['zhihu','xiaohongshu'].includes(job.platform)&&['answers','articles','notes'].includes(job.kind);
+  const transcriptTask=job.taskType==='entry_transcript_v1'&&job.platform==='bilibili'&&job.kind==='videos';
+  if(!bodyTask&&!transcriptTask)throw new Error('Invalid enrichment task');
   originalLink(job,job.url);let argv,payload;
-  if(job.platform==='zhihu'&&job.kind==='answers')argv=[config.opencliMain,'zhihu','answer-detail',job.url,'--max-content','0','-f','json','--trace','off','--site-session','ephemeral'];
+  if(transcriptTask)argv=[config.opencliMain,'bilibili','subtitle',job.url,'-f','json','--trace','off','--site-session','ephemeral'];
+  else if(job.platform==='zhihu'&&job.kind==='answers')argv=[config.opencliMain,'zhihu','answer-detail',job.url,'--max-content','0','-f','json','--trace','off','--site-session','ephemeral'];
   else if(job.platform==='xiaohongshu'&&job.kind==='notes'){
     const refresh=runOpencliRead(config,[config.opencliMain,'xiaohongshu','user',job.authorId,'--limit','50','-f','json','--trace','off','--site-session','ephemeral']);
     if(refresh.error||refresh.status!==0)return {leaseId:job.leaseId,entryId:job.entryId,status:refresh.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(refresh.status,refresh.stderr||refresh.error?.message||'')};
@@ -145,7 +148,7 @@ function collectEnrichment(job){
   else throw new Error('Unsupported enrichment task');
   const r=runOpencliRead(config,argv);
   if(r.error||r.status!==0)return {leaseId:job.leaseId,entryId:job.entryId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||'')};
-  try{payload=job.kind==='articles'?r.stdout:JSON.parse(r.stdout.replace(/^\uFEFF/,''));const normalized=normalizeEnrichment(job,payload);return {leaseId:job.leaseId,status:'OK',...normalized};}
+  try{payload=job.platform==='zhihu'&&job.kind==='articles'?r.stdout:JSON.parse(r.stdout.replace(/^\uFEFF/,''));const normalized=normalizeEnrichment(job,payload);return {leaseId:job.leaseId,status:'OK',...normalized};}
   catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};}
 }
 async function confirmedCollect(job,collectFn=collect,sleepFn=sleep){
@@ -171,11 +174,11 @@ async function main(){
         const result=JSON.parse(fs.readFileSync(pending,'utf8'));
         try{const ack=transport({op:'submit',result});if(!ack.accepted)throw new Error('Missing acknowledgement');
           if(!['SUCCEEDED_PARTIAL','ENRICHED','FALLBACK_QUEUED'].includes(ack.state))failures++;
-          fs.unlinkSync(pending);log(result.entryId?`ECS accepted article-body result; ${ack.state}`:`ECS accepted ${ack.received} records; ${ack.state}`);done++;
+          fs.unlinkSync(pending);log(result.entryId?`ECS accepted entry enrichment result; ${ack.state}`:`ECS accepted ${ack.received} records; ${ack.state}`);done++;
         }catch(e){if(e.status===409){fs.renameSync(pending,pending+'.expired-'+Date.now());log('Expired result retained locally; new collection required');}else throw e;}
         if(done>=max)break;
       }
-      const next=transport({op:'claim',platforms,capabilities:['entry_body_v1'],backends:localBackendStatus()});
+      const next=transport({op:'claim',platforms,capabilities:['entry_body_v1','entry_transcript_v1'],backends:localBackendStatus()});
       if(!next.job){
         let resumed=false;
         if(next.authProbe){
@@ -193,10 +196,10 @@ async function main(){
         if(!args.includes('--watch')&&!next.waitForCooldown){log('No currently eligible task. Cooling down or waiting for browser authorization is not a successful source check.');break;}
         await sleep(Math.max(8,Math.min(60,next.retryAfter||30))*1000);continue;
       }
-      const enrichment=next.job.taskType==='entry_body_v1';
-      log(enrichment?'Reading one known '+next.job.platform+' article body for Quiet River':'Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
+      const enrichment=['entry_body_v1','entry_transcript_v1'].includes(next.job.taskType),transcript=next.job.taskType==='entry_transcript_v1';
+      log(transcript?'Reading one known Bilibili subtitle track for Quiet River':enrichment?'Reading one known '+next.job.platform+' article body for Quiet River':'Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
       const result=await confirmedCollect(next.job,enrichment?collectEnrichment:collect);
-      if(result.status==='AUTH_REQUIRED')log('Authentication failure repeated on the same subscribed route; shared group will pause.');
+      if(result.status==='AUTH_REQUIRED')log(transcript?'Subtitle authorization was not confirmed; only this subtitle task will pause.':'Authentication failure repeated on the same subscribed route; shared group will pause.');
       persist(pending,result);await sleep(8000);
     }catch(e){log(e.message);if(!args.includes('--watch'))throw e;await sleep(30000);}
   }

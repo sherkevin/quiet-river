@@ -139,21 +139,21 @@ function setupNativeHighlightComposer(shell,body,detail){
   };
 }
 function setupNativeEnrichment(shell,container,detail){
-  const button=shell.querySelector('[data-native-enrich]'),initial=detail.bodyEnrichment;
-  if(!initial?.eligible||detail.contentState==='TEXT'){button.remove();return;}
-  let polling=false,stopped=false;
+  const button=shell.querySelector('[data-native-enrich]'),initial=detail.bodyEnrichment,isTranscript=initial?.kind==='bilibili_subtitle';
+  if(!initial?.eligible||initial.state==='DONE'||(!isTranscript&&detail.contentState==='TEXT')){button.remove();return;}
+  const noun=isTranscript?'字幕':'正文';let polling=false,stopped=false;
   const paint=state=>{
-    detail.bodyEnrichment=state;const online=state.collector?.online;
-    if(state.state==='RUNNING'){button.disabled=true;button.textContent='Shervin 正在读取正文…';}
-    else if(state.state==='QUEUED'){const retry=Number(state.next_attempt)>Date.now()&&!!state.error;button.disabled=!retry;button.textContent=retry?'正文受限 · 点击立即重试':online?'正文已排队…':'正文已排队 · Shervin 离线';}
-    else if(state.state==='AUTH_REQUIRED'){button.disabled=true;button.textContent='Shervin 需要重新登录';}
-    else{button.disabled=false;button.textContent=online?'让 Shervin 补正文':'Shervin 离线 · 先排队补正文';}
-    button.title=state.error||(!online?'任务会保留，Shervin 再次运行 collector 后继续':'正文凭证只在 Shervin 浏览器中使用');
+    detail.bodyEnrichment=state;const online=state.collector?.online,retry=Number(state.next_attempt)>Date.now()&&!!state.error;
+    if(state.state==='RUNNING'){button.disabled=true;button.textContent='Shervin 正在读取'+noun+'…';}
+    else if(state.state==='QUEUED'){button.disabled=!retry;button.textContent=retry?noun+'受限 · 点击立即重试':online?noun+'已排队…':noun+'已排队 · Shervin 离线';}
+    else if(state.state==='AUTH_REQUIRED'){button.disabled=!isTranscript;button.textContent=isTranscript?'字幕需要 B站登录 · 点击重试':'Shervin 需要重新登录';}
+    else{button.disabled=false;button.textContent=online?'让 Shervin '+(isTranscript?'获取字幕':'补正文'):'Shervin 离线 · 先排队'+noun;}
+    button.title=state.error||(!online?'任务会保留，Shervin 再次运行 collector 后继续':noun+'凭证只在 Shervin 浏览器中使用');
   };
-  const reload=async state=>{const next=await api('/entries/'+detail.id);let hs={highlights:detail.highlights||[],configured:detail.highlightConfigured,canCreate:false};try{hs=await api('/entries/'+detail.id+'/highlights');}catch{}next.highlights=hs.highlights||[];next.highlightConfigured=hs.configured!==false;next.highlightCanCreate=!!hs.canCreate;next.bodyEnrichment=state;drawNativeArticle(container,next);toast('Shervin 已补充站内正文');};
+  const reload=async state=>{const next=await api('/entries/'+detail.id);let hs={highlights:detail.highlights||[],configured:detail.highlightConfigured,canCreate:false};try{hs=await api('/entries/'+detail.id+'/highlights');}catch{}next.highlights=hs.highlights||[];next.highlightConfigured=hs.configured!==false;next.highlightCanCreate=!!hs.canCreate;next.bodyEnrichment=state;drawNativeArticle(container,next);toast('Shervin 已补充'+noun);};
   const poll=async()=>{if(polling||stopped)return;polling=true;try{for(let i=0;i<60&&!stopped;i++){await wait(3000);const state=await api('/entries/'+detail.id+'/enrichment');paint(state);if(state.state==='DONE'){stopped=true;await reload(state);break;}if(['AUTH_REQUIRED','UNAVAILABLE','FAILED'].includes(state.state)){stopped=true;break;}}}catch(e){error(e);}finally{polling=false;}};
   paint(initial);if(['QUEUED','RUNNING'].includes(initial.state))void poll();
-  button.onclick=async()=>{button.disabled=true;try{const state=await api('/entries/'+detail.id+'/enrichment',{});paint(state);void poll();toast(state.collector?.online?'正文任务已提交给 Shervin':'正文任务已排队；Shervin 上线后继续');}catch(e){paint(detail.bodyEnrichment);error(e);}};
+  button.onclick=async()=>{button.disabled=true;stopped=false;try{const state=await api('/entries/'+detail.id+'/enrichment',{});paint(state);void poll();toast(state.collector?.online?noun+'任务已提交给 Shervin':noun+'任务已排队；Shervin 上线后继续');}catch(e){paint(detail.bodyEnrichment);error(e);}};
 }
 async function recordNativeArticleOpen(detail){
   const eventId=crypto.randomUUID().replaceAll('-','');await api('/entries/'+detail.id+'/open',{eventId,target:'reader'});detail.status='read';

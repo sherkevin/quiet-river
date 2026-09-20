@@ -7,7 +7,7 @@ const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter','instagram']
 const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','instagram']);
 const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu','instagram']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
-const ENRICH_CAP='entry_body_v1',MAX_BODY_BYTES=1024*1024;
+const BODY_CAP='entry_body_v1',TRANSCRIPT_CAP='entry_transcript_v1',MAX_BODY_BYTES=1024*1024;
 const BLOCK_PAGE_RE=/登录后查看|请登录|登录已失效|验证码|安全限制|访问链接异常|页面不见了|笔记不存在|access denied|security block/i;
 function fail(message,status=400){throw Object.assign(new Error(message),{status});}
 function bodyToSafeHTML(text){
@@ -38,7 +38,7 @@ class DesktopCollector {
       expires_at INTEGER NOT NULL,state TEXT NOT NULL DEFAULT 'OPEN',digest TEXT,ack TEXT);
       CREATE INDEX IF NOT EXISTS collector_lease_state ON collector_leases(state,expires_at);
       CREATE TABLE IF NOT EXISTS collector_enrichments(
-      entry_id INTEGER PRIMARY KEY,channel_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'QUEUED',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
+      entry_id INTEGER PRIMARY KEY,channel_id TEXT NOT NULL,kind TEXT NOT NULL DEFAULT 'body',state TEXT NOT NULL DEFAULT 'QUEUED',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
       attempts INTEGER NOT NULL DEFAULT 0,next_attempt INTEGER NOT NULL DEFAULT 0,lease_id TEXT,expires_at INTEGER NOT NULL DEFAULT 0,digest TEXT,ack TEXT,error TEXT NOT NULL DEFAULT '');
       CREATE UNIQUE INDEX IF NOT EXISTS collector_enrichment_lease ON collector_enrichments(lease_id) WHERE lease_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS collector_enrichment_state ON collector_enrichments(state,next_attempt,created_at);
@@ -47,6 +47,8 @@ class DesktopCollector {
       failures INTEGER NOT NULL DEFAULT 0,error TEXT NOT NULL DEFAULT '');`);
     const leaseColumns=new Set(this.db.all('PRAGMA table_info(collector_leases)').map(c=>c.name));
     if(!leaseColumns.has('backend_id'))this.db.db.exec("ALTER TABLE collector_leases ADD COLUMN backend_id TEXT NOT NULL DEFAULT ''");
+    const enrichmentColumns=new Set(this.db.all('PRAGMA table_info(collector_enrichments)').map(c=>c.name));
+    if(!enrichmentColumns.has('kind'))this.db.db.exec("ALTER TABLE collector_enrichments ADD COLUMN kind TEXT NOT NULL DEFAULT 'body'");
     for(const channel of this.db.channels()){
       if(channel.transport==='desktop'&&['SUCCEEDED_PARTIAL','SUCCEEDED_NEW','SUCCEEDED_NO_NEW'].includes(channel.state)&&channel.error){
         this.db.run("UPDATE channels SET error='' WHERE id=?",channel.id);
@@ -115,24 +117,35 @@ class DesktopCollector {
     const id=Number(entryId),entry=Number.isSafeInteger(id)?this.db.get('SELECT * FROM entries WHERE id=?',id):null;
     if(!entry)fail('article not found',404);
     const source=this.db.sources().find(s=>s.id===entry.source_id),channel=this.db.channels().find(c=>c.id===entry.channel_id);
-    if(!source?.enabled||!channel?.enabled||channel.transport!=='desktop'||!AUTH_PLATFORMS.has(source.platform))fail('article does not support desktop enrichment',409);
+    if(!source?.enabled||!channel?.enabled||channel.transport!=='desktop')fail('article does not support desktop enrichment',409);
     const authorId=channel.author_id||source.adapter?.id,kind=channel.desktop_kind||channel.label;
-    if(!authorId||!['answers','articles','notes'].includes(kind))fail('article enrichment identity is incomplete',409);
+    let enrichmentKind='',taskType='';
+    if(AUTH_PLATFORMS.has(source.platform)&&['answers','articles','notes'].includes(kind)){enrichmentKind='body';taskType=BODY_CAP;}
+    else if(source.platform==='bilibili'&&kind==='videos'){enrichmentKind='bilibili_subtitle';taskType=TRANSCRIPT_CAP;}
+    else fail('article enrichment identity is incomplete',409);
+    if(!authorId)fail('article enrichment identity is incomplete',409);
     let original;try{original=originalLink({platform:source.platform,kind,authorId},entry.url);}catch{fail('article original URL no longer matches its source',409);}
-    return {entry,source,channel,authorId,kind,original};
+    return {entry,source,channel,authorId,kind,original,enrichmentKind,taskType};
+  }
+  enrichmentDone(ctx){
+    if(ctx.enrichmentKind==='body')return ctx.entry.content_state==='TEXT';
+    if(ctx.enrichmentKind==='bilibili_subtitle')return !!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind='bilibili_subtitle_v1' AND state='DONE'",ctx.entry.id);
+    return false;
   }
   enrichmentStatus(entryId){
     let ctx;try{ctx=this.enrichmentContext(entryId);}catch(e){if(e.status===404)throw e;return {entryId:Number(entryId),eligible:false,state:'UNAVAILABLE',error:e.message,collector:this.status()};}
-    if(ctx.entry.content_state==='TEXT')return {entryId:ctx.entry.id,eligible:true,state:'DONE',contentState:'TEXT',collector:this.status()};
-    const row=this.db.get('SELECT state,created_at,updated_at,attempts,next_attempt,error FROM collector_enrichments WHERE entry_id=?',ctx.entry.id);
-    return {entryId:ctx.entry.id,eligible:true,state:row?.state||'NONE',contentState:ctx.entry.content_state,...(row||{}),collector:this.status()};
+    const base={entryId:ctx.entry.id,eligible:true,kind:ctx.enrichmentKind,taskType:ctx.taskType,contentState:ctx.entry.content_state,collector:this.status()};
+    if(this.enrichmentDone(ctx))return {...base,state:'DONE'};
+    const row=this.db.get('SELECT kind,state,created_at,updated_at,attempts,next_attempt,error FROM collector_enrichments WHERE entry_id=?',ctx.entry.id);
+    if(row&&row.kind!==ctx.enrichmentKind)return {...base,state:'NONE'};
+    return {...base,state:row?.state||'NONE',...(row||{})};
   }
   queueEnrichment(entryId,now=Date.now()){
-    const ctx=this.enrichmentContext(entryId);if(ctx.entry.content_state==='TEXT')return this.enrichmentStatus(ctx.entry.id);
-    const old=this.db.get('SELECT state FROM collector_enrichments WHERE entry_id=?',ctx.entry.id);
-    if(old?.state!=='RUNNING')this.db.run(`INSERT INTO collector_enrichments(entry_id,channel_id,state,created_at,updated_at,next_attempt,error)
-      VALUES(?,?,'QUEUED',?,?,0,'') ON CONFLICT(entry_id) DO UPDATE SET channel_id=excluded.channel_id,state='QUEUED',updated_at=excluded.updated_at,next_attempt=0,lease_id=NULL,expires_at=0,digest=NULL,ack=NULL,error=''`,ctx.entry.id,ctx.channel.id,now,now);
-    this.db.audit('collector_enrichment',ctx.entry.id,'queued');return this.enrichmentStatus(ctx.entry.id);
+    const ctx=this.enrichmentContext(entryId);if(this.enrichmentDone(ctx))return this.enrichmentStatus(ctx.entry.id);
+    const old=this.db.get('SELECT kind,state FROM collector_enrichments WHERE entry_id=?',ctx.entry.id);
+    if(old?.state!=='RUNNING'||old.kind!==ctx.enrichmentKind)this.db.run(`INSERT INTO collector_enrichments(entry_id,channel_id,kind,state,created_at,updated_at,next_attempt,error)
+      VALUES(?,?,?,'QUEUED',?,?,0,'') ON CONFLICT(entry_id) DO UPDATE SET channel_id=excluded.channel_id,kind=excluded.kind,state='QUEUED',updated_at=excluded.updated_at,next_attempt=0,lease_id=NULL,expires_at=0,digest=NULL,ack=NULL,error=''`,ctx.entry.id,ctx.channel.id,ctx.enrichmentKind,now,now);
+    this.db.audit('collector_enrichment',ctx.entry.id,ctx.enrichmentKind+' queued');return this.enrichmentStatus(ctx.entry.id);
   }
   authProbe(platforms){
     const configured=this.s.config.adapters?.desktopPlatforms||[];
@@ -175,18 +188,19 @@ class DesktopCollector {
     return !!this.db.get("SELECT id FROM collector_leases WHERE state IN ('OPEN','APPLYING') AND expires_at>? LIMIT 1",now)||!!this.db.get("SELECT entry_id FROM collector_enrichments WHERE state='RUNNING' AND expires_at>? LIMIT 1",now);
   }
   claimEnrichment(allowed,capabilities,now,bySource){
-    if(!capabilities.includes(ENRICH_CAP)||this.hasActiveLease(now))return null;
+    if(this.hasActiveLease(now))return null;
     let nearCooldown=null;
     for(const task of this.db.all("SELECT * FROM collector_enrichments WHERE state='QUEUED' AND next_attempt<=? ORDER BY created_at,entry_id LIMIT 50",now)){
       let ctx;try{ctx=this.enrichmentContext(task.entry_id);}catch(e){this.db.run("UPDATE collector_enrichments SET state='FAILED',updated_at=?,error=? WHERE entry_id=?",now,String(e.message).slice(0,200),task.entry_id);continue;}
-      if(ctx.entry.content_state==='TEXT'){this.db.run("UPDATE collector_enrichments SET state='DONE',updated_at=?,error='' WHERE entry_id=?",now,task.entry_id);continue;}
-      if(!allowed.includes(ctx.source.platform))continue;
+      if(task.kind!==ctx.enrichmentKind){this.db.run("UPDATE collector_enrichments SET state='FAILED',updated_at=?,error='enrichment kind changed' WHERE entry_id=?",now,task.entry_id);continue;}
+      if(this.enrichmentDone(ctx)){this.db.run("UPDATE collector_enrichments SET state='DONE',updated_at=?,error='' WHERE entry_id=?",now,task.entry_id);continue;}
+      if(!capabilities.includes(ctx.taskType)||!allowed.includes(ctx.source.platform))continue;
       const group=this.db.get('SELECT * FROM groups WHERE id=?',ctx.channel.group_key);
-      if(group?.state==='AUTH_REQUIRED')continue;
+      if(ctx.enrichmentKind==='body'&&group?.state==='AUTH_REQUIRED')continue;
       if(group?.next_allowed>now){const seconds=Math.ceil((group.next_allowed-now)/1000);nearCooldown=Math.min(nearCooldown??seconds,seconds);continue;}
       const leaseId=crypto.randomBytes(24).toString('hex');
       this.db.run("UPDATE collector_enrichments SET state='RUNNING',lease_id=?,expires_at=?,attempts=attempts+1,updated_at=?,digest=NULL,ack=NULL,error='' WHERE entry_id=?",leaseId,now+900000,now,ctx.entry.id);
-      return {job:{taskType:ENRICH_CAP,leaseId,entryId:ctx.entry.id,sourceId:ctx.source.id,platform:ctx.source.platform,authorId:ctx.authorId,kind:ctx.kind,url:ctx.original.link,title:ctx.entry.title},retryAfter:8};
+      return {job:{taskType:ctx.taskType,enrichmentKind:ctx.enrichmentKind,leaseId,entryId:ctx.entry.id,sourceId:ctx.source.id,platform:ctx.source.platform,authorId:ctx.authorId,kind:ctx.kind,url:ctx.original.link,title:ctx.entry.title},retryAfter:8};
     }
     return nearCooldown===null?null:{job:null,retryAfter:Math.max(8,Math.min(60,nearCooldown)),waitForCooldown:true};
   }
@@ -235,33 +249,51 @@ class DesktopCollector {
     if(task.expires_at<Date.now()||task.state!=='RUNNING')fail('expired enrichment lease',409);
     if(task.digest&&task.digest!==digest)fail('changed enrichment payload on retry',409);
     const ctx=this.enrichmentContext(task.entry_id);if(Number(input.entryId)!==ctx.entry.id)fail('enrichment entry mismatch',409);
+    if(task.kind!==ctx.enrichmentKind)fail('enrichment kind mismatch',409);
     if(!['OK',...STATES].includes(input.status))fail('invalid enrichment status');
     const now=Date.now();this.db.run('UPDATE collector_enrichments SET digest=?,updated_at=? WHERE entry_id=?',digest,now,ctx.entry.id);
     if(input.status==='OK'){
-      const html=bodyToSafeHTML(input.content);let updated=false;
-      if(ctx.entry.content_state!=='TEXT'){
-        const upstream=await this.s.mf.call('/v1/entries/'+ctx.entry.id);
+      let updated=false;
+      if(ctx.enrichmentKind==='body'){
+        const html=bodyToSafeHTML(input.content);
+        if(ctx.entry.content_state!=='TEXT'){
+          const upstream=await this.s.mf.call('/v1/entries/'+ctx.entry.id);
+          await this.s.mf.call('/v1/entries/'+ctx.entry.id,'PUT',{title:upstream.title||ctx.entry.title,content:html});
+          this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='desktop_enrichment' WHERE entry_id=?",hash(html),ctx.entry.id);
+          this.s.project({...upstream,content:html},ctx.channel,Date.now());
+          this.db.run("UPDATE entries SET content_origin='desktop_enrichment' WHERE id=?",ctx.entry.id);updated=true;
+        }
+        this.db.run("UPDATE groups SET state='OK',next_allowed=?,failures=0 WHERE id=?",now+Math.max(8000,ctx.channel.min_gap_ms),ctx.channel.group_key);
+      }else if(ctx.enrichmentKind==='bilibili_subtitle'){
+        const transcript='<section><h2>Bilibili Transcript</h2>'+bodyToSafeHTML(input.content)+'</section>';
+        const upstream=await this.s.mf.call('/v1/entries/'+ctx.entry.id),existing=String(upstream?.content||'');
+        const html=[existing,transcript].filter(Boolean).join('<hr>');
+        if(Buffer.byteLength(html)>2*1024*1024)fail('enriched Bilibili article too large');
         await this.s.mf.call('/v1/entries/'+ctx.entry.id,'PUT',{title:upstream.title||ctx.entry.title,content:html});
-        this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='desktop_enrichment' WHERE entry_id=?",hash(html),ctx.entry.id);
+        this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='bilibili_subtitle_enrichment' WHERE entry_id=?",hash(html),ctx.entry.id);
         this.s.project({...upstream,content:html},ctx.channel,Date.now());
-        this.db.run("UPDATE entries SET content_origin='desktop_enrichment' WHERE id=?",ctx.entry.id);updated=true;
-      }
-      const ack={accepted:true,entryId:ctx.entry.id,state:'ENRICHED',updated};
+        this.db.run("UPDATE entries SET content_origin='bilibili_subtitle_enrichment' WHERE id=?",ctx.entry.id);
+        this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,'DONE',?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state='DONE',updated_at=excluded.updated_at,detail=excluded.detail",ctx.entry.id,'bilibili_subtitle_v1',now,JSON.stringify({chars:String(input.content||'').length}));
+        updated=true;
+      }else fail('unsupported enrichment kind');
+      const ack={accepted:true,entryId:ctx.entry.id,state:'ENRICHED',updated,kind:ctx.enrichmentKind};
       this.db.run("UPDATE collector_enrichments SET state='DONE',updated_at=?,expires_at=0,ack=?,error='' WHERE entry_id=?",now,JSON.stringify(ack),ctx.entry.id);
-      this.db.run("UPDATE groups SET state='OK',next_allowed=?,failures=0 WHERE id=?",now+Math.max(8000,ctx.channel.min_gap_ms),ctx.channel.group_key);
-      this.db.audit('collector_enrichment',ctx.entry.id,updated?'content upgraded':'already text');return ack;
+      this.db.audit('collector_enrichment',ctx.entry.id,ctx.enrichmentKind+(updated?' upgraded':' already complete'));return ack;
     }
-    const message=input.status==='AUTH_REQUIRED'?'Shervin需要重新登录该平台':input.status==='BROWSER_OFFLINE'?'Shervin浏览器或OpenCLI扩展未连接':input.status==='ACCESS_BLOCKED'?'正文页面访问受限，未绕过限制':input.status==='TIMEOUT'?'正文读取超时':'正文读取失败，原有内容保留';
+    const noun=ctx.enrichmentKind==='bilibili_subtitle'?'字幕':'正文';
+    const message=input.status==='AUTH_REQUIRED'?'Shervin需要重新登录该平台以读取'+noun:input.status==='BROWSER_OFFLINE'?'Shervin浏览器或OpenCLI扩展未连接':input.status==='ACCESS_BLOCKED'?noun+'页面访问受限，未绕过限制':input.status==='TIMEOUT'?noun+'读取超时':noun+'读取失败，原有内容保留';
     if(input.status==='AUTH_REQUIRED'){
       this.db.run("UPDATE collector_enrichments SET state='AUTH_REQUIRED',updated_at=?,expires_at=0,error=? WHERE entry_id=?",now,message,ctx.entry.id);
-      this.db.run("UPDATE groups SET state='AUTH_REQUIRED',next_allowed=?,failures=failures+1 WHERE id=?",now+86400000,ctx.channel.group_key);
-      this.db.alert('desktop-enrichment:'+ctx.channel.group_key+':'+now,'Windows正文采集需要重新授权',message);
+      if(ctx.enrichmentKind==='body'){
+        this.db.run("UPDATE groups SET state='AUTH_REQUIRED',next_allowed=?,failures=failures+1 WHERE id=?",now+86400000,ctx.channel.group_key);
+        this.db.alert('desktop-enrichment:'+ctx.channel.group_key+':'+now,'Windows正文采集需要重新授权',message);
+      }
     }else{
       const retry=now+(input.status==='ACCESS_BLOCKED'?1800000:600000);
       this.db.run("UPDATE collector_enrichments SET state='QUEUED',updated_at=?,next_attempt=?,lease_id=NULL,expires_at=0,error=? WHERE entry_id=?",now,retry,message,ctx.entry.id);
-      this.db.run('UPDATE groups SET next_allowed=? WHERE id=?',now+Math.max(8000,ctx.channel.min_gap_ms),ctx.channel.group_key);
+      if(ctx.enrichmentKind==='body')this.db.run('UPDATE groups SET next_allowed=? WHERE id=?',now+Math.max(8000,ctx.channel.min_gap_ms),ctx.channel.group_key);
     }
-    return {accepted:true,entryId:ctx.entry.id,state:input.status,updated:false};
+    return {accepted:true,entryId:ctx.entry.id,state:input.status,updated:false,kind:ctx.enrichmentKind};
   }
   async submit(input){
     if(!input||typeof input!=='object')fail('invalid result');

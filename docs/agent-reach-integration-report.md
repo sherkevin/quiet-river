@@ -377,3 +377,47 @@ Quiet River tested the narrower need actually required by the reader: public vid
 ### Remaining
 
 Bilibili subtitle enrichment remains a separate OpenCLI-backed task. Author discovery stays unchanged on Shervin and is not replaced by the public detail API.
+
+
+## 2026-09-20 — P1 Bilibili subtitle enrichment
+
+### Real backend canary
+
+OpenCLI 1.8.7 on Shervin was tested against the already-known AITIME video BV1AaJP6iEch using the read-only bilibili subtitle command.
+
+Result:
+- first navigation hit the known Chromium Navigation rejected condition;
+- the existing one-time retain-on-failure retry succeeded;
+- 2,635 subtitle rows returned;
+- all from/to timestamp fields validated;
+- 38,436 transcript characters;
+- no subtitle text, Cookie or browser payload was printed into the engineering report.
+
+### Architecture
+
+Subtitle completion is intentionally independent from article content_state.
+
+A Bilibili card may already be TEXT after public video-detail enrichment while its subtitle is still absent. The desktop enrichment queue therefore gained a backward-compatible kind column:
+- body -> entry_body_v1 for Zhihu/Xiaohongshu;
+- bilibili_subtitle -> entry_transcript_v1 for Bilibili.
+
+Existing rows migrate with kind=body.
+
+### Safety and failure semantics
+
+- ECS only queues a known stored Bilibili entry after validating its canonical original URL and subscribed UID/channel;
+- Shervin runs only the fixed OpenCLI bilibili subtitle command;
+- Windows normalizer accepts at most 20,000 subtitle rows, validates monotonic from/to timestamps, removes consecutive duplicate text and uploads at most 1 MiB of timestamped plain text;
+- ECS escapes the transcript before appending it under a Bilibili Transcript section;
+- combined article content is capped at 2 MiB;
+- successful transcript is cached as entry_enrichments/bilibili_subtitle_v1 with provenance bilibili_subtitle_enrichment;
+- subtitle AUTH_REQUIRED is isolated to the single transcript task; it does not set desktop:bilibili or the author channel to AUTH_REQUIRED;
+- explicit retry can requeue that subtitle task after the user later logs in;
+- discovery/source health is untouched by transcript success or failure.
+
+### Verification
+
+- focused collector/workspace regression: 85/85 passed;
+- full regression: 362/362 passed;
+- all prior body enrichment tests remain green;
+- no feature-branch code was deployed to production during this canary.

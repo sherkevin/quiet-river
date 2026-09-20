@@ -219,7 +219,7 @@ test('desktop enrichment is capability-gated and does not starve behind schedule
  const legacy=legacyFixture.collector.claim(['zhihu']);assert.ok(legacy.job);assert.equal(legacy.job.taskType,undefined);
  const compatibleFixture=enrichmentFixture(t);compatibleFixture.collector.queueEnrichment(101);
  const compatible=compatibleFixture.collector.claim(['zhihu'],['entry_body_v1']);assert.equal(compatible.job.taskType,'entry_body_v1');assert.equal(compatible.job.entryId,101);assert.equal(compatible.job.url,'https://www.zhihu.com/question/123/answer/456');
- assert.deepEqual(Object.keys(compatible.job).sort(),['authorId','entryId','kind','leaseId','platform','sourceId','taskType','title','url'].sort());
+ assert.deepEqual(Object.keys(compatible.job).sort(),['authorId','enrichmentKind','entryId','kind','leaseId','platform','sourceId','taskType','title','url'].sort());assert.equal(compatible.job.enrichmentKind,'body');
 });
 test('successful desktop enrichment upgrades only article content and preserves source health/read metadata',async t=>{
  const f=enrichmentFixture(t);f.collector.queueEnrichment(101);const claimed=f.collector.claim(['zhihu'],['entry_body_v1']);
@@ -270,8 +270,8 @@ test('native body enrichment status is authenticated and queueing is action-gate
 });
 test('Windows collector advertises enrichment capability without changing normal source-list result shape',()=>{
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
- assert.match(src,/capabilities:\['entry_body_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
- assert.match(src,/result\.entryId\?`ECS accepted article-body result/);assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
+ assert.match(src,/capabilities:\['entry_body_v1','entry_transcript_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/taskType==='entry_transcript_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/bilibili','subtitle/);assert.match(src,/web','read/);
+ assert.match(src,/result\.entryId\?`ECS accepted entry enrichment result/);assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
 });
 test('Windows enrichment normalizer rejects short login and challenge bodies before upload',()=>{
  const article={taskType:'entry_body_v1',entryId:10,platform:'zhihu',kind:'articles',authorId:'author',url:'https://zhuanlan.zhihu.com/p/789'};
@@ -464,4 +464,57 @@ test('Instagram auth recovery probe names the platform backend and is explicitly
  const config={adapters:{desktopPlatforms:['instagram']}},channel=channelsFor(source,config.adapters)[0];db.putSource(source,[channel]);db.run("UPDATE channels SET feed_id=19,state='AUTH_REQUIRED' WHERE id=?",channel.id);db.run("INSERT OR REPLACE INTO groups(id,state,next_allowed,last_success,failures) VALUES('credential:instagram','AUTH_REQUIRED',0,0,1)");
  const service={db,config,provisionChannels:async()=>{},finish:()=>{}};const collector=new DesktopCollector(service);service.desktop=collector;
  const probe=collector.authProbe(['instagram']);assert.equal(probe.platform,'instagram');assert.equal(probe.authorId,'nasa');assert.equal(probe.kind,'posts');assert.equal(probe.backendId,'opencli-instagram-shervin');assert.equal(probe.authProbe,true);
+});
+
+function bilibiliSubtitleFixture(t){
+ const {ReaderService}=require('../reader-bridge/service');const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'bili-enrich-source',name:'AITIME',platform:'bilibili',url:'https://space.bilibili.com/503316308',tags:[],feeds:['http://127.0.0.1:1200/bilibili/user/video/503316308']};
+ const config={adapters:{desktopPlatforms:['bilibili']}},channel=channelsFor(source,config.adapters)[0];db.putSource(source,[channel]);
+ db.run('UPDATE channels SET feed_id=23,next_check=? WHERE id=?',Date.now()+3600000,channel.id);
+ let upstream={id:202,title:'Known Bilibili video',url:'https://www.bilibili.com/video/BV1AaJP6iEch',author:'AITIME',published_at:'2026-09-20T00:00:00Z',content:'<section><h2>Bilibili Video 详情</h2><p>existing detail</p></section>',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/202'&&method==='GET')return upstream;if(path==='/v1/entries/202'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const service=new ReaderService(db,{...config,miniflux:'http://unused',karakeep:'http://unused',karakeepToken:'',adapters:config.adapters},{mf});service.project(upstream,channel);
+ db.run("INSERT INTO imports(channel_id,external_id,entry_id,content_hash,payload,state,original_published_at,published_at_source,content_state,content_origin) VALUES(?,?,?,?,?,'COMPLETE',?,'upstream','TEXT','bilibili_public_detail_enrichment')",
+   channel.id,'bilibili:fixture',202,'old','{}',Date.parse(upstream.published_at));
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,getUpstream:()=>upstream,puts};
+}
+
+test('Bilibili subtitle enrichment stays eligible after video detail already made the entry TEXT',t=>{
+ const f=bilibiliSubtitleFixture(t);const before=f.collector.enrichmentStatus(202);
+ assert.equal(before.eligible,true);assert.equal(before.kind,'bilibili_subtitle');assert.equal(before.taskType,'entry_transcript_v1');assert.equal(before.state,'NONE');assert.equal(before.contentState,'TEXT');
+ f.collector.queueEnrichment(202);const wrong=f.collector.claim(['bilibili'],['entry_body_v1']);assert.equal(wrong.job,null);
+ const claim=f.collector.claim(['bilibili'],['entry_body_v1','entry_transcript_v1']);assert.equal(claim.job.taskType,'entry_transcript_v1');assert.equal(claim.job.enrichmentKind,'bilibili_subtitle');
+ assert.equal(claim.job.kind,'videos');assert.equal(claim.job.url,'https://www.bilibili.com/video/BV1AaJP6iEch');
+});
+
+test('successful Bilibili subtitle enrichment appends transcript and preserves discovery health/read metadata',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueEnrichment(202);const claim=f.collector.claim(['bilibili'],['entry_transcript_v1']);
+ const before=f.db.get('SELECT status,published_at FROM entries WHERE id=202'),channelBefore=f.db.get('SELECT last_success,state,error FROM channels WHERE id=?',f.channel.id),groupBefore=f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key);
+ const content='[4.00s - 6.00s] first subtitle line <script>text only</script>\n[6.00s - 8.00s] second subtitle line with enough transcript text';
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:202,status:'OK',content});
+ assert.equal(ack.state,'ENRICHED');assert.equal(ack.kind,'bilibili_subtitle');assert.equal(ack.updated,true);assert.equal(f.puts.length,1);
+ assert.match(f.puts[0].content,/existing detail/);assert.match(f.puts[0].content,/Bilibili Transcript/);assert.match(f.puts[0].content,/&lt;script&gt;/);assert.doesNotMatch(f.puts[0].content,/<script>/);
+ const row=f.db.get('SELECT status,published_at,content_state,content_origin FROM entries WHERE id=202');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.content_state,'TEXT');assert.equal(row.content_origin,'bilibili_subtitle_enrichment');
+ assert.deepEqual(f.db.get('SELECT last_success,state,error FROM channels WHERE id=?',f.channel.id),channelBefore);assert.deepEqual(f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),groupBefore);
+ assert.equal(f.db.get("SELECT state FROM entry_enrichments WHERE entry_id=202 AND kind='bilibili_subtitle_v1'").state,'DONE');assert.equal(f.collector.enrichmentStatus(202).state,'DONE');
+});
+
+test('Bilibili subtitle auth failure pauses only the subtitle task, not author discovery',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueEnrichment(202);const claim=f.collector.claim(['bilibili'],['entry_transcript_v1']),groupBefore=f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key);
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:202,status:'AUTH_REQUIRED'});
+ assert.equal(ack.state,'AUTH_REQUIRED');assert.equal(ack.kind,'bilibili_subtitle');assert.equal(f.db.get('SELECT state FROM collector_enrichments WHERE entry_id=202').state,'AUTH_REQUIRED');
+ assert.deepEqual(f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),groupBefore);assert.notEqual(f.db.get('SELECT state FROM channels WHERE id=?',f.channel.id).state,'AUTH_REQUIRED');
+ const retry=f.collector.queueEnrichment(202);assert.equal(retry.state,'QUEUED');assert.equal(f.db.get('SELECT state FROM groups WHERE id=?',f.channel.group_key).state,groupBefore.state);
+});
+
+test('Windows Bilibili subtitle normalizer emits only bounded timestamped transcript text',()=>{
+ const job={taskType:'entry_transcript_v1',entryId:203,platform:'bilibili',kind:'videos',authorId:'503316308',url:'https://www.bilibili.com/video/BV1AaJP6iEch'};
+ const result=normalizeEnrichment(job,[
+   {index:1,from:'4.00s',to:'6.00s',content:' first  subtitle  line ',cookie:'never'},
+   {index:2,from:'6.00s',to:'8.00s',content:'first subtitle line'},
+   {index:3,from:'8.00s',to:'10.00s',content:'second line with enough text for a real transcript payload'}
+ ]);
+ assert.equal(result.entryId,203);assert.match(result.content,/\[4\.00s - 6\.00s\] first subtitle line/);assert.match(result.content,/\[8\.00s - 10\.00s\] second line/);assert.doesNotMatch(result.content,/cookie|never/);
+ assert.throws(()=>normalizeEnrichment(job,[{from:'9.00s',to:'8.00s',content:'bad timestamp that is long enough'}]),/timestamp/);
+ assert.throws(()=>normalizeEnrichment({...job,url:'https://www.bilibili.com/video/not-a-bv'},[{from:'1.00s',to:'2.00s',content:'text'}]),/Original link mismatch/);
 });

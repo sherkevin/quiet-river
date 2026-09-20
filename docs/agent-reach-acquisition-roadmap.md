@@ -171,14 +171,14 @@ Tasks:
 - [ ] keep comments as article enrichment, not extra feed cards
 - [ ] canary one public community under logged-in session
 
-### F. P1 — Bilibili: keep author discovery, improve detail/search backends — VIDEO DETAIL DONE
+### F. P1 — Bilibili: keep author discovery, improve detail/search backends — DETAIL + SUBTITLE DONE
 
 Do not replace working author discovery merely because Agent-Reach prefers bili-cli for other capabilities. Agent-Reach's important production knowledge is retained: do not use yt-dlp for Bilibili; use platform-specific paths and OpenCLI for subtitles.
 
 Current split:
 - bilibili.author.videos -> OpenCLI @ Shervin (unchanged scheduler owner)
 - bilibili.video.detail -> Bilibili Public Detail API @ ECS -> bili-cli fallback if the public API later becomes unreliable
-- bilibili.video.subtitle -> OpenCLI @ Shervin (still open)
+- bilibili.video.subtitle -> OpenCLI @ Shervin (done; separate transcript enrichment)
 - bilibili.search -> not needed for current subscription workflow; Agent-Reach's bili-cli/search API chain remains reference material
 
 Completed:
@@ -193,9 +193,19 @@ Completed:
 - [x] do not install/restore yt-dlp for Bilibili
 - [x] attempted bili-cli 0.6.2 isolation was abandoned before use because the lighter zero-credential public detail API passed all current-source canaries; incomplete runtime files/processes were removed
 
-Remaining:
-- [ ] Bilibili subtitles through OpenCLI as a separate enrichment capability
-- [ ] keep bili-cli as a fallback candidate only if future public detail API canaries fail; do not add the dependency pre-emptively
+Subtitle completion:
+- [x] add separate `entry_transcript_v1` Shervin capability without overloading body completion state
+- [x] `content_state=TEXT` from video detail does not hide or complete the subtitle task
+- [x] fixed read-only OpenCLI command: `bilibili subtitle <known original URL> -f json`
+- [x] Windows normalizer uploads only bounded `[from-to] + content` transcript text, not raw OpenCLI objects
+- [x] append transcript to existing video detail and cache `bilibili_subtitle_v1`
+- [x] subtitle `AUTH_REQUIRED` pauses only that entry's subtitle task and never freezes Bilibili author discovery
+- [x] real AITIME canary passed: 2,635 subtitle segments, 38,436 text characters; Chromium Navigation rejected was retried once by the existing bounded workaround
+- [x] UI exposes `让 Shervin 获取字幕` and allows explicit retry after subtitle-only authorization failure
+
+Remaining policy:
+- keep bili-cli as a fallback candidate only if future public detail API canaries fail; do not add the dependency pre-emptively
+- no additional Bilibili acquisition work is required unless a concrete search or multi-part subtitle use case appears
 
 ### G. P1 — GitHub enrichment, not feed replacement — COMMIT DETAIL DONE
 
