@@ -7,7 +7,7 @@ const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter','instagram',
 const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','instagram','reddit']);
 const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu','instagram']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
-const ENRICH_CAP='entry_body_v1',YOUTUBE_TRANSCRIPT_CAP='youtube_transcript_v1',PODCAST_TRANSCRIPT_CAP='podcast_transcript_v1',MAX_BODY_BYTES=1024*1024;
+const ENRICH_CAP='entry_body_v1',YOUTUBE_TRANSCRIPT_CAP='youtube_transcript_v1',BILIBILI_SUBTITLE_CAP='bilibili_subtitle_v1',PODCAST_TRANSCRIPT_CAP='podcast_transcript_v1',MAX_BODY_BYTES=1024*1024;
 const BLOCK_PAGE_RE=/登录后查看|请登录|登录已失效|验证码|安全限制|访问链接异常|页面不见了|笔记不存在|access denied|security block/i;
 function fail(message,status=400){throw Object.assign(new Error(message),{status});}
 function bodyToSafeHTML(text){
@@ -21,6 +21,12 @@ function transcriptToSafeHTML(text,videoId){
   if(!value||Buffer.byteLength(value)>MAX_BODY_BYTES||!/^[A-Za-z0-9_-]{11}$/.test(String(videoId||'')))fail('invalid transcript body');
   const lines=value.split('\n').filter(Boolean);if(!lines.length||lines.length>5000)fail('invalid transcript body');
   return '<hr><section data-qr-youtube-transcript="'+videoId+'"><h2>视频字幕</h2><p>'+escapeHTML(lines.join('\n')).replace(/\n/g,'<br>')+'</p></section>';
+}
+function bilibiliSubtitleToSafeHTML(text,bvid){
+  const value=String(text||'').replace(/\r\n?/g,'\n').trim(),id=String(bvid||'');
+  if(!/^BV[0-9A-Za-z]{10}$/.test(id)||!value||Buffer.byteLength(value)>MAX_BODY_BYTES)fail('invalid Bilibili subtitle body');
+  const lines=value.split('\n').filter(Boolean);if(!lines.length||lines.length>20000)fail('invalid Bilibili subtitle body');
+  return '<hr><section data-qr-bilibili-subtitle="'+id+'"><h2>B站字幕</h2><p>'+escapeHTML(lines.join('\n')).replace(/\n/g,'<br>')+'</p></section>';
 }
 function podcastTranscriptToSafeHTML(text,entryId){
   const value=String(text||'').replace(/\r\n?/g,'\n').trim(),id=Number(entryId);
@@ -165,6 +171,11 @@ class DesktopCollector {
       let original;try{original=originalLink({platform:'youtube',kind:'transcript'},entry.url);}catch{fail('YouTube article URL is not a supported video',409);}
       return {entry,source,channel,kind:YOUTUBE_TRANSCRIPT_CAP,original};
     }
+    if(source.platform==='bilibili'){
+      let original;try{original=originalLink({platform:'bilibili',kind:'videos'},entry.url);}catch{fail('Bilibili article URL is not a supported video',409);}
+      if(!/^BV[0-9A-Za-z]{10}$/.test(String(original.bilibiliId||'')))fail('Bilibili subtitle requires BV identity',409);
+      return {entry,source,channel,kind:BILIBILI_SUBTITLE_CAP,original};
+    }
     if(source.platform==='podcast'){
       const original=safeURL(entry.url);if(!original)fail('Podcast episode URL is not supported',409);
       return {entry,source,channel,kind:PODCAST_TRANSCRIPT_CAP,original:{link:original}};
@@ -260,6 +271,7 @@ class DesktopCollector {
       const leaseId=crypto.randomBytes(24).toString('hex'),expires=now+(ctx.kind===PODCAST_TRANSCRIPT_CAP?3600000:900000);
       this.db.run("UPDATE collector_transcripts SET state='RUNNING',lease_id=?,expires_at=?,attempts=attempts+1,updated_at=?,digest=NULL,ack=NULL,error='' WHERE entry_id=?",leaseId,expires,now,ctx.entry.id);
       if(ctx.kind===PODCAST_TRANSCRIPT_CAP)return {job:{taskType:PODCAST_TRANSCRIPT_CAP,leaseId,entryId:ctx.entry.id,sourceId:ctx.source.id,platform:'podcast',kind:'transcript',url:ctx.original.link,audioUrl:task.media_url,mediaLength:Number(task.media_length)||0,title:ctx.entry.title},retryAfter:8};
+      if(ctx.kind===BILIBILI_SUBTITLE_CAP)return {job:{taskType:BILIBILI_SUBTITLE_CAP,leaseId,entryId:ctx.entry.id,sourceId:ctx.source.id,platform:'bilibili',kind:'videos',url:ctx.original.link,title:ctx.entry.title},retryAfter:8};
       return {job:{taskType:YOUTUBE_TRANSCRIPT_CAP,leaseId,entryId:ctx.entry.id,sourceId:ctx.source.id,platform:'youtube',kind:'transcript',url:ctx.original.link,title:ctx.entry.title},retryAfter:8};
     }
     return null;
@@ -349,13 +361,19 @@ class DesktopCollector {
     if(!['OK',...STATES].includes(input.status))fail('invalid transcript status');
     const now=Date.now();
     if(input.status==='OK'){
-      const segments=Number(input.segmentCount);if(!Number.isSafeInteger(segments)||segments<1||segments>(ctx.kind===PODCAST_TRANSCRIPT_CAP?10000:5000))fail('invalid transcript segment count');
+      const maxSegments=ctx.kind===BILIBILI_SUBTITLE_CAP?20000:ctx.kind===PODCAST_TRANSCRIPT_CAP?10000:5000,segments=Number(input.segmentCount);
+      if(!Number.isSafeInteger(segments)||segments<1||segments>maxSegments)fail('invalid transcript segment count');
       let backendId='',transcriptHTML='',marker='',origin='',detail={segments};
       if(ctx.kind===YOUTUBE_TRANSCRIPT_CAP){
         if(String(input.videoId||'')!==ctx.original.youtubeId)fail('YouTube transcript video mismatch',409);
         backendId=String(input.backendId||'');if(!['yt-dlp-shervin','opencli-youtube-shervin'].includes(backendId))fail('invalid transcript backend',400);
         transcriptHTML=transcriptToSafeHTML(input.content,ctx.original.youtubeId);marker='data-qr-youtube-transcript="'+ctx.original.youtubeId+'"';origin='youtube_transcript_enrichment';
         detail={segments,videoId:ctx.original.youtubeId,backend:backendId};
+      }else if(ctx.kind===BILIBILI_SUBTITLE_CAP){
+        if(String(input.bilibiliId||'')!==ctx.original.bilibiliId)fail('Bilibili subtitle video mismatch',409);
+        backendId=String(input.backendId||'');if(backendId!=='opencli-bilibili-shervin')fail('invalid transcript backend',400);
+        transcriptHTML=bilibiliSubtitleToSafeHTML(input.content,ctx.original.bilibiliId);marker='data-qr-bilibili-subtitle="'+ctx.original.bilibiliId+'"';origin='bilibili_subtitle_enrichment';
+        detail={segments,bilibiliId:ctx.original.bilibiliId,backend:backendId};
       }else{
         backendId=String(input.backendId||'');if(backendId!=='faster-whisper-local')fail('invalid transcript backend',400);
         if(String(input.mediaSha256||'')!==hash(task.media_url))fail('podcast transcript media mismatch',409);
@@ -376,8 +394,9 @@ class DesktopCollector {
       this.db.audit(ctx.kind,ctx.entry.id,'transcript appended');return ack;
     }
     this.db.run('UPDATE collector_transcripts SET digest=?,updated_at=? WHERE entry_id=?',digest,now,ctx.entry.id);
-    const label=ctx.kind===PODCAST_TRANSCRIPT_CAP?'播客本地转录':'YouTube字幕';
-    const message=input.status==='BROWSER_OFFLINE'?'Shervin本地转录运行时未连接':input.status==='ACCESS_BLOCKED'?label+'访问受限，未绕过限制':input.status==='TIMEOUT'?label+'读取或转录超时':input.status==='AUTH_REQUIRED'?label+'路径要求额外登录，未使用账号绕过':label+'暂不可用，原有正文保留';
+    const label=ctx.kind===PODCAST_TRANSCRIPT_CAP?'播客本地转录':ctx.kind===BILIBILI_SUBTITLE_CAP?'B站字幕':'YouTube字幕';
+    const offline=ctx.kind===PODCAST_TRANSCRIPT_CAP?'Shervin本地转录运行时未连接':'Shervin浏览器或字幕后端未连接';
+    const message=input.status==='BROWSER_OFFLINE'?offline:input.status==='ACCESS_BLOCKED'?label+'访问受限，未绕过限制':input.status==='TIMEOUT'?label+'读取或转录超时':input.status==='AUTH_REQUIRED'?label+'路径要求额外登录，未使用账号绕过':label+'暂不可用，原有正文保留';
     const retry=now+(input.status==='ACCESS_BLOCKED'||input.status==='AUTH_REQUIRED'?1800000:600000);
     this.db.run("UPDATE collector_transcripts SET state='QUEUED',updated_at=?,next_attempt=?,lease_id=NULL,expires_at=0,error=? WHERE entry_id=?",now,retry,message,ctx.entry.id);
     return {accepted:true,entryId:ctx.entry.id,state:input.status,updated:false};

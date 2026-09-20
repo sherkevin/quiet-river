@@ -45,7 +45,7 @@ function originalLink(job,value){
     if(kind!=='videos'||u.hostname!=='www.bilibili.com')throw new Error('Original link mismatch');
     const match=/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/.exec(u.pathname);
     if(!match)throw new Error('Original link mismatch');
-    return {link:u.href,guid:'https://www.bilibili.com/video/'+match[1],noteId:null};
+    return {link:u.href,guid:'https://www.bilibili.com/video/'+match[1],bilibiliId:match[1],noteId:null};
   }
   if(job.platform!=='xiaohongshu'||u.hostname!=='www.xiaohongshu.com')throw new Error('Original link mismatch');
   const simple=/^\/(?:explore|discovery\/item)\/([a-f\d]{24})$/i.exec(u.pathname);

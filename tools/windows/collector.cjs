@@ -2,7 +2,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {spawnSync,spawn}=require('node:child_process');
-const {normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,selectFreshXhsNoteUrl,statusFor}=require('./normalize.cjs');
+const {normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,normalizeBilibiliSubtitle,selectFreshXhsNoteUrl,statusFor}=require('./normalize.cjs');
 const {originalLink}=require('./original-link.cjs');
 const root=process.env.QR_COLLECTOR_HOME||path.join(process.env.LOCALAPPDATA||os.homedir(),'QuietRiverCollector');
 const configPath=path.join(root,'config.json'),args=process.argv.slice(2);
@@ -68,7 +68,7 @@ function podcastRuntimeReady(){
   const ffmpeg=spawnSync('ffmpeg',['-version'],{encoding:'utf8',timeout:10000,windowsHide:true});
   return !!python&&fs.existsSync(wrapper)&&!ffmpeg.error&&ffmpeg.status===0;
 }
-function workerCapabilities(){const out=['entry_body_v1','youtube_transcript_v1'];if(podcastReady)out.push('podcast_transcript_v1');return out;}
+function workerCapabilities(){const out=['entry_body_v1','youtube_transcript_v1'];if(opencliReady)out.push('bilibili_subtitle_v1');if(podcastReady)out.push('podcast_transcript_v1');return out;}
 function discoverTwitterPython(){
   const candidates=[config.twitterPython,process.env.APPDATA&&path.join(process.env.APPDATA,'uv','tools','twitter-cli','Scripts','python.exe'),process.env.LOCALAPPDATA&&path.join(process.env.LOCALAPPDATA,'uv','tools','twitter-cli','Scripts','python.exe')].filter(Boolean);
   return candidates.find(p=>fs.existsSync(p))||'';
@@ -195,6 +195,15 @@ function collectYoutubeTranscript(job){
   }
   return {leaseId:job.leaseId,entryId:job.entryId,status:last?.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(last?.status,last?.stderr||last?.error?.message||''),backendId:'opencli-youtube-shervin'};
 }
+function collectBilibiliSubtitle(job){
+  if(job.taskType!=='bilibili_subtitle_v1'||job.platform!=='bilibili'||job.kind!=='videos'||!Number.isSafeInteger(Number(job.entryId)))throw new Error('Invalid Bilibili subtitle task');
+  if(!opencliReady)return {leaseId:job.leaseId,entryId:job.entryId,status:'BROWSER_OFFLINE',backendId:'opencli-bilibili-shervin'};
+  const original=originalLink({platform:'bilibili',kind:'videos'},String(job.url||''));
+  const r=runOpencliRead(config,[config.opencliMain,'bilibili','subtitle',original.link,'-f','json','--trace','off','--site-session','ephemeral']);
+  if(r.error||r.status!==0)return {leaseId:job.leaseId,entryId:job.entryId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),backendId:'opencli-bilibili-shervin'};
+  try{const normalized=normalizeBilibiliSubtitle(job,JSON.parse(String(r.stdout||'').replace(/^\uFEFF/,'')));return {leaseId:job.leaseId,status:'OK',backendId:'opencli-bilibili-shervin',...normalized};}
+  catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR',backendId:'opencli-bilibili-shervin'};}
+}
 function collectPodcastTranscript(job){
   if(job.taskType!=='podcast_transcript_v1'||job.platform!=='podcast'||!Number.isSafeInteger(Number(job.entryId))||typeof job.audioUrl!=='string')throw new Error('Invalid podcast transcript task');
   const python=discoverPodcastPython(),wrapper=path.join(__dirname,'podcast-local-whisper.py');
@@ -249,10 +258,10 @@ async function main(){
         if(!args.includes('--watch')&&!next.waitForCooldown){log('No currently eligible task. Cooling down or waiting for browser authorization is not a successful source check.');break;}
         await sleep(Math.max(8,Math.min(60,next.retryAfter||30))*1000);continue;
       }
-      const enrichment=next.job.taskType==='entry_body_v1',youtubeTranscript=next.job.taskType==='youtube_transcript_v1',podcastTranscript=next.job.taskType==='podcast_transcript_v1';
-      log(podcastTranscript?'Transcribing one registered podcast episode locally on Shervin':youtubeTranscript?'Reading one known YouTube transcript for Quiet River':enrichment?'Reading one known '+next.job.platform+' article body for Quiet River':'Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
-      const result=await confirmedCollect(next.job,podcastTranscript?collectPodcastTranscript:youtubeTranscript?collectYoutubeTranscript:enrichment?collectEnrichment:collect);
-      if(result.status==='AUTH_REQUIRED')log('Authentication failure repeated on the same subscribed route; shared group will pause.');
+      const enrichment=next.job.taskType==='entry_body_v1',youtubeTranscript=next.job.taskType==='youtube_transcript_v1',bilibiliSubtitle=next.job.taskType==='bilibili_subtitle_v1',podcastTranscript=next.job.taskType==='podcast_transcript_v1';
+      log(podcastTranscript?'Transcribing one registered podcast episode locally on Shervin':bilibiliSubtitle?'Reading one known Bilibili subtitle track for Quiet River':youtubeTranscript?'Reading one known YouTube transcript for Quiet River':enrichment?'Reading one known '+next.job.platform+' article body for Quiet River':'Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
+      const result=await confirmedCollect(next.job,podcastTranscript?collectPodcastTranscript:bilibiliSubtitle?collectBilibiliSubtitle:youtubeTranscript?collectYoutubeTranscript:enrichment?collectEnrichment:collect);
+      if(result.status==='AUTH_REQUIRED')log(bilibiliSubtitle?'Bilibili subtitle authorization was not confirmed; only this subtitle task will pause.':'Authentication failure repeated on the same subscribed route; shared group will pause.');
       persist(pending,result);await sleep(8000);
     }catch(e){log(e.message);if(!args.includes('--watch'))throw e;await sleep(30000);}
   }
@@ -260,4 +269,4 @@ async function main(){
   if(failures)process.exitCode=2;
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,statusFor,collectEnrichment,collectYoutubeViaYtDlp,collectYoutubeTranscript,collectPodcastTranscript,podcastRuntimeReady,workerCapabilities,runOpencliRead,confirmedCollect,authRecovered,proxyTunnelArgs};
+module.exports={normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,normalizeBilibiliSubtitle,statusFor,collectEnrichment,collectYoutubeViaYtDlp,collectYoutubeTranscript,collectBilibiliSubtitle,collectPodcastTranscript,podcastRuntimeReady,workerCapabilities,runOpencliRead,confirmedCollect,authRecovered,proxyTunnelArgs};

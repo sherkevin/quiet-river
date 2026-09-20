@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
-const {normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
+const {normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,normalizeBilibiliSubtitle,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
 const {confirmedCollect,authRecovered,proxyTunnelArgs,runOpencliRead}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
@@ -270,7 +270,7 @@ test('native body enrichment status is authenticated and queueing is action-gate
 });
 test('Windows collector advertises enrichment capability without changing normal source-list result shape',()=>{
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
- assert.match(src,/function workerCapabilities\(\)/);assert.match(src,/out\.push\('podcast_transcript_v1'\)/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
+ assert.match(src,/function workerCapabilities\(\)/);assert.match(src,/out\.push\('bilibili_subtitle_v1'\)/);assert.match(src,/out\.push\('podcast_transcript_v1'\)/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/taskType==='bilibili_subtitle_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/bilibili','subtitle/);assert.match(src,/web','read/);
  assert.match(src,/result\.entryId\?`ECS accepted article-body result/);assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
 });
 test('Windows enrichment normalizer rejects short login and challenge bodies before upload',()=>{
@@ -630,4 +630,64 @@ test('Windows collector maps Reddit only to the bounded RSS wrapper and never to
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
  assert.match(src,/reddit-rss\.cjs/);assert.match(src,/backendId!=='reddit-rss-shervin'/);
  assert.doesNotMatch(src,/reddit.*login|rdt login/i);
+});
+
+function bilibiliSubtitleFixture(t){
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'bili-sub-source',name:'AITIME',platform:'bilibili',url:'https://space.bilibili.com/503316308',tags:[],feeds:['http://127.0.0.1:1200/bilibili/user/video/503316308'],enabled:true};
+ const config={adapters:{desktopPlatforms:['bilibili']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=23,last_success=?,state=?,next_check=? WHERE id=?',1234567890,'SUCCEEDED_NO_NEW',Date.now()+3600000,channel.id);
+ let upstream={id:903,title:'Known Bilibili video',url:'https://www.bilibili.com/video/BV1AaJP6iEch',author:'AITIME',published_at:'2026-09-20T00:00:00Z',content:'<section><h2>Bilibili Video 详情</h2><p>existing detail</p></section>',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/903'&&method==='GET')return upstream;if(path==='/v1/entries/903'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const service=new ReaderService(db,{...config,karakeep:'http://unused',karakeepToken:'',adapters:config.adapters},{mf});service.project(upstream,channel);
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,puts,getUpstream:()=>upstream};
+}
+
+test('Bilibili subtitle queue remains eligible after public detail already made the article TEXT',t=>{
+ const f=bilibiliSubtitleFixture(t),initial=f.collector.transcriptStatus(903);
+ assert.equal(initial.eligible,true);assert.equal(initial.kind,'bilibili_subtitle_v1');assert.equal(initial.state,'NONE');
+ const queued=f.collector.queueTranscript(903);assert.equal(queued.state,'QUEUED');
+ assert.equal(f.collector.claim(['bilibili'],['entry_body_v1']).job,null);
+ const claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ assert.equal(claim.job.taskType,'bilibili_subtitle_v1');assert.equal(claim.job.platform,'bilibili');assert.equal(claim.job.kind,'videos');
+ assert.equal(claim.job.url,'https://www.bilibili.com/video/BV1AaJP6iEch');
+});
+
+test('successful Bilibili subtitle appends to existing detail and preserves discovery health/read metadata',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueTranscript(903);const claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ const before=f.db.get('SELECT status,published_at,url FROM entries WHERE id=903'),channelBefore=f.db.get('SELECT last_success,state,error FROM channels WHERE id=?',f.channel.id),groupBefore=f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key);
+ const result={leaseId:claim.job.leaseId,entryId:903,status:'OK',backendId:'opencli-bilibili-shervin',bilibiliId:'BV1AaJP6iEch',segmentCount:2,content:'[4.00s - 6.00s] first line <script>text only</script>\n[6.00s - 8.00s] second subtitle line'};
+ const ack=await f.collector.submit(result);assert.equal(ack.state,'TRANSCRIPT_ENRICHED');assert.equal(ack.backendId,'opencli-bilibili-shervin');
+ const row=f.db.get('SELECT status,published_at,url,content_origin FROM entries WHERE id=903');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.url,before.url);assert.equal(row.content_origin,'bilibili_subtitle_enrichment');
+ assert.deepEqual(f.db.get('SELECT last_success,state,error FROM channels WHERE id=?',f.channel.id),channelBefore);assert.deepEqual(f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),groupBefore);
+ assert.equal(f.puts.length,1);assert.match(f.puts[0].content,/existing detail/);assert.match(f.puts[0].content,/data-qr-bilibili-subtitle="BV1AaJP6iEch"/);assert.match(f.puts[0].content,/&lt;script&gt;/);assert.doesNotMatch(f.puts[0].content,/<script>/);
+ const detail=JSON.parse(f.db.get("SELECT detail FROM entry_enrichments WHERE entry_id=903 AND kind='bilibili_subtitle_v1'").detail);assert.equal(detail.backend,'opencli-bilibili-shervin');assert.equal(detail.bilibiliId,'BV1AaJP6iEch');
+});
+
+test('Bilibili subtitle auth failure requeues only the subtitle task and never freezes author discovery',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueTranscript(903);const claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']),groupBefore=f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),channelBefore=f.db.get('SELECT state,error FROM channels WHERE id=?',f.channel.id);
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:903,status:'AUTH_REQUIRED',backendId:'opencli-bilibili-shervin'});
+ assert.equal(ack.state,'AUTH_REQUIRED');assert.equal(f.db.get('SELECT state FROM collector_transcripts WHERE entry_id=903').state,'QUEUED');
+ assert.deepEqual(f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),groupBefore);assert.deepEqual(f.db.get('SELECT state,error FROM channels WHERE id=?',f.channel.id),channelBefore);
+});
+
+test('Bilibili subtitle rejects BV substitution and wrong backend before Miniflux write',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueTranscript(903);let claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:903,status:'OK',backendId:'opencli-bilibili-shervin',bilibiliId:'BV1BBBBBBBBBB',segmentCount:1,content:'[1.00s - 2.00s] x'}),/video mismatch/);assert.equal(f.puts.length,0);
+ f.db.run("UPDATE collector_transcripts SET state='QUEUED',lease_id=NULL,expires_at=0,digest=NULL,next_attempt=0 WHERE entry_id=903");claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:903,status:'OK',backendId:'yt-dlp-shervin',bilibiliId:'BV1AaJP6iEch',segmentCount:1,content:'[1.00s - 2.00s] x'}),/invalid transcript backend/);assert.equal(f.puts.length,0);
+});
+
+test('Windows Bilibili subtitle normalizer emits bounded timestamped text and stable BV identity',()=>{
+ const job={taskType:'bilibili_subtitle_v1',entryId:903,platform:'bilibili',kind:'videos',url:'https://www.bilibili.com/video/BV1AaJP6iEch'};
+ const result=normalizeBilibiliSubtitle(job,[{from:'4.00s',to:'6.00s',content:' first subtitle line '},{from:'6.00s',to:'8.00s',content:'first subtitle line'},{from:'8.00s',to:'10.00s',content:'second line with enough text for a real transcript payload'}]);
+ assert.equal(result.entryId,903);assert.equal(result.bilibiliId,'BV1AaJP6iEch');assert.equal(result.segmentCount,2);assert.match(result.content,/\[4\.00s - 6\.00s\] first subtitle line/);assert.match(result.content,/\[8\.00s - 10\.00s\] second line/);
+ assert.throws(()=>normalizeBilibiliSubtitle(job,[{from:'9.00s',to:'8.00s',content:'bad timestamp that is long enough'}]),/timestamp/);
+});
+
+test('Windows Bilibili subtitle worker uses one fixed read-only OpenCLI command',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/function collectBilibiliSubtitle/);assert.match(src,/config\.opencliMain,'bilibili','subtitle',original\.link/);assert.match(src,/backendId:'opencli-bilibili-shervin'/);assert.match(src,/out\.push\('bilibili_subtitle_v1'\)/);
+ assert.doesNotMatch(src,/bilibili.*login/i);
 });

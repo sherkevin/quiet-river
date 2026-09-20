@@ -80,6 +80,19 @@ function normalizeYoutubeTranscript(job,rows){
   }
   return {entryId:Number(job.entryId),videoId:original.youtubeId,segmentCount:lines.length,content:lines.join('\n')};
 }
+function normalizeBilibiliSubtitle(job,rows){
+  if(!job||job.taskType!=='bilibili_subtitle_v1'||job.platform!=='bilibili'||job.kind!=='videos'||!Number.isSafeInteger(Number(job.entryId))||!Array.isArray(rows)||rows.length<1||rows.length>20000)throw new Error('Invalid Bilibili subtitle');
+  const original=originalLink({platform:'bilibili',kind:'videos'},String(job.url||'')),lines=[];let last='',chars=0;
+  for(const row of rows){
+    if(!row||typeof row!=='object')throw new Error('Invalid Bilibili subtitle row');
+    const from=String(row.from||''),to=String(row.to||''),fm=/^(\d+(?:\.\d+)?)s$/.exec(from),tm=/^(\d+(?:\.\d+)?)s$/.exec(to);
+    if(!fm||!tm||Number(tm[1])<Number(fm[1]))throw new Error('Invalid Bilibili subtitle timestamp');
+    const text=String(row.content??'').replace(/\s+/g,' ').trim();if(!text||text===last)continue;last=text;
+    const line='['+from+' - '+to+'] '+text;chars+=line.length+1;if(chars>1024*1024)throw new Error('Bilibili subtitle too large');lines.push(line);
+  }
+  if(!lines.length||chars<40)throw new Error('Bilibili subtitle missing or too small');
+  return {entryId:Number(job.entryId),bilibiliId:original.bilibiliId,segmentCount:lines.length,content:lines.join('\n')};
+}
 function selectFreshXhsNoteUrl(job,rows){
   if(job?.platform!=='xiaohongshu'||job?.kind!=='notes'||!Array.isArray(rows)||rows.length>100)throw new Error('Invalid Xiaohongshu refresh list');
   const expected=originalLink(job,job.url);
@@ -111,4 +124,4 @@ function statusFor(code,text){
   if(code===75||/timeout|timed out/i.test(text))return 'TIMEOUT';
   return 'UPSTREAM_ERROR';
 }
-module.exports={normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,selectFreshXhsNoteUrl,statusFor};
+module.exports={normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,normalizeBilibiliSubtitle,selectFreshXhsNoteUrl,statusFor};

@@ -225,7 +225,7 @@ test('native article page exposes explicit Shervin body enrichment with persiste
 test('native YouTube transcript control is platform-gated and uses explicit queue/status APIs',()=>{
  const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
  assert.match(ui,/data-native-transcript>补充媒体转录<\/button>/);assert.match(ui,/function setupNativeTranscript/);
- assert.match(ui,/isYoutube=detail\.platform==='youtube',isPodcast=detail\.platform==='podcast'/);assert.match(ui,/\(!isYoutube&&!isPodcast\)/);
+ assert.match(ui,/isYoutube=detail\.platform==='youtube',isBilibili=detail\.platform==='bilibili',isPodcast=detail\.platform==='podcast'/);assert.match(ui,/\(!isYoutube&&!isBilibili&&!isPodcast\)/);
  assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript'\)/);
  assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript',\{\}\)/);
  assert.match(ui,/优先使用 yt-dlp；失败后按既定链路回退到 OpenCLI。不会下载视频。/);
@@ -238,6 +238,16 @@ test('native Podcast transcript control promises local-only audio processing and
  assert.match(ui,/isPodcast=detail\.platform==='podcast'/);
  assert.match(ui,/本地转录播客/);assert.match(ui,/faster-whisper/);assert.match(ui,/音频不会上传第三方/);assert.match(ui,/临时音频完成后删除/);
  assert.match(ui,/maxPolls=isPodcast\?1200:120/);
- assert.match(ui,/\['youtube','podcast'\]\.includes\(detail\.platform\)/);
+ assert.match(ui,/\['youtube','bilibili','podcast'\]\.includes\(detail\.platform\)/);
+ assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript',\{\}\)/);
+});
+
+test('native Bilibili subtitle control is independent from public video detail enrichment',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ assert.match(ui,/isBilibili=detail\.platform==='bilibili'/);
+ assert.match(ui,/补充 B站字幕/);assert.match(ui,/Shervin OpenCLI/);
+ assert.match(ui,/失败只影响这条字幕任务，不影响作者发现/);
+ assert.match(ui,/B站字幕任务已提交给 Shervin/);
+ assert.match(ui,/detail\.prepareKind==='bilibili-detail'\?'获取视频详情'/);
  assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript',\{\}\)/);
 });

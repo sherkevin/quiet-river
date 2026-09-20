@@ -503,3 +503,63 @@ Quiet River tested the narrower need actually required by the reader: public vid
 ### Remaining
 
 Bilibili subtitle enrichment remains a separate OpenCLI-backed task. Author discovery stays unchanged on Shervin and is not replaced by the public detail API.
+
+
+## 2026-09-20 — P1 Bilibili subtitle enrichment
+
+### Real backend canary
+
+OpenCLI 1.8.7 on Shervin was tested against the already-known AITIME video BV1AaJP6iEch using the read-only bilibili subtitle command.
+
+Result:
+- first navigation hit the known Chromium Navigation rejected condition;
+- the existing one-time retain-on-failure retry succeeded;
+- 2,635 subtitle rows returned;
+- all from/to timestamp fields validated;
+- 38,436 transcript characters;
+- no subtitle text, Cookie or browser payload was printed into the engineering report.
+
+### Architecture
+
+Subtitle completion is intentionally independent from article content_state.
+
+A Bilibili card may already be TEXT after public video-detail enrichment while its subtitle is still absent. The desktop enrichment queue therefore gained a backward-compatible kind column:
+- body -> entry_body_v1 for Zhihu/Xiaohongshu;
+- bilibili_subtitle -> entry_transcript_v1 for Bilibili.
+
+Existing rows migrate with kind=body.
+
+### Safety and failure semantics
+
+- ECS only queues a known stored Bilibili entry after validating its canonical original URL and subscribed UID/channel;
+- Shervin runs only the fixed OpenCLI bilibili subtitle command;
+- Windows normalizer accepts at most 20,000 subtitle rows, validates monotonic from/to timestamps, removes consecutive duplicate text and uploads at most 1 MiB of timestamped plain text;
+- ECS escapes the transcript before appending it under a Bilibili Transcript section;
+- combined article content is capped at 2 MiB;
+- successful transcript is cached as entry_enrichments/bilibili_subtitle_v1 with provenance bilibili_subtitle_enrichment;
+- subtitle AUTH_REQUIRED is isolated to the single transcript task; it does not set desktop:bilibili or the author channel to AUTH_REQUIRED;
+- explicit retry can requeue that subtitle task after the user later logs in;
+- discovery/source health is untouched by transcript success or failure.
+
+### Verification
+
+- focused collector/workspace regression: 85/85 passed;
+- full regression: 362/362 passed;
+- all prior body enrichment tests remain green;
+- no feature-branch code was deployed to production during this canary.
+
+### Integration adaptation — unified media transcript queue
+
+When the independently verified Bilibili subtitle branch was consolidated with the newer YouTube and Podcast work, its original `entry_transcript_v1` / `collector_enrichments` implementation was deliberately not carried forward. The canary evidence above remains valid; the queue contract was migrated to the newer media-transcript architecture:
+
+- capability kind is now `bilibili_subtitle_v1`;
+- persistence/lease state uses `collector_transcripts`, shared structurally with YouTube and Podcast but with separate platform identity rules;
+- YouTube remains `youtube_transcript_v1`; Podcast remains `podcast_transcript_v1`;
+- Bilibili claim exposes only the already-stored canonical BV URL and fixed `videos` kind;
+- Shervin executes only `opencli bilibili subtitle <known BV URL>`;
+- worker output must declare backend `opencli-bilibili-shervin` and the same BV ID before ECS will write;
+- article detail and subtitle remain independent: public detail uses the ECS public detail API, subtitle uses the explicit Shervin media-transcript queue;
+- subtitle authentication/access failure requeues only the subtitle task and does not alter the Bilibili author discovery group/channel;
+- the native article UI exposes `获取视频详情` and `补充 B站字幕` as separate explicit actions.
+
+Focused integration regression after this adaptation: 143/143 passed across collector, native workspace, Bilibili detail, backend registry and capability routing. Full combined regression is run only after the cherry-pick is finalized.

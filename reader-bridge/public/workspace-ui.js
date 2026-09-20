@@ -156,12 +156,15 @@ function setupNativeEnrichment(shell,container,detail){
   button.onclick=async()=>{button.disabled=true;try{const state=await api('/entries/'+detail.id+'/enrichment',{});paint(state);void poll();toast(state.collector?.online?'正文任务已提交给 Shervin':'正文任务已排队；Shervin 上线后继续');}catch(e){paint(detail.bodyEnrichment);error(e);}};
 }
 function setupNativeTranscript(shell,container,detail){
-  const button=shell.querySelector('[data-native-transcript]'),initial=detail.mediaTranscript||detail.youtubeTranscript,isYoutube=detail.platform==='youtube',isPodcast=detail.platform==='podcast';
-  if((!isYoutube&&!isPodcast)||!initial?.eligible){button.remove();return;}
+  const button=shell.querySelector('[data-native-transcript]'),initial=detail.mediaTranscript||detail.youtubeTranscript,isYoutube=detail.platform==='youtube',isBilibili=detail.platform==='bilibili',isPodcast=detail.platform==='podcast';
+  if((!isYoutube&&!isBilibili&&!isPodcast)||!initial?.eligible){button.remove();return;}
   let polling=false,stopped=false;
   const labels=isPodcast?{
     done:'已完成播客转录',running:'Shervin 本地转录中…',queued:'播客转录已排队…',offline:'播客已排队 · Shervin 离线',retry:'转录受限 · 点击立即重试',ready:'本地转录播客',readyOffline:'Shervin 离线 · 先排队转录',toast:'播客转录已加入站内正文',
     title:'使用 Shervin 本地 faster-whisper；音频不会上传第三方，临时音频完成后删除。'
+  }:isBilibili?{
+    done:'已补充 B站字幕',running:'Shervin 正在读取 B站字幕…',queued:'B站字幕已排队…',offline:'B站字幕已排队 · Shervin 离线',retry:'B站字幕受限 · 点击立即重试',ready:'补充 B站字幕',readyOffline:'Shervin 离线 · 先排队 B站字幕',toast:'B站字幕已加入站内正文',
+    title:'使用 Shervin OpenCLI 读取当前已知 BV 视频的字幕；失败只影响这条字幕任务，不影响作者发现。'
   }:{
     done:'已补充视频字幕',running:'Shervin 正在读取字幕…',queued:'字幕已排队…',offline:'字幕已排队 · Shervin 离线',retry:'字幕受限 · 点击立即重试',ready:'补充视频字幕',readyOffline:'Shervin 离线 · 先排队字幕',toast:'视频字幕已加入站内正文',
     title:'优先使用 yt-dlp；失败后按既定链路回退到 OpenCLI。不会下载视频。'
@@ -184,7 +187,7 @@ function setupNativeTranscript(shell,container,detail){
     catch(e){error(e);}finally{polling=false;}
   };
   paint(initial);if(['QUEUED','RUNNING'].includes(initial.state))void poll();
-  button.onclick=async()=>{button.disabled=true;try{const state=await api('/entries/'+detail.id+'/transcript',{});paint(state);void poll();toast(state.collector?.online?(isPodcast?'本地播客转录任务已提交给 Shervin':'字幕任务已提交给 Shervin'):'转录任务已排队；Shervin 上线后继续');}catch(e){paint(detail.mediaTranscript);error(e);}};
+  button.onclick=async()=>{button.disabled=true;try{const state=await api('/entries/'+detail.id+'/transcript',{});paint(state);void poll();toast(state.collector?.online?(isPodcast?'本地播客转录任务已提交给 Shervin':isBilibili?'B站字幕任务已提交给 Shervin':'字幕任务已提交给 Shervin'):'转录任务已排队；Shervin 上线后继续');}catch(e){paint(detail.mediaTranscript);error(e);}};
 }
 async function recordNativeArticleOpen(detail){
   const eventId=crypto.randomUUID().replaceAll('-','');await api('/entries/'+detail.id+'/open',{eventId,target:'reader'});detail.status='read';
@@ -224,7 +227,7 @@ async function renderArticleDetail(id){
   try{highlightState=await api('/entries/'+id+'/highlights');detail.highlights=highlightState.highlights||[];detail.highlightConfigured=highlightState.configured!==false;detail.highlightCanCreate=!!highlightState.canCreate;}
   catch(e){detail.highlights=[];detail.highlightConfigured=!!detail.notesConfigured;detail.highlightCanCreate=false;detail.highlightUnavailable=true;}
   try{detail.bodyEnrichment=await api('/entries/'+id+'/enrichment');}catch{detail.bodyEnrichment={eligible:false,state:'UNAVAILABLE'};}
-  if(['youtube','podcast'].includes(detail.platform)){try{detail.mediaTranscript=await api('/entries/'+id+'/transcript');}catch{detail.mediaTranscript={eligible:false,state:'UNAVAILABLE'};}}else detail.mediaTranscript={eligible:false,state:'UNAVAILABLE'};detail.youtubeTranscript=detail.platform==='youtube'?detail.mediaTranscript:{eligible:false,state:'UNAVAILABLE'};
+  if(['youtube','bilibili','podcast'].includes(detail.platform)){try{detail.mediaTranscript=await api('/entries/'+id+'/transcript');}catch{detail.mediaTranscript={eligible:false,state:'UNAVAILABLE'};}}else detail.mediaTranscript={eligible:false,state:'UNAVAILABLE'};detail.youtubeTranscript=detail.platform==='youtube'?detail.mediaTranscript:{eligible:false,state:'UNAVAILABLE'};
   if(view!=='article'||articleId!==id)return;drawNativeArticle(container,detail);recordNativeArticleOpen(detail).catch(e=>error(new Error('文章已打开，但阅读状态未保存：'+e.message)));
 }
 function syncReadCards(entryId,status){
