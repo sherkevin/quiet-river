@@ -330,3 +330,50 @@ Keep the official YouTube channel Atom feed as discovery. Add yt-dlp only as an 
 ### Remaining
 
 No additional YouTube discovery work is needed. Optional future work is richer video metadata only if a concrete reader use case appears.
+
+
+## 2026-09-20 — P1 Bilibili public video-detail enrichment
+
+### Agent-Reach input and local decision
+
+Agent-Reach's pinned Bilibili channel records a valuable reliability finding: yt-dlp should not be used for Bilibili because live tests hit 412 risk control, while bili-cli/OpenCLI are the maintained Bilibili-specific paths.
+
+Quiet River tested the narrower need actually required by the reader: public video detail for already-discovered BV items. The unauthenticated Bilibili x/web-interface/view endpoint was simpler than installing the full bili-cli dependency graph and passed every current author canary. Therefore the production-oriented order is now:
+
+1. Bilibili Public Detail API @ ECS
+2. bili-cli fallback only if the public detail API later fails real canaries
+3. OpenCLI remains responsible for author discovery and future subtitle enrichment
+
+### Runtime/dependency decision
+
+- audited PyPI bilibili-cli 0.6.2 and its source before attempting installation;
+- confirmed its pure video command calls public get_video_info with credential=None, while optional subtitle/comments/etc paths may load credentials;
+- an isolated pip --target install was started only for evaluation, but dependencies were unnecessarily heavy for the narrow detail use case;
+- after the public API passed all four real source canaries, the unfinished bili-cli install and orphan pip process were terminated and its target directory removed;
+- no new Bilibili credential, browser cookie or system Python package is required.
+
+### Implemented
+
+- canonical https://www.bilibili.com/video/BV... target parser;
+- bounded public detail API request with browser-like User-Agent/Referer but no Cookie/Authorization;
+- response must be HTTP 200, JSON, code=0 and contain data;
+- returned BV must equal the stored item BV;
+- returned owner UID must equal the subscribed channel author_id before any write;
+- escaped structured HTML with title, UP owner, duration, interaction stats and description;
+- explicit article prepare uses prepareKind=bilibili-detail and UI label 获取视频详情;
+- successful enrichment caches bilibili_detail_v1 in entry_enrichments and marks provenance bilibili_public_detail_enrichment;
+- failure caches FAILED but leaves the original META card and read/url/publication metadata unchanged;
+- acquisition doctor exposes the backend observationally without contacting Bilibili.
+
+### Verification
+
+- focused Bilibili/backend tests: 19/19 passed;
+- full regression: 358/358 passed;
+- first raw API canary on AITIME: HTTP 200, code 0, owner UID 503316308 matched;
+- four-source formal module canary: 4/4 current Bilibili subscriptions passed exact BV + owner UID validation;
+- generated structured detail HTML sizes across the four samples: 333, 526, 339, 497 characters;
+- no production database mutation during canaries.
+
+### Remaining
+
+Bilibili subtitle enrichment remains a separate OpenCLI-backed task. Author discovery stays unchanged on Shervin and is not replaced by the public detail API.

@@ -10,6 +10,7 @@ const {capabilityReport}=require('./capabilities');
 const {runBackend,doctorBackends}=require('./acquisition-backends');
 const {githubDetailTarget,githubEnrichment}=require('./github-enrichment');
 const {youtubeVideoTarget,youtubeTranscript}=require('./youtube-enrichment');
+const {bilibiliVideoTarget,bilibiliDetail}=require('./bilibili-enrichment');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
@@ -20,6 +21,7 @@ class ReaderService {
     this.internalFetch=clients.internalFetch || request;
     this.fetchNative=clients.fetchNative || fetchNativeMetadata;
     this.youtubeTranscript=clients.youtubeTranscript || youtubeTranscript;
+    this.bilibiliDetail=clients.bilibiliDetail || bilibiliDetail;
     meta.ensureSnapshots(db);
   }
   async importManifest(manifest,options={}) {
@@ -261,6 +263,9 @@ class ReaderService {
     const youtubeTarget=source.platform==='youtube'?youtubeVideoTarget(row.url):null,youtubeKind='youtube_transcript_v1';
     const youtubeDone=youtubeTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,youtubeKind);
     const canYoutubeEnrich=!!youtubeTarget&&!youtubeDone;
+    const bilibiliTarget=source.platform==='bilibili'?bilibiliVideoTarget(row.url):null,bilibiliKind='bilibili_detail_v1';
+    const bilibiliDone=bilibiliTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,bilibiliKind);
+    const canBilibiliEnrich=!!bilibiliTarget&&!bilibiliDone;
     const canFetch=channel?.transport==='public'&&['blog','github','csdn','juejin','wechat'].includes(source.platform)&&source.fullTextMode!=='feed'&&!['feed_full','metadata_only'].includes(source.content_policy);
     let upstream=null,html='',prepareAttempted=false,prepareImproved=false,contentUnavailable=false;
     try {
@@ -297,6 +302,22 @@ class ReaderService {
           this.db.audit('youtube-enrichment',id,'YouTube subtitle unavailable; existing content retained');
         }
       }
+      if(prepare&&canBilibiliEnrich){
+        prepareAttempted=true;
+        try{
+          const enriched=await this.bilibiliDetail(this,bilibiliTarget,{expectedOwnerId:channel?.author_id||source.adapter?.id||''}),candidate=String(enriched.html||'');
+          if(stripHTML(candidate)){
+            html=candidate;prepareImproved=true;
+            await this.mf.call(`/v1/entries/${id}`,'PUT',{title:upstream.title||row.title,content:html});
+            this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,bilibiliKind,'DONE',Date.now(),JSON.stringify({bvid:enriched.bvid,ownerId:enriched.ownerId}));
+            this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='bilibili_public_detail_enrichment' WHERE entry_id=?",hash(html),id);
+            this.project({...upstream,content:html},channel,Date.now());this.db.run("UPDATE entries SET content_origin='bilibili_public_detail_enrichment' WHERE id=?",id);row=this.db.get('SELECT * FROM entries WHERE id=?',id);
+          }
+        }catch(e){
+          this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,bilibiliKind,'FAILED',Date.now(),String(e.message||e).slice(0,200));
+          this.db.audit('bilibili-enrichment',id,'Bilibili detail unavailable; existing content retained');
+        }
+      }
       if(prepare&&!prepareImproved&&canFetch&&stripHTML(html).length<1500){
         prepareAttempted=true;
         try {
@@ -309,7 +330,8 @@ class ReaderService {
     const snapshot=meta.tagSnapshot(this.db,id),feedback=this.db.get('SELECT value FROM feedback WHERE entry_id=?',id)?.value||0,noteState=await this.articleNote(id);
     const githubDoneNow=githubTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,githubKind);
     const youtubeDoneNow=youtubeTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,youtubeKind);
-    const prepareKind=githubTarget?(githubDoneNow?null:'github-detail'):youtubeTarget?(youtubeDoneNow?null:'youtube-transcript'):canFetch&&stripHTML(html).length<1500?'fulltext':null;
+    const bilibiliDoneNow=bilibiliTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,bilibiliKind);
+    const prepareKind=githubTarget?(githubDoneNow?null:'github-detail'):youtubeTarget?(youtubeDoneNow?null:'youtube-transcript'):bilibiliTarget?(bilibiliDoneNow?null:'bilibili-detail'):canFetch&&stripHTML(html).length<1500?'fulltext':null;
     const canFetchFullText=!!prepareKind;
     const safeOriginal=safeURL(row.url)||null,contentLimit=2*1024*1024,contentTruncated=html.length>contentLimit;
     const readerMode=row.bookmark_id||row.content_state!=='META'?'reader':canFetchFullText?'fetchable':'original';

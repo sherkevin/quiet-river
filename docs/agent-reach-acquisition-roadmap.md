@@ -171,21 +171,31 @@ Tasks:
 - [ ] keep comments as article enrichment, not extra feed cards
 - [ ] canary one public community under logged-in session
 
-### F. P1 — Bilibili: keep author discovery, improve detail/search backends
+### F. P1 — Bilibili: keep author discovery, improve detail/search backends — VIDEO DETAIL DONE
 
-Do not replace working author discovery merely because Agent-Reach prefers bili-cli for other capabilities.
+Do not replace working author discovery merely because Agent-Reach prefers bili-cli for other capabilities. Agent-Reach's important production knowledge is retained: do not use yt-dlp for Bilibili; use platform-specific paths and OpenCLI for subtitles.
 
-Target split:
-- bilibili.author.videos -> OpenCLI @ Shervin
-- bilibili.video.detail -> bili-cli, then OpenCLI
-- bilibili.video.subtitle -> OpenCLI
-- bilibili.search -> bili-cli, OpenCLI, Bilibili search API
+Current split:
+- bilibili.author.videos -> OpenCLI @ Shervin (unchanged scheduler owner)
+- bilibili.video.detail -> Bilibili Public Detail API @ ECS -> bili-cli fallback if the public API later becomes unreliable
+- bilibili.video.subtitle -> OpenCLI @ Shervin (still open)
+- bilibili.search -> not needed for current subscription workflow; Agent-Reach's bili-cli/search API chain remains reference material
 
-Tasks:
-- [ ] add bili-cli runtime/probe
-- [ ] use detail/subtitle as enrichment to existing video cards
-- [ ] do not restore yt-dlp as Bilibili backend
-- [ ] verify existing Bilibili source IDs remain stable
+Completed:
+- [x] preserve existing OpenCLI author discovery and all source/channel IDs
+- [x] validate public x/web-interface/view detail API on one latest video from each of all 4 current Bilibili authors
+- [x] all 4/4 canaries returned HTTP 200/code 0, exact BV identity and subscribed owner UID
+- [x] implement bounded unauthenticated detail adapter with trusted=false, 10s timeout and 2 MiB response limit
+- [x] no Cookie/Authorization header and no browser/session dependency
+- [x] require returned BV and owner UID to match stored subscription before import
+- [x] explicit 获取视频详情 action upgrades META cards to cached TEXT without changing URL/publication/read state
+- [x] HTTP/API/JSON failures remain acquisition failures and retain the old card
+- [x] do not install/restore yt-dlp for Bilibili
+- [x] attempted bili-cli 0.6.2 isolation was abandoned before use because the lighter zero-credential public detail API passed all current-source canaries; incomplete runtime files/processes were removed
+
+Remaining:
+- [ ] Bilibili subtitles through OpenCLI as a separate enrichment capability
+- [ ] keep bili-cli as a fallback candidate only if future public detail API canaries fail; do not add the dependency pre-emptively
 
 ### G. P1 — GitHub enrichment, not feed replacement — COMMIT DETAIL DONE
 
