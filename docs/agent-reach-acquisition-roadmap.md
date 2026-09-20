@@ -147,13 +147,13 @@ Why:
 Target: instagram.author.posts -> OpenCLI @ Shervin
 
 Tasks:
-- [ ] add platform/source validation
-- [ ] add fixed read-only OpenCLI command
-- [ ] normalize recent posts to Quiet River item contract
-- [ ] preserve caption/time/permalink without downloading private media
-- [ ] add doctor/probe state
-- [ ] canary an explicitly selected test user
-- [ ] add blogger/profile UI labeling
+- [x] add platform/source validation
+- [x] add a bounded read-only Shervin wrapper over the same Instagram feed-by-username API used by OpenCLI
+- [x] normalize recent posts to Quiet River item contract with stable shortcode identity
+- [x] preserve caption/time/permalink without downloading private media
+- [x] add blogger/filter/UI platform support and Shervin-owned desktop channel
+- [ ] real backend canary — BLOCKED: OpenCLI 1.8.7 with Browser Bridge extension 1.0.21 returns BROWSER_CONNECT/EX_UNAVAILABLE for both official `instagram profile` and `instagram user`; the custom wrapper fails at the same bridge layer. No Instagram source is claimed working until the extension/runtime gate is resolved.
+- [ ] after a successful canary, add a concrete probe timestamp/status and only then allow scheduled production routing
 
 ### E. P1 — Reddit Community/User source
 

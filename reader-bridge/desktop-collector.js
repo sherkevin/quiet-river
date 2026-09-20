@@ -3,9 +3,9 @@ const crypto=require('node:crypto');
 const {channelsFor,escapeHTML,hash,stripHTML}=require('./core');
 const {originalLink}=require('../tools/windows/original-link.cjs');
 const {sourceCapabilities}=require('./capabilities');
-const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter']);
-const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili']);
-const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu']);
+const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter','instagram']);
+const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','instagram']);
+const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu','instagram']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
 const ENRICH_CAP='entry_body_v1',MAX_BODY_BYTES=1024*1024;
 const BLOCK_PAGE_RE=/登录后查看|请登录|登录已失效|验证码|安全限制|访问链接异常|页面不见了|笔记不存在|access denied|security block/i;
@@ -22,10 +22,11 @@ function validateItems(channel,items){
     let original;try{original=originalLink({platform:channel.platform,kind:channel.label,authorId:channel.authorId},item.link);}
     catch{fail('collector original URL does not match platform');}
     if(typeof item.title!=='string'||!item.title.trim()||item.title.length>1000)fail('invalid title');
+    if(channel.platform==='instagram'&&String(item.author||'').toLowerCase()!==String(channel.authorId||'').toLowerCase())fail('Instagram item author does not match registered source');
     const published=item.published==null?null:Number(item.published);
     if(published!==null&&(!Number.isSafeInteger(published)||published<946684800000||published>Date.now()+300000))fail('invalid publication date');
     const summary=typeof item.summary==='string'?item.summary.slice(0,1500):'';
-    return {guid:original.guid,link:original.link,title:item.title.trim(),published,
+    return {guid:original.guid,link:original.link,title:item.title.trim(),published,author:item.author?String(item.author).slice(0,150):'',
       content:summary?'<p>'+escapeHTML(summary)+'</p>':'',content_state:summary?'PARTIAL':'META'};
   });
 }

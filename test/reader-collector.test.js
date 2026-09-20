@@ -428,3 +428,30 @@ test('explicit Twitter Python wrapper never imports browser-cookie auth and filt
  const noCreds=spawnSync('python3',[wrapper,'karpathy','1'],{encoding:'utf8',env:{...process.env,PYTHONPATH:dir,TWITTER_AUTH_TOKEN:'',TWITTER_CT0:''}});
  assert.equal(noCreds.status,77);
 });
+
+
+test('Instagram rows normalize stable shortcode identity, time and author',()=>{
+ const job={platform:'instagram',kind:'posts',authorId:'nasa',name:'NASA'};
+ const [item]=normalize(job,[{id:'1234567890123456789',code:'ABC_def-12',author:'nasa',caption:'Moon image',taken_at:1789700000,media_type:1,url:'https://www.instagram.com/p/ABC_def-12/'}]);
+ assert.equal(item.link,'https://www.instagram.com/p/ABC_def-12/');
+ assert.equal(item.published,1789700000000);
+ assert.equal(item.title,'Moon image');assert.equal(item.summary,'Moon image');assert.equal(item.author,'nasa');
+ const [validated]=validateItems({platform:'instagram',label:'posts',authorId:'nasa'},[item]);
+ assert.equal(validated.guid,'instagram:ABC_def-12');assert.equal(validated.author,'nasa');assert.equal(validated.content_state,'PARTIAL');
+});
+test('Instagram item author and shortcode mismatch are rejected on both worker and ECS boundaries',()=>{
+ const job={platform:'instagram',kind:'posts',authorId:'nasa'};
+ assert.throws(()=>normalize(job,[{id:'1',code:'ABC_def-12',author:'other',caption:'x',taken_at:1789700000,url:'https://www.instagram.com/p/ABC_def-12/'}]),/author mismatch/);
+ assert.throws(()=>normalize(job,[{id:'1',code:'DIFFERENT1',author:'nasa',caption:'x',taken_at:1789700000,url:'https://www.instagram.com/p/ABC_def-12/'}]),/shortcode mismatch/);
+ assert.throws(()=>validateItems({platform:'instagram',label:'posts',authorId:'nasa'},[{title:'x',link:'https://www.instagram.com/p/ABC_def-12/',published:1789900000000,summary:'x',author:'other'}]),/author/);
+});
+test('Instagram desktop source is claimable through the existing single-browser lease queue',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'ig-source',name:'NASA',platform:'instagram',url:'https://www.instagram.com/nasa/',tags:[],adapter:{platform:'instagram',id:'nasa'},enabled:true};
+ const config={adapters:{desktopPlatforms:['instagram']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=19 WHERE id=?',channel.id);
+ const service={db,config,provisionChannels:async()=>{},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=? WHERE id=?',state,error,job.id)};
+ const collector=new DesktopCollector(service);service.desktop=collector;db.createRun([channel],'manual');
+ const claimed=collector.claim(['instagram']);
+ assert.ok(claimed.job);assert.equal(claimed.job.platform,'instagram');assert.equal(claimed.job.authorId,'nasa');assert.equal(claimed.job.kind,'posts');assert.equal(claimed.job.backendId,'opencli-shervin');
+});

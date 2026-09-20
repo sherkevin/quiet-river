@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {authorIdentity}=require('../reader-bridge/sources');
+const {authorIdentity,blockers}=require('../reader-bridge/sources');
 const {channelsFor}=require('../reader-bridge/core');
 const {fetchNativeMetadata}=require('../reader-bridge/native-metadata');
 const {Database}=require('../reader-bridge/database');
@@ -115,4 +115,22 @@ test('source-first landing preserves notes navigation but makes Latest the initi
  assert.match(html,/id="platform-filter"/);assert.match(html,/data-view="notes"/);
  assert.match(app,/return Object\.hasOwn\(titles,next\)\?next:'latest'/);assert.match(app,/await switchView\(initialView\(\)\);if\(view!=='article'\)refresh\(\)/);
  assert.match(fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8'),/<a class="primary" data-article>站内阅读<\/a>/);
+});
+
+test('Instagram profile is a stable author identity while content/system routes are not',()=>{
+ assert.deepEqual(authorIdentity('https://www.instagram.com/nasa/'),{platform:'instagram',id:'nasa'});
+ assert.deepEqual(authorIdentity('https://instagram.com/open.ai'),{platform:'instagram',id:'open.ai'});
+ for(const url of ['https://www.instagram.com/p/ABC123/','https://www.instagram.com/reel/ABC123/','https://www.instagram.com/explore/','https://www.instagram.com/accounts/login/'])assert.equal(authorIdentity(url),null,url);
+});
+test('Instagram author produces one Shervin-owned posts channel without a feed URL',()=>{
+ const s={...base,id:'instagram-source',platform:'instagram',url:'https://www.instagram.com/nasa/',feeds:[],adapter:{platform:'instagram',id:'nasa'}};
+ const c=channelsFor(s,{desktopPlatforms:['instagram']});
+ assert.equal(c.length,1);assert.equal(c[0].transport,'desktop');assert.equal(c[0].label,'posts');assert.equal(c[0].author_id,'nasa');assert.equal(c[0].desktop_kind,'posts');assert.equal(c[0].group_key,'credential:instagram');assert.equal(c[0].enabled,true);
+});
+
+test('Instagram authorization blocker disappears only after a real successful channel check',()=>{
+ const s={...base,id:'ig',platform:'instagram',url:'https://www.instagram.com/nasa/',adapter:{platform:'instagram',id:'nasa'}};
+ const [channel]=channelsFor(s,{desktopPlatforms:['instagram']});
+ assert.ok(blockers(s,[{...channel,state:'NEVER_CHECKED'}],{}).some(x=>/Instagram/.test(x)));
+ assert.equal(blockers(s,[{...channel,state:'SUCCEEDED_NO_NEW'}],{}).some(x=>/Instagram/.test(x)),false);
 });

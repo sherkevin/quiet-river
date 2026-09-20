@@ -3,6 +3,7 @@ const {originalLink}=require('./original-link.cjs');
 function normalize(job,rows){
   if(!Array.isArray(rows)||rows.length>50)throw new Error('Invalid OpenCLI list');
   if(job.platform==='twitter')return rows.filter(row=>!row?.isRetweet&&!row?.is_retweet).map(row=>normalizeTwitterRow(job,row));
+  if(job.platform==='instagram')return rows.map(row=>normalizeInstagramRow(job,row));
   return rows.map(row=>{
     const original=originalLink(job,row.url);
     if(job.platform==='xiaohongshu'&&row.id&&String(row.id).toLowerCase()!==original.noteId)throw new Error('Original link identity mismatch');
@@ -17,6 +18,17 @@ function normalize(job,rows){
     }
     return {title:title.slice(0,1000),link:original.link,published,summary:''};
   });
+}
+function normalizeInstagramRow(job,row){
+  if(!row||typeof row!=='object')throw new Error('Invalid Instagram row');
+  const id=String(row.id||''),code=String(row.code||''),author=String(row.author||'');
+  if(!/^\d{1,30}$/.test(id)||!/^[A-Za-z0-9_-]{5,32}$/.test(code)||!author)throw new Error('Invalid Instagram identity');
+  if(author.toLowerCase()!==String(job.authorId||'').toLowerCase())throw new Error('Instagram author mismatch');
+  const original=originalLink({...job,kind:'posts'},String(row.url||''));
+  if(original.instagramCode!==code)throw new Error('Instagram shortcode mismatch');
+  const caption=String(row.caption||'').trim(),taken=Number(row.taken_at),published=Number.isFinite(taken)&&taken>0?Math.floor(taken*1000):null;
+  const fallback=(job.name||('@'+author))+' 的 Instagram 帖子';
+  return {title:(caption||fallback).slice(0,1000),link:original.link,published,summary:caption.slice(0,1500),author};
 }
 function normalizeTwitterRow(job,row){
   if(!row||typeof row!=='object')throw new Error('Invalid Twitter row');

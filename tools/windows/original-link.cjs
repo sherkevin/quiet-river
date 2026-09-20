@@ -19,6 +19,12 @@ function originalLink(job,value){
     if(!expected||match[1].toLowerCase()!==expected.toLowerCase())throw new Error('Original link author mismatch');
     return {link:`https://x.com/${match[1]}/status/${match[2]}`,guid:match[2],tweetId:match[2],noteId:null};
   }
+  if(job.platform==='instagram'){
+    if(kind!=='posts'||u.hostname!=='www.instagram.com')throw new Error('Original link mismatch');
+    const match=/^\/(p|reel)\/([A-Za-z0-9_-]{5,32})\/?$/.exec(u.pathname);
+    if(!match)throw new Error('Original link mismatch');
+    return {link:`https://www.instagram.com/${match[1]}/${match[2]}/`,guid:'instagram:'+match[2],instagramCode:match[2],noteId:null};
+  }
   if(job.platform==='bilibili'){
     if(kind!=='videos'||u.hostname!=='www.bilibili.com')throw new Error('Original link mismatch');
     const match=/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/.exec(u.pathname);

@@ -161,3 +161,31 @@ Across 77 items from the four responsive feeds, the item-link handle always matc
 ### Remaining Twitter gate
 
 No direct backend is enabled in production yet. twitter-cli requires explicit user-supplied Twitter credentials and OpenCLI Twitter has not passed its author-timeline canary. Until one direct backend passes a real parity canary, xgo remains the active production path.
+
+## 2026-09-20 — P1 Instagram author-source preparation
+
+### Implemented
+
+- added canonical Instagram profile identity for author sources;
+- reserved/system/content routes are rejected as author identities;
+- added one Shervin-owned `instagram.posts` desktop channel;
+- added stable post identity `instagram:<shortcode>` for both /p/ and /reel/ URLs;
+- Windows normalizer requires the returned media author to equal the registered source username;
+- ECS repeats the author/URL identity validation before import;
+- added a bounded read-only wrapper that uses the same Instagram feed-by-username endpoint as OpenCLI, serializes only media ID/shortcode/author/caption/time/type/canonical URL, and performs no write action;
+- UI/platform filters and add-source flow now understand Instagram.
+
+### Verification
+
+- focused collector/original-link/source tests: 90/90 passed;
+- full regression with Instagram preparation: 327/327 passed;
+- read-only NASA canary through the Quiet River wrapper: exit 70, 0 rows, Browser Bridge failure;
+- independent OpenCLI `instagram profile nasa` and `instagram user nasa` probes: both exit 69 (EX_UNAVAILABLE / BROWSER_CONNECT), 0 JSON rows;
+- failure is therefore upstream Browser Bridge/runtime, not Quiet River normalization;
+- no login was automated and no Instagram content was imported.
+
+### Gate
+
+Shervin runs OpenCLI 1.8.7 with Browser Bridge extension 1.0.21. OpenCLI reports newer extension 1.0.24 is available. The current extension installation path could not be identified as a safe unpacked directory, so Quiet River does not mutate the daily Chrome extension installation automatically.
+
+Instagram remains **prepared but not verified**. Do not enable scheduled Instagram acquisition until a supported extension/runtime upgrade succeeds and the same NASA-style read-only canary returns stable author/post identities.
