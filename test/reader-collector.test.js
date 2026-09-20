@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
-const {normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
+const {normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
 const {confirmedCollect,authRecovered,proxyTunnelArgs,runOpencliRead}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
@@ -270,7 +270,7 @@ test('native body enrichment status is authenticated and queueing is action-gate
 });
 test('Windows collector advertises enrichment capability without changing normal source-list result shape',()=>{
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
- assert.match(src,/capabilities:\['entry_body_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
+ assert.match(src,/capabilities:\['entry_body_v1','youtube_transcript_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
  assert.match(src,/result\.entryId\?`ECS accepted article-body result/);assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
 });
 test('Windows enrichment normalizer rejects short login and challenge bodies before upload',()=>{
@@ -464,4 +464,82 @@ test('Instagram auth recovery probe names the platform backend and is explicitly
  const config={adapters:{desktopPlatforms:['instagram']}},channel=channelsFor(source,config.adapters)[0];db.putSource(source,[channel]);db.run("UPDATE channels SET feed_id=19,state='AUTH_REQUIRED' WHERE id=?",channel.id);db.run("INSERT OR REPLACE INTO groups(id,state,next_allowed,last_success,failures) VALUES('credential:instagram','AUTH_REQUIRED',0,0,1)");
  const service={db,config,provisionChannels:async()=>{},finish:()=>{}};const collector=new DesktopCollector(service);service.desktop=collector;
  const probe=collector.authProbe(['instagram']);assert.equal(probe.platform,'instagram');assert.equal(probe.authorId,'nasa');assert.equal(probe.kind,'posts');assert.equal(probe.backendId,'opencli-instagram-shervin');assert.equal(probe.authProbe,true);
+});
+
+function youtubeTranscriptFixture(t){
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'yt-source',name:'YouTube source',platform:'youtube',url:'https://www.youtube.com/@example',tags:[],feeds:['https://www.youtube.com/feeds/videos.xml?channel_id=UCfixture'],enabled:true};
+ const channel={id:'yt-channel',source_id:source.id,label:'rss',transport:'public',url:source.feeds[0],enabled:true,group_key:'youtube.com',interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=23,last_success=?,state=? WHERE id=?',1234567890,'SUCCEEDED_NO_NEW',channel.id);
+ let upstream={id:901,title:'Video',url:'https://www.youtube.com/watch?v=TlR7douxQRM',author:'Channel',published_at:'2026-09-20T00:00:00Z',content:'<p>Feed body</p>',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/901'&&method==='GET')return upstream;if(path==='/v1/entries/901'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const service=new ReaderService(db,{karakeep:'http://unused',karakeepToken:'',adapters:{}},{mf});service.project(upstream,channel);
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,puts,getUpstream:()=>upstream};
+}
+
+test('YouTube original links normalize watch and youtu.be routes to one video identity',()=>{
+ const {originalLink}=require('../tools/windows/original-link.cjs');
+ const a=originalLink({platform:'youtube',kind:'transcript'},'https://www.youtube.com/watch?v=TlR7douxQRM');
+ const b=originalLink({platform:'youtube',kind:'transcript'},'https://youtu.be/TlR7douxQRM');
+ assert.equal(a.guid,'youtube:TlR7douxQRM');assert.equal(b.guid,a.guid);assert.equal(b.link,a.link);
+ assert.throws(()=>originalLink({platform:'youtube',kind:'transcript'},'https://www.youtube.com/playlist?list=PL123'),/mismatch/);
+});
+
+test('yt-dlp JSON3 subtitles normalize into bounded transcript rows',()=>{
+ const job={taskType:'youtube_transcript_v1',platform:'youtube',entryId:901,url:'https://www.youtube.com/watch?v=TlR7douxQRM'};
+ const payload={events:[
+  {tStartMs:0,segs:[{utf8:'Hello '},{utf8:'world'}]},
+  {tStartMs:1200,segs:[{utf8:'Second line'}]},
+  {tStartMs:2400,segs:[{utf8:'Second line'}]},
+  {tStartMs:65000,segs:[{utf8:'After a minute'}]}
+ ]};
+ const out=normalizeYtDlpJson3(job,payload);
+ assert.equal(out.videoId,'TlR7douxQRM');assert.equal(out.segmentCount,3);
+ assert.match(out.content,/\[0:00\] Hello world/);assert.match(out.content,/\[1:05\] After a minute/);
+});
+
+test('YouTube transcript queue is explicit and uses the existing entry identity',t=>{
+ const f=youtubeTranscriptFixture(t);
+ const initial=f.collector.transcriptStatus(901);assert.equal(initial.state,'NONE');assert.equal(initial.eligible,true);
+ const queued=f.collector.queueTranscript(901);assert.equal(queued.state,'QUEUED');
+ const claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);assert.equal(claim.job.taskType,'youtube_transcript_v1');assert.equal(claim.job.entryId,901);
+ assert.equal(claim.job.url,'https://www.youtube.com/watch?v=TlR7douxQRM');assert.equal(claim.job.kind,'transcript');
+});
+
+test('successful YouTube transcript enrichment preserves read state, publication time and source health',async t=>{
+ const f=youtubeTranscriptFixture(t);f.collector.queueTranscript(901);const claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);
+ const before=f.db.get('SELECT status,published_at,url FROM entries WHERE id=901'),channelBefore=f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id);
+ const result={leaseId:claim.job.leaseId,entryId:901,status:'OK',backendId:'opencli-youtube-shervin',videoId:'TlR7douxQRM',segmentCount:2,content:'[0:00] hello\n[0:05] world'};
+ const ack=await f.collector.submit(result);assert.equal(ack.state,'TRANSCRIPT_ENRICHED');assert.equal(ack.backendId,'opencli-youtube-shervin');
+ const row=f.db.get('SELECT status,published_at,url,content_origin FROM entries WHERE id=901');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.url,before.url);assert.equal(row.content_origin,'youtube_transcript_enrichment');
+ assert.deepEqual(f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id),channelBefore);
+ assert.equal(f.puts.length,1);assert.match(f.puts[0].content,/data-qr-youtube-transcript="TlR7douxQRM"/);assert.match(f.puts[0].content,/\[0:00\] hello/);
+ const detail=JSON.parse(f.db.get("SELECT detail FROM entry_enrichments WHERE entry_id=901 AND kind='youtube_transcript_v1'").detail);assert.equal(detail.backend,'opencli-youtube-shervin');
+ assert.deepEqual(await f.collector.submit(result),ack);await assert.rejects(f.collector.submit({...result,content:'changed'}),/changed transcript replay/);
+});
+
+test('YouTube transcript submit rejects mismatched video or unknown backend before Miniflux write',async t=>{
+ const f=youtubeTranscriptFixture(t);f.collector.queueTranscript(901);let claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:901,status:'OK',backendId:'opencli-youtube-shervin',videoId:'AAAAAAAAAAA',segmentCount:1,content:'x'}),/video mismatch/);
+ assert.equal(f.puts.length,0);
+ f.db.run("UPDATE collector_transcripts SET state='QUEUED',lease_id=NULL,expires_at=0,digest=NULL,next_attempt=0 WHERE entry_id=901");claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:901,status:'OK',backendId:'unknown',videoId:'TlR7douxQRM',segmentCount:1,content:'x'}),/invalid transcript backend/);
+ assert.equal(f.puts.length,0);
+});
+
+test('YouTube worker implements Agent-Reach retry chain without downloading video',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/function collectYoutubeViaYtDlp/);assert.match(src,/--skip-download/);assert.match(src,/--sub-format','json3'/);assert.match(src,/fs\.rmSync\(dir/);
+ assert.match(src,/backendId:'yt-dlp-shervin'/);assert.match(src,/backendId:'opencli-youtube-shervin'/);
+ assert.ok(src.indexOf("collectYoutubeViaYtDlp(job)")<src.indexOf("config.opencliMain,'youtube','transcript'"));
+});
+
+test('native YouTube transcript status is authenticated and queueing is action-gated',async t=>{
+ const f=youtubeTranscriptFixture(t),app=createApp(f.service,{accessToken:'reader-test',collectorToken:'collector-test'});await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+ const base='http://127.0.0.1:'+app.address().port,auth={'X-Qr-Token':'reader-test','Content-Type':'application/json'},write={...auth,'X-QR-Action':'1'};
+ assert.equal((await fetch(base+'/desk/api/entries/901/transcript')).status,401);
+ let response=await fetch(base+'/desk/api/entries/901/transcript',{headers:auth});assert.equal(response.status,200);assert.equal((await response.json()).state,'NONE');
+ assert.equal((await fetch(base+'/desk/api/entries/901/transcript',{method:'POST',headers:auth,body:'{}'})).status,403);
+ response=await fetch(base+'/desk/api/entries/901/transcript',{method:'POST',headers:write,body:'{}'});assert.equal(response.status,202);assert.equal((await response.json()).state,'QUEUED');
 });

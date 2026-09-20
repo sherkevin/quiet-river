@@ -43,6 +43,33 @@ function normalizeTwitterRow(job,row){
   const fallback=(job.name||('@'+screen))+' 的 X 帖子';
   return {title:(text||fallback).slice(0,1000),link:original.link,published,summary:text.slice(0,1500)};
 }
+function normalizeYtDlpJson3(job,payload){
+  if(!payload||typeof payload!=='object'||!Array.isArray(payload.events))throw new Error('Invalid yt-dlp JSON3 subtitle');
+  const rows=[];let last='';
+  for(const event of payload.events){
+    if(!event||!Array.isArray(event.segs))continue;
+    const text=event.segs.map(s=>String(s?.utf8||'')).join('').replace(/\s+/g,' ').trim();
+    if(!text||text===last)continue;last=text;
+    const ms=Number(event.tStartMs)||0,total=Math.max(0,Math.floor(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;
+    const timestamp=(h?String(h)+':':'')+String(m).padStart(h?2:1,'0')+':'+String(s).padStart(2,'0');
+    rows.push({timestamp,text});
+    if(rows.length>5000)throw new Error('YouTube transcript has too many segments');
+  }
+  if(!rows.length)throw new Error('yt-dlp subtitle contains no transcript text');
+  return normalizeYoutubeTranscript(job,rows);
+}
+function normalizeYoutubeTranscript(job,rows){
+  if(!job||job.taskType!=='youtube_transcript_v1'||job.platform!=='youtube'||!Array.isArray(rows)||rows.length<1||rows.length>5000)throw new Error('Invalid YouTube transcript');
+  const original=originalLink({platform:'youtube',kind:'transcript'},String(job.url||''));
+  const lines=[];let chars=0;
+  for(const row of rows){
+    if(!row||typeof row!=='object')throw new Error('Invalid YouTube transcript row');
+    const timestamp=String(row.timestamp||'').trim(),speaker=String(row.speaker||'').trim(),text=String(row.text||'').replace(/\s+/g,' ').trim();
+    if(!text||text.length>10000||timestamp.length>64||speaker.length>120)throw new Error('Invalid YouTube transcript row');
+    const prefix=[timestamp,speaker].filter(Boolean).join(' · '),line=(prefix?'['+prefix+'] ':'')+text;chars+=line.length+1;if(chars>1024*1024)throw new Error('YouTube transcript too large');lines.push(line);
+  }
+  return {entryId:Number(job.entryId),videoId:original.youtubeId,segmentCount:lines.length,content:lines.join('\n')};
+}
 function selectFreshXhsNoteUrl(job,rows){
   if(job?.platform!=='xiaohongshu'||job?.kind!=='notes'||!Array.isArray(rows)||rows.length>100)throw new Error('Invalid Xiaohongshu refresh list');
   const expected=originalLink(job,job.url);
@@ -74,4 +101,4 @@ function statusFor(code,text){
   if(code===75||/timeout|timed out/i.test(text))return 'TIMEOUT';
   return 'UPSTREAM_ERROR';
 }
-module.exports={normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor};
+module.exports={normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,selectFreshXhsNoteUrl,statusFor};

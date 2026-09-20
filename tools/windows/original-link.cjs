@@ -25,6 +25,14 @@ function originalLink(job,value){
     if(!match)throw new Error('Original link mismatch');
     return {link:`https://www.instagram.com/${match[1]}/${match[2]}/`,guid:'instagram:'+match[2],instagramCode:match[2],noteId:null};
   }
+  if(job.platform==='youtube'){
+    if(kind!=='transcript'||!['youtube.com','www.youtube.com','youtu.be'].includes(u.hostname))throw new Error('Original link mismatch');
+    let videoId='';
+    if(u.hostname==='youtu.be'){const m=/^\/([A-Za-z0-9_-]{11})\/?$/.exec(u.pathname);if(m)videoId=m[1];}
+    else if(u.pathname==='/watch'&&/^[A-Za-z0-9_-]{11}$/.test(u.searchParams.get('v')||''))videoId=u.searchParams.get('v');
+    if(!videoId)throw new Error('Original link mismatch');
+    return {link:`https://www.youtube.com/watch?v=${videoId}`,guid:'youtube:'+videoId,youtubeId:videoId,noteId:null};
+  }
   if(job.platform==='bilibili'){
     if(kind!=='videos'||u.hostname!=='www.bilibili.com')throw new Error('Original link mismatch');
     const match=/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/.exec(u.pathname);

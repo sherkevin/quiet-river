@@ -2,7 +2,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {spawnSync,spawn}=require('node:child_process');
-const {normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor}=require('./normalize.cjs');
+const {normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,selectFreshXhsNoteUrl,statusFor}=require('./normalize.cjs');
 const {originalLink}=require('./original-link.cjs');
 const root=process.env.QR_COLLECTOR_HOME||path.join(process.env.LOCALAPPDATA||os.homedir(),'QuietRiverCollector');
 const configPath=path.join(root,'config.json'),args=process.argv.slice(2);
@@ -148,6 +148,38 @@ function collectEnrichment(job){
   try{payload=job.kind==='articles'?r.stdout:JSON.parse(r.stdout.replace(/^\uFEFF/,''));const normalized=normalizeEnrichment(job,payload);return {leaseId:job.leaseId,status:'OK',...normalized};}
   catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR'};}
 }
+function collectYoutubeViaYtDlp(job){
+  const original=originalLink({platform:'youtube',kind:'transcript'},String(job.url||'')),dir=fs.mkdtempSync(path.join(os.tmpdir(),'qr-youtube-'));
+  try{
+    const template=path.join(dir,'%(id)s'),args=['--no-config','--js-runtimes','node','--write-sub','--write-auto-sub','--sub-langs','zh-Hans,zh,en.*','--sub-format','json3','--skip-download','-o',template,original.link];
+    const r=spawnSync('yt-dlp',args,{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:process.env});
+    if(r.error||r.status!==0)return {ok:false,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),reason:String(r.stderr||r.error?.message||'').slice(0,240)};
+    const files=fs.readdirSync(dir).filter(name=>name.startsWith(original.youtubeId+'.')&&name.endsWith('.json3'));
+    const rank=name=>name.includes('.zh-Hans.')?0:name.includes('.zh.')?1:name.includes('.en.')?2:name.includes('.en-')?3:4;
+    files.sort((x,y)=>rank(x)-rank(y)||x.localeCompare(y));
+    for(const name of files){
+      try{
+        const parsed=JSON.parse(fs.readFileSync(path.join(dir,name),'utf8')),normalized=normalizeYtDlpJson3(job,parsed);
+        return {ok:true,backendId:'yt-dlp-shervin',...normalized};
+      }catch{}
+    }
+    return {ok:false,status:'UPSTREAM_ERROR',reason:'yt-dlp produced no usable subtitle'};
+  }finally{try{fs.rmSync(dir,{recursive:true,force:true});}catch{}}
+}
+function collectYoutubeTranscript(job){
+  if(job.taskType!=='youtube_transcript_v1'||job.platform!=='youtube'||!Number.isSafeInteger(Number(job.entryId)))throw new Error('Invalid YouTube transcript task');
+  const original=originalLink({platform:'youtube',kind:'transcript'},String(job.url||''));
+  const primary=collectYoutubeViaYtDlp(job);
+  if(primary.ok)return {leaseId:job.leaseId,status:'OK',backendId:primary.backendId,entryId:primary.entryId,videoId:primary.videoId,segmentCount:primary.segmentCount,content:primary.content};
+  if(!opencliReady)return {leaseId:job.leaseId,entryId:job.entryId,status:primary.status||'BROWSER_OFFLINE',backendId:'yt-dlp-shervin'};
+  let last=null;
+  for(let attempt=0;attempt<3;attempt++){
+    const r=runOpencliRead(config,[config.opencliMain,'youtube','transcript',original.link,'-f','json','--trace','off','--site-session','ephemeral']);last=r;
+    if(!r.error&&r.status===0){try{const normalized=normalizeYoutubeTranscript(job,JSON.parse(r.stdout.replace(/^\uFEFF/,'')));return {leaseId:job.leaseId,status:'OK',backendId:'opencli-youtube-shervin',...normalized};}catch{return {leaseId:job.leaseId,entryId:job.entryId,status:'UPSTREAM_ERROR',backendId:'opencli-youtube-shervin'};}}
+    if(!/Caption URL returned empty response/i.test(r.stderr||''))break;
+  }
+  return {leaseId:job.leaseId,entryId:job.entryId,status:last?.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(last?.status,last?.stderr||last?.error?.message||''),backendId:'opencli-youtube-shervin'};
+}
 async function confirmedCollect(job,collectFn=collect,sleepFn=sleep){
   const first=collectFn(job);if(first.status!=='AUTH_REQUIRED')return first;
   await sleepFn(3000);return collectFn(job);
@@ -159,9 +191,9 @@ async function authRecovered(probe,collectFn=collect,sleepFn=sleep){
   return recovered;
 }
 async function main(){
-  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili|twitter|instagram] [--doctor] [--verify-twitter HANDLE] [--verify-twitter-opencli HANDLE] [--verify-instagram HANDLE]');return;}
+  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili|twitter|instagram|youtube] [--doctor] [--verify-twitter HANDLE] [--verify-twitter-opencli HANDLE] [--verify-instagram HANDLE]');return;}
   preflight();if(args.includes('--verify-twitter')){const handle=option('--verify-twitter','');const result=verifyTwitterCli(handle);log('Verified '+result.backend+' with an explicit read-only author canary; no browser cookie discovery was used.');return;}if(args.includes('--verify-twitter-opencli')){const handle=option('--verify-twitter-opencli','');const result=verifyOpencliTwitter(handle);log('Verified '+result.backend+' with an explicit read-only author canary.');return;}if(args.includes('--verify-instagram')){const handle=option('--verify-instagram','');const result=verifyInstagram(handle);log('Verified '+result.backend+' with an explicit read-only author canary.');return;}if(args.includes('--doctor')){for(const [id,s] of Object.entries(localBackendStatus()))log(id+': '+s.status+' · '+s.reason);return;}acquire();if(args.includes('--watch'))startProxyTunnel();
-  const platforms=option('--platform','zhihu,xiaohongshu,bilibili,twitter,instagram').split(',').filter(p=>['zhihu','xiaohongshu','bilibili','twitter','instagram'].includes(p));
+  const platforms=option('--platform','zhihu,xiaohongshu,bilibili,twitter,instagram,youtube').split(',').filter(p=>['zhihu','xiaohongshu','bilibili','twitter','instagram','youtube'].includes(p));
   if(!platforms.length)throw new Error('Choose a supported platform');
   const max=Math.max(1,Math.min(1000,Number(option('--max-jobs',args.includes('--watch')?'1000':'20'))||20));
   const pending=path.join(root,'pending-result.json'),authProbeAt=new Map();let done=0,failures=0;
@@ -170,12 +202,12 @@ async function main(){
       if(fs.existsSync(pending)){
         const result=JSON.parse(fs.readFileSync(pending,'utf8'));
         try{const ack=transport({op:'submit',result});if(!ack.accepted)throw new Error('Missing acknowledgement');
-          if(!['SUCCEEDED_PARTIAL','ENRICHED','FALLBACK_QUEUED'].includes(ack.state))failures++;
+          if(!['SUCCEEDED_PARTIAL','ENRICHED','TRANSCRIPT_ENRICHED','FALLBACK_QUEUED'].includes(ack.state))failures++;
           fs.unlinkSync(pending);log(result.entryId?`ECS accepted article-body result; ${ack.state}`:`ECS accepted ${ack.received} records; ${ack.state}`);done++;
         }catch(e){if(e.status===409){fs.renameSync(pending,pending+'.expired-'+Date.now());log('Expired result retained locally; new collection required');}else throw e;}
         if(done>=max)break;
       }
-      const next=transport({op:'claim',platforms,capabilities:['entry_body_v1'],backends:localBackendStatus()});
+      const next=transport({op:'claim',platforms,capabilities:['entry_body_v1','youtube_transcript_v1'],backends:localBackendStatus()});
       if(!next.job){
         let resumed=false;
         if(next.authProbe){
@@ -193,9 +225,9 @@ async function main(){
         if(!args.includes('--watch')&&!next.waitForCooldown){log('No currently eligible task. Cooling down or waiting for browser authorization is not a successful source check.');break;}
         await sleep(Math.max(8,Math.min(60,next.retryAfter||30))*1000);continue;
       }
-      const enrichment=next.job.taskType==='entry_body_v1';
-      log(enrichment?'Reading one known '+next.job.platform+' article body for Quiet River':'Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
-      const result=await confirmedCollect(next.job,enrichment?collectEnrichment:collect);
+      const enrichment=next.job.taskType==='entry_body_v1',transcript=next.job.taskType==='youtube_transcript_v1';
+      log(transcript?'Reading one known YouTube transcript for Quiet River':enrichment?'Reading one known '+next.job.platform+' article body for Quiet River':'Checking '+next.job.platform+' / '+next.job.kind+' for a subscribed author');
+      const result=await confirmedCollect(next.job,transcript?collectYoutubeTranscript:enrichment?collectEnrichment:collect);
       if(result.status==='AUTH_REQUIRED')log('Authentication failure repeated on the same subscribed route; shared group will pause.');
       persist(pending,result);await sleep(8000);
     }catch(e){log(e.message);if(!args.includes('--watch'))throw e;await sleep(30000);}
@@ -204,4 +236,4 @@ async function main(){
   if(failures)process.exitCode=2;
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
-module.exports={normalize,normalizeEnrichment,statusFor,collectEnrichment,runOpencliRead,confirmedCollect,authRecovered,proxyTunnelArgs};
+module.exports={normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,statusFor,collectEnrichment,collectYoutubeViaYtDlp,collectYoutubeTranscript,runOpencliRead,confirmedCollect,authRecovered,proxyTunnelArgs};

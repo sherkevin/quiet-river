@@ -209,18 +209,37 @@ Remaining:
 - [ ] add issue/release/repository detail capabilities when a concrete Quiet River use case needs them
 - [ ] consider gh @ Shervin only for private/richer cases; do not replace public REST/Atom merely for uniformity
 
-### H. P1 — YouTube enrichment, not feed replacement
+### H. P1 — YouTube enrichment, not feed replacement — SUBTITLE DONE ON FEATURE BRANCH
 
-Current official YouTube channel feed stays discovery path.
+Current official YouTube channel feed stays discovery path and remains the only scheduler owner.
 
-Add:
-- youtube.video.subtitle -> yt-dlp
-- youtube.video.detail -> yt-dlp
+Subtitle backend order:
+1. yt-dlp @ Shervin — preferred zero-account backend, subtitle-only, never downloads video
+2. OpenCLI YouTube transcript @ Shervin — fallback when yt-dlp does not return usable subtitles
+3. audio/Whisper transcription — intentionally deferred behind a separate privacy/API gate
 
-Tasks:
-- [ ] subtitle extraction as native article enrichment
-- [ ] no video download by default
-- [ ] preserve channel feed as scheduler owner
+Completed:
+- [x] stable YouTube video identity across watch and youtu.be URLs
+- [x] explicit per-entry transcript queue; opening an article does not silently start extraction
+- [x] yt-dlp JSON3 subtitle normalization with segment/size bounds
+- [x] yt-dlp command uses --skip-download, an isolated temporary directory and unconditional cleanup
+- [x] OpenCLI transcript fallback with bounded Caption-URL retry
+- [x] transcript appended to the existing native article body rather than creating a second card
+- [x] preserve official channel feed as discovery/scheduler owner
+- [x] preserve entry URL, publication time, read state and source-channel health
+- [x] record actual backend provenance in entry_enrichments
+- [x] article UI exposes explicit queue/status control only for YouTube
+- [x] transcript GET is authenticated and POST is action-gated
+
+Real canary:
+- existing Quiet River video: TlR7douxQRM
+- yt-dlp 2026.08.19: HTTP/rate-limit path, exit 1, 0 subtitle files
+- OpenCLI fallback: exit 0 on first attempt, 153 segments, about 48,802 text characters
+- canary did not mutate production Quiet River data and downloaded no video
+
+Remaining:
+- [ ] optional video detail enrichment if a concrete UI use case needs more than the official feed metadata
+- [ ] Whisper/audio fallback only after an explicit external-provider/audio-retention privacy decision
 
 ### I. P2 — V2EX Community source
 

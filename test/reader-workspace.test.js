@@ -221,3 +221,14 @@ test('native article page exposes explicit Shervin body enrichment with persiste
  assert.match(ui,/Shervin 需要重新登录/);assert.match(ui,/Shervin 已补充站内正文/);
  assert.match(ui,/detail\.bodyEnrichment=await api\('\/entries\/'\+id\+'\/enrichment'\)/);
 });
+
+test('native YouTube transcript control is platform-gated and uses explicit queue/status APIs',()=>{
+ const ui=fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8');
+ assert.match(ui,/data-native-transcript>补充视频字幕<\/button>/);assert.match(ui,/function setupNativeTranscript/);
+ assert.match(ui,/if\(detail\.platform!=='youtube'\|\|!initial\?\.eligible\)\{button\.remove\(\)/);
+ assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript'\)/);
+ assert.match(ui,/api\('\/entries\/'\+detail\.id\+'\/transcript',\{\}\)/);
+ assert.match(ui,/优先使用 yt-dlp；失败后按既定链路回退到 OpenCLI。不会下载视频。/);
+ assert.match(ui,/detail\.platform==='youtube'/);
+ assert.match(ui,/setupNativeTranscript\(shell,container,detail\)/);
+});

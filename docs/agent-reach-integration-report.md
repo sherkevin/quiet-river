@@ -281,3 +281,55 @@ Do not replace official GitHub Atom feeds. Five active Quiet River GitHub source
 ### Credential boundary
 
 Shervin already has gh 2.92.0 authenticated through Windows keyring. That credential was not copied to ECS and is not required for public commit enrichment. gh remains a potential second backend for private/richer detail only.
+
+## 2026-09-20 — P1 YouTube transcript enrichment
+
+### Decision
+
+Keep the official YouTube channel feed as the only discovery/scheduler owner. Agent-Reach's yt-dlp path is valuable for enrichment, but a real Quiet River video canary showed that yt-dlp alone is not reliable on the current Shervin network. The production design therefore follows the Agent-Reach retry chain rather than treating one installed tool as sufficient.
+
+Backend order:
+1. yt-dlp @ Shervin
+2. OpenCLI YouTube transcript @ Shervin
+3. audio/Whisper transcription deferred
+
+### Implemented
+
+- added canonical YouTube video identity across watch and youtu.be routes;
+- added an explicit youtube_transcript_v1 per-entry queue and lease; opening an article remains read-only and does not silently start extraction;
+- Windows collector advertises transcript capability separately from restricted-body enrichment;
+- yt-dlp runs with --no-config, JS runtime, --write-sub/--write-auto-sub, --sub-format json3 and --skip-download;
+- yt-dlp writes only into an isolated temporary directory, which is deleted in finally even on failure;
+- JSON3 subtitle events are normalized and bounded before upload;
+- when yt-dlp does not return a usable transcript, the worker falls back to OpenCLI youtube transcript;
+- OpenCLI Caption URL empty-response failures are retried at most three times;
+- ECS accepts only normalized videoId/segment count/transcript text plus the declared backend ID;
+- transcript is appended to the existing Miniflux article body with a stable marker, not imported as a second feed card;
+- URL, publication time, read state and channel health are preserved;
+- entry_enrichments records actual backend provenance;
+- native article UI exposes an explicit YouTube-only queue/status button;
+- transcript GET requires Quiet River authentication and POST additionally requires the mutation action header.
+
+### Real canary
+
+Existing Quiet River entry 8709 / video ID TlR7douxQRM was used without writing production data.
+
+- Shervin yt-dlp version: 2026.08.19
+- yt-dlp subtitle-only canary: exit 1, rate-limit/429 class, 0 subtitle files
+- no video was downloaded
+- OpenCLI transcript fallback on the same public video: exit 0 on first attempt
+- result: 153 structured segments, approximately 48,802 text characters
+- no account/Cookie was requested for YouTube.
+
+This is an important Agent-Reach lesson in practice: doctor/runtime availability does not prove that a concrete content request works, so the fallback chain is part of the acquisition contract.
+
+### Verification
+
+- focused YouTube/collector/original-link/workspace suite: 108/108
+- full regression on final worktree bytes: 351/351
+- successful transcript submit tests preserve entry identity/read metadata/source health and record backend provenance
+- mismatched video IDs and unknown backend IDs are rejected before Miniflux writes.
+
+### Production status
+
+Feature branch only. No production deployment and no production DB transcript mutation was performed during the canary.

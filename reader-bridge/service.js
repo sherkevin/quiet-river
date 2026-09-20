@@ -215,6 +215,8 @@ class ReaderService {
   backend() {return require('./article-actions').backend(this);}
   bodyEnrichment(id){return this.desktop?this.desktop.enrichmentStatus(id):{entryId:Number(id),eligible:false,state:'UNAVAILABLE',error:'Shervin collector is not configured',collector:null};}
   requestBodyEnrichment(id){if(!this.desktop)throw Object.assign(new Error('Shervin collector is not configured'),{status:503});return this.desktop.queueEnrichment(id);}
+  youtubeTranscript(id){return this.desktop?this.desktop.transcriptStatus(id):{entryId:Number(id),eligible:false,state:'UNAVAILABLE',error:'Shervin collector is not configured',collector:null};}
+  requestYoutubeTranscript(id){if(!this.desktop)throw Object.assign(new Error('Shervin collector is not configured'),{status:503});return this.desktop.queueTranscript(id);}
   feedback(id,value){if(![-1,0,1].includes(value)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid feedback');this.db.run('INSERT INTO feedback VALUES(?,?,?) ON CONFLICT(entry_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',id,value,Date.now());}
   async _articleNoteBookmark(row,{create=false}={}) {
     if(!this.config.karakeepToken){if(create)throw Object.assign(new Error('not configured: notes'),{status:503});return null;}
