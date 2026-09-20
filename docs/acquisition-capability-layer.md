@@ -77,13 +77,15 @@ The UI therefore says that capability/backend routing is currently observational
 
 Actual fallback should be introduced one platform at a time after both candidates have real probes and equivalent normalization contracts.
 
-The preferred first candidate is Xiaohongshu:
+The first ordered policy is already declared for Xiaohongshu:
 
 ```
 xiaohongshu.notes
   1. OpenCLI @ Shervin
   2. xiaohongshu-mcp @ ECS
 ```
+
+The second candidate is deliberately reported as `off` until it has a real local probe and runner. A declared policy is not evidence that a backend is usable; this keeps the Agent-Reach `probe, don't assume` rule intact.
 
 Before enabling automatic fallback:
 

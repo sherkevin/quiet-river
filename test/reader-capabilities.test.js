@@ -89,3 +89,27 @@ test('ReaderService health exposes the capability overlay without changing persi
     assert.ok(health.capabilitySummary.activeBackends.includes('opencli-shervin'));
   }finally{db.close();}
 });
+
+test('Xiaohongshu capability declares Agent-Reach-style ordered fallback candidates',()=>{
+  const [cap]=sourceCapabilities(source,[baseChannel],{collector:{online:true}});
+  assert.deepEqual(cap.candidates.map(c=>c.id),['opencli-shervin','xiaohongshu-mcp-ecs']);
+  assert.equal(cap.candidates[0].status,'ok');
+  assert.equal(cap.candidates[1].status,'off');
+  assert.match(cap.candidates[1].reason,/not configured/);
+  assert.equal(cap.activeBackend,'opencli-shervin');
+});
+
+test('declared fallback is not treated as usable until its own probe says so',()=>{
+  const failed={...baseChannel,state:'AUTH_REQUIRED'};
+  const [withoutFallback]=sourceCapabilities(source,[failed],{collector:{online:true}});
+  assert.equal(withoutFallback.activeBackend,null);
+  assert.equal(withoutFallback.status,'error');
+
+  const [withFallback]=sourceCapabilities(source,[failed],{
+    collector:{online:true},
+    backendStatus:{'xiaohongshu-mcp-ecs':{status:'ok',reason:'local MCP probe passed',state:'READY'}}
+  });
+  assert.equal(withFallback.activeBackend,'xiaohongshu-mcp-ecs');
+  assert.equal(withFallback.status,'ok');
+  assert.equal(withFallback.candidates[1].reason,'local MCP probe passed');
+});

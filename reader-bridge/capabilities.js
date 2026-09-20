@@ -17,6 +17,14 @@ const BACKENDS = Object.freeze({
   desktop: {id:'opencli-shervin', name:'OpenCLI @ Shervin', kind:'desktop', description:'Desktop browser-session acquisition; credentials stay on Shervin'},
   rsshub: {id:'rsshub-ecs', name:'RSSHub @ ECS', kind:'service', description:'Self-hosted RSSHub adapter'},
   werss: {id:'werss-ecs', name:'WeRSS @ ECS', kind:'service', description:'Pinned WeRSS runtime for WeChat official accounts'},
+  xiaohongshu_mcp: {id:'xiaohongshu-mcp-ecs', name:'xiaohongshu-mcp @ ECS', kind:'service', description:'Agent-Reach-style server fallback for Xiaohongshu using an explicitly configured local MCP service'},
+});
+
+// Ordered backend policies are intentionally separate from persisted channels.
+// This lets Quiet River describe a future fallback before enabling it, exactly
+// like Agent-Reach keeps an ordered candidate list independent of one runtime.
+const CAPABILITY_POLICIES=Object.freeze({
+  'xiaohongshu.notes':['opencli-shervin','xiaohongshu-mcp-ecs'],
 });
 
 function backendForTransport(transport) {
@@ -27,6 +35,20 @@ function backendForTransport(transport) {
 function capabilityId(source, channel) {
   const label=String(channel.label||'feed').replace(/[^A-Za-z0-9._-]+/g,'-');
   return `${source.platform || 'unknown'}.${label}`;
+}
+
+function backendById(id){return Object.values(BACKENDS).find(b=>b.id===id)||{id,name:id,kind:'unknown',description:'Policy backend'};}
+function policyCandidate(id,context={}){
+  const backend=backendById(id),runtime=context.backendStatus?.[id];
+  if(runtime&&['ok','warn','error','off'].includes(runtime.status))return {...backend,status:runtime.status,reason:String(runtime.reason||runtime.status),transport:null,channelId:null,enabled:runtime.status!=='off',state:runtime.state||'VIRTUAL'};
+  return {...backend,status:'off',reason:'backend candidate is declared but not configured',transport:null,channelId:null,enabled:false,state:'NOT_CONFIGURED'};
+}
+function applyPolicy(capability,context={}){
+  const policy=CAPABILITY_POLICIES[capability.id];if(!policy)return capability;
+  const physical=new Map(capability.candidates.map(c=>[c.id,c])),ordered=[];
+  for(const id of policy)ordered.push(physical.get(id)||policyCandidate(id,context));
+  for(const candidate of capability.candidates)if(!policy.includes(candidate.id))ordered.push(candidate);
+  return {...capability,candidates:ordered};
 }
 
 function candidateStatus(channel, context={}) {
@@ -50,7 +72,8 @@ function sourceCapabilities(source, channels, context={}) {
     grouped.get(id).candidates.push(candidate);
   }
   if(!mine.length)return [{id:`${source.platform||'unknown'}.unconfigured`,sourceId:source.id,platform:source.platform,label:'unconfigured',activeBackend:null,status:'off',candidates:[],reason:'no executable acquisition channel'}];
-  return [...grouped.values()].map(cap=>{
+  return [...grouped.values()].map(raw=>{
+    const cap=applyPolicy(raw,context);
     if(source.enabled===false)return {...cap,activeBackend:null,status:'off',reason:'source is paused'};
     // Same semantics as Agent-Reach: candidate order is meaningful. The first
     // actually usable backend is active; warn is still a degraded backend that
