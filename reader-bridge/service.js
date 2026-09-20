@@ -1,11 +1,13 @@
 'use strict';
 const fs = require('node:fs');
-const {hash,json,escapeHTML,opmlFor,channelsFor,parseFullFeed,rankEntries,buildArchive,stripHTML,safeURL,classifyError,articleKey} = require('./core');
+const {hash,json,escapeHTML,opmlFor,channelsFor,rankEntries,buildArchive,stripHTML,safeURL,classifyError,articleKey} = require('./core');
 const {ApiClient,request} = require('./network');
 const {fetchNativeMetadata}=require('./native-metadata');
 const {normalizeTags,containsAllTags,requestedTags}=require('./tags');
 const meta=require('./article-metadata');
 const reading=require('./reading-history');
+const {capabilityReport}=require('./capabilities');
+const {runBackend}=require('./acquisition-backends');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
@@ -87,7 +89,7 @@ class ReaderService {
         if(this.stopping){this.db.run("UPDATE jobs SET state='QUEUED' WHERE id=?",job.id);break;}
         this.db.run('UPDATE channels SET last_check=?,state=? WHERE id=?',Date.now(),'RUNNING',c.id);
         try {
-          const result=c.transport==='public'?await this.refreshPublic(c):await this.refreshAdapter(c);
+          const result=await runBackend(this,c);
           const added=typeof result==='number'?result:result.added;
           const finalState=result?.partial?'SUCCEEDED_PARTIAL':added?'SUCCEEDED_NEW':'SUCCEEDED_NO_NEW';
           const success=Date.now();
@@ -163,26 +165,9 @@ class ReaderService {
     return old?0:1;
   }
   async refreshAdapter(c) {
-    if(c.transport==='native'){
-      const result=await this.fetchNative(c);let added=0;
-      for(const item of result.items)added+=await this.importItem(c,item);
-      return {added,partial:result.moreAvailable};
-    }
-    if(c.browser && !this.config.adapters?.browserEnabled)throw new Error('missing configuration: browser acceptance');
-    const base=c.transport==='werss'?this.config.adapters?.werss:this.config.adapters?.rsshub;
-    if(!base||new URL(c.url).origin!==new URL(base).origin)throw new Error('not configured: trusted adapter origin');
-    if(c.transport==='werss') {
-      const a=this.config.adapters||{},auth=a.werssAK&&a.werssSK?`AK-SK ${a.werssAK}:${a.werssSK}`:a.werssToken?`Bearer ${a.werssToken}`:'';
-      const wx=new ApiClient(base,auth?{Authorization:auth}:{});
-      const result=await wx.call(`/api/v1/wx/mps/update/${encodeURIComponent(c.mp_id)}?start_page=0&end_page=1`,'GET',undefined,{timeout:120000});
-      if(result?.code && ![0,200].includes(result.code))throw new Error('WeRSS update did not confirm success');
-      // Merely returning HTTP 200 is not a full-content guarantee; each entry below retains its content state.
-    }
-    const r=await this.internalFetch(c.url,{trusted:true,timeout:c.browser?120000:45000});
-    if(r.status!==200){const e=new Error('adapter HTTP error');e.status=r.status;throw e;}
-    const parsed=parseFullFeed(r.body.toString('utf8'),c.url);let added=0;
-    for(const item of parsed.items){if(!safeURL(item.link))continue;added+=await this.importItem(c,item);}
-    return added;
+    // Backward-compatible method retained for tests/callers; execution is now
+    // delegated to the backend registry instead of hard-coded transport branches.
+    return runBackend(this,c);
   }
   async findImported(c,payload) {
     let offset=0;
@@ -438,8 +423,10 @@ class ReaderService {
     return digest;
   }
   health() {
-    const sources=this.db.sources(), channels=this.db.channels();
-    return {collector:this.desktop?.status()||null,sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
+    const sources=this.db.sources(), channels=this.db.channels(),collector=this.desktop?.status()||null;
+    const capability=capabilityReport(sources,channels,{collector,config:this.config});
+    return {collector,sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
+      capabilities:capability.capabilities,capabilitySummary:capability.summary,
       groups:this.db.all('SELECT * FROM groups'),queue:this.db.get("SELECT count(*) n FROM jobs WHERE state IN ('QUEUED','RUNNING')").n,
       entries:this.db.get('SELECT count(*) n FROM entries').n,readerConfigured:!!this.config.karakeepToken,
       notifications:this.db.all('SELECT created_at,payload,state,attempts FROM outbox ORDER BY created_at DESC LIMIT 30').map(r=>({...r,payload:json(r.payload,{})}))};
