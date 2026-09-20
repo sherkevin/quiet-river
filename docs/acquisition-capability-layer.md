@@ -50,6 +50,8 @@ Current backend identities are:
 
 The health API exposes `capabilities` and `capabilitySummary`. The UI shows the active backend on blogger pages and the acquisition-health screen.
 
+An explicit `/desk/api/acquisition/doctor` endpoint ports Agent-Reach's doctor idea without weakening Quiet River's passive-health rule. Passive health never sends network requests. Doctor runs only when explicitly requested and probes runtime dependencies, not platform content: Shervin heartbeat plus loopback-only RSSHub/WeRSS/xiaohongshu-mcp HTTP reachability. Probe results are observational and never rewrite persisted channel state.
+
 Health semantics intentionally mirror Agent-Reach's "probe, don't assume" rule:
 
 - `ok`: a real check completed successfully;

@@ -89,6 +89,7 @@ function createApp(service,config,clients={}){
         res.writeHead(302,{Location:'/dashboard/'+target,'Cache-Control':'no-store'});return res.end();
       }
       if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),tags:service.tagCatalog(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
+      if(p==='/desk/api/acquisition/doctor'&&req.method==='GET')return reply(res,200,await service.acquisitionDoctor());
       if(p==='/desk/api/entries'&&req.method==='GET'){
         const offset=Math.max(0,Number(u.searchParams.get('offset'))||0), limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit'))||30));
         return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,platform:u.searchParams.get('platform')||undefined,tags:u.searchParams.has('tag')?u.searchParams.getAll('tag'):[],order:u.searchParams.get('order')||'desc',unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
@@ -199,7 +200,7 @@ function loadConfig(){
     proxyFeedsEnabled:process.env.QR_PUBLIC_FEED_PROXY==='true',
     miniflux:process.env.MINIFLUX_URL||'http://127.0.0.1:3061',minifluxToken:process.env.MINIFLUX_TOKEN,
     karakeep:process.env.KARAKEEP_URL||'http://127.0.0.1:3062',karakeepToken:process.env.KARAKEEP_TOKEN,
-    ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu','bilibili'].includes(p)),rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',werssAK:process.env.WERSS_AK||'',werssSK:process.env.WERSS_SK||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
+    ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu','bilibili'].includes(p)),rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',xiaohongshuMcp:process.env.XHS_MCP_URL||'',werssAK:process.env.WERSS_AK||'',werssSK:process.env.WERSS_SK||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
 }
 async function main(){
   const config=loadConfig();if(!config.minifluxToken)throw new Error('MINIFLUX_TOKEN required');

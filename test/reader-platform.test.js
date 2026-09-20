@@ -152,3 +152,16 @@ test('WeRSS explicit update failure stops before reading a cached feed',async t=
   await assert.rejects(service.refreshAdapter(c),/did not confirm success/);
   assert.deepEqual(seen,['/api/v1/wx/mps/update/MP_WXS_1234567890?start_page=0&end_page=1']);
 });
+
+test('HTTP acquisition doctor is authenticated, read-only and does not require mutation action header',async()=>{
+  const {db,service}=setup();const app=createApp(service,{accessToken:'test-only-token'});
+  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
+  try{
+    assert.equal((await fetch(base+'/desk/api/acquisition/doctor')).status,401);
+    const response=await fetch(base+'/desk/api/acquisition/doctor',{headers:{'X-Qr-Token':'test-only-token'}});
+    assert.equal(response.status,200);const doctor=await response.json();
+    assert.equal(doctor.backends['direct-feed'].status,'ok');
+    assert.equal(doctor.backends['xiaohongshu-mcp-ecs'].status,'off');
+    assert.ok(Array.isArray(doctor.capabilities));
+  }finally{await new Promise(r=>app.close(r));db.close();}
+});

@@ -1,10 +1,10 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {backendIdForChannel,runBackend,listBackends,registerBackend}=require('../reader-bridge/acquisition-backends');
+const {backendIdForChannel,runBackend,listBackends,registerBackend,probeBackend,doctorBackends}=require('../reader-bridge/acquisition-backends');
 
 test('registry contains every persisted Quiet River transport backend',()=>{
-  assert.deepEqual(listBackends(),['direct-feed','opencli-shervin','quiet-river-native','rsshub-ecs','werss-ecs']);
+  assert.deepEqual(listBackends(),['direct-feed','opencli-shervin','quiet-river-native','rsshub-ecs','werss-ecs','xiaohongshu-mcp-ecs']);
   assert.equal(backendIdForChannel({transport:'public'}),'direct-feed');
   assert.equal(backendIdForChannel({transport:'desktop'}),'opencli-shervin');
 });
@@ -36,4 +36,39 @@ test('registry supports later pluggable backend additions without editing Reader
   // Unknown transports map to transport:<name>; registration makes them runnable.
   registerBackend('transport:fixture',async(_service,channel)=>channel.value);
   assert.equal(await runBackend({}, {transport:'fixture',value:42}),42);
+});
+
+test('doctor reports unconfigured optional fallback without making a network request',async()=>{
+  let calls=0;
+  const service={config:{adapters:{}},internalFetch:async()=>{calls++;throw new Error('must not call');},desktop:{status:()=>({online:false})}};
+  const result=await probeBackend(service,'xiaohongshu-mcp-ecs');
+  assert.equal(result.status,'off');
+  assert.equal(calls,0);
+});
+
+test('doctor only probes loopback runtime URLs',async()=>{
+  let calls=0;
+  const service={config:{adapters:{xiaohongshuMcp:'https://example.com/mcp'}},internalFetch:async()=>{calls++;return {status:200};}};
+  const result=await probeBackend(service,'xiaohongshu-mcp-ecs');
+  assert.equal(result.status,'error');
+  assert.match(result.reason,/loopback/);
+  assert.equal(calls,0);
+});
+
+test('doctor marks a loopback MCP runtime usable on any non-5xx HTTP response',async()=>{
+  const seen=[];
+  const service={config:{adapters:{xiaohongshuMcp:'http://127.0.0.1:18060/mcp'}},internalFetch:async(url,opts)=>{seen.push([url,opts]);return {status:405};}};
+  const result=await probeBackend(service,'xiaohongshu-mcp-ecs');
+  assert.equal(result.status,'ok');
+  assert.equal(result.state,'READY');
+  assert.deepEqual(seen[0][0],'http://127.0.0.1:18060');
+  assert.equal(seen[0][1].trusted,true);
+});
+
+test('doctor combines built-in and runtime backend probes',async()=>{
+  const service={config:{adapters:{}},internalFetch:async()=>{throw new Error('offline');},desktop:{status:()=>({online:true})}};
+  const doctor=await doctorBackends(service);
+  assert.equal(doctor.backends['opencli-shervin'].status,'ok');
+  assert.equal(doctor.backends['direct-feed'].status,'ok');
+  assert.equal(doctor.backends['xiaohongshu-mcp-ecs'].status,'off');
 });

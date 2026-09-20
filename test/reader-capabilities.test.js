@@ -113,3 +113,26 @@ test('declared fallback is not treated as usable until its own probe says so',()
   assert.equal(withFallback.status,'ok');
   assert.equal(withFallback.candidates[1].reason,'local MCP probe passed');
 });
+
+test('explicit doctor can promote a probed fallback without mutating persisted channel state',async()=>{
+  const {Database}=require('../reader-bridge/database');
+  const {ReaderService}=require('../reader-bridge/service');
+  const db=new Database(':memory:');
+  try{
+    const authFailed={...baseChannel,state:'AUTH_REQUIRED',error:'reauth required'};
+    db.putSource(source,[authFailed]);
+    db.run("UPDATE channels SET state='AUTH_REQUIRED',error='reauth required' WHERE id=?",authFailed.id);
+    const service=new ReaderService(db,{karakeep:'http://unused',adapters:{xiaohongshuMcp:'http://127.0.0.1:18060/mcp'}},{
+      mf:{call:async()=>[]},
+      internalFetch:async()=>({status:405,body:Buffer.alloc(0),headers:{}})
+    });
+    service.desktop={status:()=>({online:true})};
+    const before=db.get('SELECT state,error FROM channels WHERE id=?',authFailed.id);
+    const doctor=await service.acquisitionDoctor();
+    const cap=doctor.capabilities.find(c=>c.id==='xiaohongshu.notes');
+    assert.equal(cap.activeBackend,'xiaohongshu-mcp-ecs');
+    assert.equal(cap.status,'ok');
+    assert.equal(doctor.backends['xiaohongshu-mcp-ecs'].status,'ok');
+    assert.deepEqual(db.get('SELECT state,error FROM channels WHERE id=?',authFailed.id),before);
+  }finally{db.close();}
+});

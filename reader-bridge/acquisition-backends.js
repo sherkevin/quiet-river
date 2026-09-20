@@ -9,11 +9,16 @@ const {ApiClient}=require('./network');
 const {parseFullFeed,safeURL}=require('./core');
 const {backendForTransport}=require('./capabilities');
 
-const runners=new Map();
+const runners=new Map(),probes=new Map();
 
 function registerBackend(id,runner){
   if(!/^[a-z0-9][a-z0-9._:-]*$/i.test(String(id))||typeof runner!=='function')throw new Error('invalid acquisition backend');
   runners.set(String(id),runner);
+}
+
+function registerProbe(id,probe){
+  if(!/^[a-z0-9][a-z0-9._:-]*$/i.test(String(id))||typeof probe!=='function')throw new Error('invalid acquisition probe');
+  probes.set(String(id),probe);
 }
 
 function backendIdForChannel(channel){
@@ -26,8 +31,21 @@ async function runBackend(service,channel){
   return runner(service,channel);
 }
 
-function listBackends(){
-  return [...runners.keys()].sort();
+function listBackends(){return [...new Set([...runners.keys(),...probes.keys()])].sort();}
+async function probeBackend(service,id){
+  const probe=probes.get(id);if(!probe)return {status:runners.has(id)?'ok':'off',reason:runners.has(id)?'built-in runner loaded':'no runtime probe registered'};
+  try{return await probe(service);}catch(e){return {status:'error',reason:String(e.message||e).slice(0,240)};}
+}
+async function doctorBackends(service){
+  const byId={};for(const id of listBackends())byId[id]=await probeBackend(service,id);
+  return {observedAt:Date.now(),backends:byId};
+}
+async function probeLocalHttp(service,base){
+  if(!base)return {status:'off',reason:'runtime URL is not configured'};
+  let url;try{url=new URL(base);}catch{return {status:'error',reason:'runtime URL is invalid'};}
+  if(!['http:','https:'].includes(url.protocol)||!['127.0.0.1','localhost','::1'].includes(url.hostname))return {status:'error',reason:'doctor only probes loopback runtimes'};
+  const result=await service.internalFetch(url.origin,{trusted:true,timeout:3000,maxBytes:65536});
+  return {status:result.status>=500?'warn':'ok',reason:`local runtime reachable (HTTP ${result.status})`,state:'READY'};
 }
 
 registerBackend('direct-feed',async(service,channel)=>service.refreshPublic(channel));
@@ -63,4 +81,9 @@ registerBackend('werss-ecs',(service,channel)=>adapterFeed(service,channel,{wers
 // ECS scheduler from silently trying to execute browser-session work.
 registerBackend('opencli-shervin',async()=>{throw new Error('desktop acquisition backend is worker-owned by Shervin');});
 
-module.exports={registerBackend,backendIdForChannel,runBackend,listBackends};
+registerProbe('opencli-shervin',async service=>{const status=service.desktop?.status?.();return status?.online?{status:'ok',reason:'Shervin collector heartbeat is current',state:'READY'}:{status:'warn',reason:'Shervin collector is offline or has not checked in',state:'OFFLINE'};});
+registerProbe('rsshub-ecs',service=>probeLocalHttp(service,service.config.adapters?.rsshub));
+registerProbe('werss-ecs',service=>probeLocalHttp(service,service.config.adapters?.werss));
+registerProbe('xiaohongshu-mcp-ecs',service=>probeLocalHttp(service,service.config.adapters?.xiaohongshuMcp));
+
+module.exports={registerBackend,registerProbe,backendIdForChannel,runBackend,listBackends,probeBackend,doctorBackends};

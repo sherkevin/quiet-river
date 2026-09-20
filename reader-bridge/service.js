@@ -7,7 +7,7 @@ const {normalizeTags,containsAllTags,requestedTags}=require('./tags');
 const meta=require('./article-metadata');
 const reading=require('./reading-history');
 const {capabilityReport}=require('./capabilities');
-const {runBackend}=require('./acquisition-backends');
+const {runBackend,doctorBackends}=require('./acquisition-backends');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
@@ -421,6 +421,11 @@ class ReaderService {
     this.db.run('INSERT INTO digests VALUES(?,?,?,?) ON CONFLICT(day) DO UPDATE SET created_at=excluded.created_at,revision=excluded.revision,payload=excluded.payload',day,now,digest.revision,JSON.stringify(digest));
     if(!old)this.db.alert('digest:'+day,'Quiet River 日报',`${day}：优先阅读 ${items.length} 篇；另有 ${issues.length} 个通道需要关注。请在私人阅读器查看。`);
     return digest;
+  }
+  async acquisitionDoctor() {
+    const doctor=await doctorBackends(this),sources=this.db.sources(),channels=this.db.channels(),collector=this.desktop?.status()||null;
+    const report=capabilityReport(sources,channels,{collector,config:this.config,backendStatus:doctor.backends});
+    return {...doctor,capabilities:report.capabilities,summary:report.summary};
   }
   health() {
     const sources=this.db.sources(), channels=this.db.channels(),collector=this.desktop?.status()||null;
