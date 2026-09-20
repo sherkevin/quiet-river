@@ -244,3 +244,40 @@ Hardening completed so dormant feature-branch code cannot accidentally become ac
 Real environment remains unchanged: Shervin has no usable Instagram login state, OpenCLI profile/user canaries return AUTH_OR_LOGIN, and no Instagram content was imported.
 
 Verification after hardening: focused 112/112; full regression 337/337.
+
+
+## 2026-09-20 — P1 GitHub public commit enrichment
+
+### Decision
+
+Do not replace official GitHub Atom feeds. Five active Quiet River GitHub sources are repository commit feeds and already provide stable discovery/text. Agent-Reach's gh CLI is useful, but public GitHub REST is a better first enrichment backend for public commits because it needs no new ECS credential.
+
+### Implemented
+
+- added a generic entry_enrichments cache table for future cross-platform enrichment state;
+- added canonical commit/compare target parser limited to github.com owner/repo commit SHA or SHA-to-SHA compare paths;
+- added public GitHub REST adapter with trusted=false, 10s timeout and 2 MiB response bound;
+- commit responses must match requested repository and SHA prefix before rendering;
+- compare responses must match requested base/head and repository before rendering;
+- commit messages, filenames and statuses are HTML-escaped;
+- explicit article prepare enriches GitHub commit/compare entries with commit message, stats and changed files;
+- success is cached so repeated prepare does not repeat the REST request;
+- Miniflux receives title/content only; read state is not sent;
+- imports/entries provenance is marked github_rest_enrichment;
+- REST/rate-limit/JSON/identity failure keeps the existing Atom body and may fall through to the prior generic full-text path.
+
+### Verification
+
+- focused GitHub enrichment tests: 6/6 passed;
+- full regression: 343/343 passed;
+- real read-only public REST canary:
+  - repository Doragd/Algorithm-Practice-in-Industry;
+  - requested commit prefix 7b734408e365;
+  - generated structured detail length 564 characters;
+  - changed-files section present;
+  - anonymous x-ratelimit-remaining: 58 after canary;
+  - no production database mutation.
+
+### Credential boundary
+
+Shervin already has gh 2.92.0 authenticated through Windows keyring. That credential was not copied to ECS and is not required for public commit enrichment. gh remains a potential second backend for private/richer detail only.

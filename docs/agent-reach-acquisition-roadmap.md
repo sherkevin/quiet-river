@@ -187,19 +187,27 @@ Tasks:
 - [ ] do not restore yt-dlp as Bilibili backend
 - [ ] verify existing Bilibili source IDs remain stable
 
-### G. P1 — GitHub enrichment, not feed replacement
+### G. P1 — GitHub enrichment, not feed replacement — COMMIT DETAIL DONE
 
-Current GitHub discovery feeds are already stable.
+Current GitHub discovery feeds remain the scheduler owner. Public commit/compare detail is enriched only on explicit article prepare; it never creates a second discovery stream.
 
-Add:
-- github.repository.detail -> gh CLI
-- github.issue.detail -> gh CLI
-- github.release.detail -> gh CLI
+Backend order for public commit detail:
+1. GitHub public REST @ ECS — no credential required
+2. gh CLI @ Shervin — retained as a future richer/private-repo fallback; its keyring token is not moved to ECS
 
-Tasks:
-- [ ] preserve official feed discovery
-- [ ] add gh-based enrichment on demand
-- [ ] avoid duplicate events from feed and gh paths
+Completed:
+- [x] preserve official Atom discovery
+- [x] accept only canonical github.com/<owner>/<repo>/commit/<sha> and compare/<sha>...<sha> targets
+- [x] public REST detail uses bounded unauthenticated request and validates returned repo/SHA identity
+- [x] render commit message/stats/changed files through HTML escaping
+- [x] cache successful enrichment in generic entry_enrichments table so repeated article opens do not consume API quota
+- [x] persist content provenance as github_rest_enrichment without changing URL/publication/read state
+- [x] REST failure retains the existing Atom body and falls back to existing Miniflux full-text behavior
+- [x] real Doragd commit canary passed (HTTP 200, stable SHA, changed files, anonymous rate limit remained healthy)
+
+Remaining:
+- [ ] add issue/release/repository detail capabilities when a concrete Quiet River use case needs them
+- [ ] consider gh @ Shervin only for private/richer cases; do not replace public REST/Atom merely for uniformity
 
 ### H. P1 — YouTube enrichment, not feed replacement
 

@@ -8,6 +8,7 @@ const meta=require('./article-metadata');
 const reading=require('./reading-history');
 const {capabilityReport}=require('./capabilities');
 const {runBackend,doctorBackends}=require('./acquisition-backends');
+const {githubDetailTarget,githubEnrichment}=require('./github-enrichment');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
@@ -252,11 +253,30 @@ class ReaderService {
     let row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
     const source=this.db.sources().find(s=>s.id===row.source_id),channel=this.db.channels().find(c=>c.id===row.channel_id);
     if(!source)throw Object.assign(new Error('source not found'),{status:404});
+    const githubTarget=source.platform==='github'?githubDetailTarget(row.url):null,githubKind='github_rest_v1';
+    const githubDone=githubTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,githubKind);
+    const canGithubEnrich=!!githubTarget&&!githubDone;
     const canFetch=channel?.transport==='public'&&['blog','github','csdn','juejin','wechat'].includes(source.platform)&&source.fullTextMode!=='feed'&&!['feed_full','metadata_only'].includes(source.content_policy);
     let upstream=null,html='',prepareAttempted=false,prepareImproved=false,contentUnavailable=false;
     try {
       upstream=await this.mf.call(`/v1/entries/${id}`);html=String(upstream?.content||'');
-      if(prepare&&canFetch&&stripHTML(html).length<1500){
+      if(prepare&&canGithubEnrich){
+        prepareAttempted=true;
+        try{
+          const enriched=await githubEnrichment(this,githubTarget),candidate=String(enriched.html||'');
+          if(stripHTML(candidate)){
+            html=candidate;prepareImproved=true;
+            await this.mf.call(`/v1/entries/${id}`,'PUT',{title:upstream.title||row.title,content:html});
+            this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,githubKind,'DONE',Date.now(),JSON.stringify({rateRemaining:enriched.rateRemaining}));
+            this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='github_rest_enrichment' WHERE entry_id=?",hash(html),id);
+            this.project({...upstream,content:html},channel,Date.now());this.db.run("UPDATE entries SET content_origin='github_rest_enrichment' WHERE id=?",id);row=this.db.get('SELECT * FROM entries WHERE id=?',id);
+          }
+        }catch(e){
+          this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,githubKind,'FAILED',Date.now(),String(e.message||e).slice(0,200));
+          this.db.audit('github-enrichment',id,'GitHub REST detail unavailable; existing content retained');
+        }
+      }
+      if(prepare&&!prepareImproved&&canFetch&&stripHTML(html).length<1500){
         prepareAttempted=true;
         try {
           const fetched=await this.mf.call(`/v1/entries/${id}/fetch-content?update_content=false`,'GET',undefined,{timeout:20000});
@@ -266,12 +286,14 @@ class ReaderService {
       }
     }catch{contentUnavailable=true;html=row.summary?`<p>${escapeHTML(row.summary)}</p>`:'';}
     const snapshot=meta.tagSnapshot(this.db,id),feedback=this.db.get('SELECT value FROM feedback WHERE entry_id=?',id)?.value||0,noteState=await this.articleNote(id);
+    const githubDoneNow=githubTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,githubKind);
+    const canFetchFullText=githubTarget?!githubDoneNow:canFetch;
     const safeOriginal=safeURL(row.url)||null,contentLimit=2*1024*1024,contentTruncated=html.length>contentLimit;
-    const readerMode=row.bookmark_id||row.content_state!=='META'?'reader':canFetch?'fetchable':'original';
+    const readerMode=row.bookmark_id||row.content_state!=='META'?'reader':canFetchFullText?'fetchable':'original';
     return {id:row.id,title:row.title,author:row.author||source.name,source:source.name,sourceId:source.id,sourceUrl:safeURL(source.url)||null,platform:source.platform,readerMode,
       url:safeOriginal,published_at:row.published_at,discovered_at:row.discovered_at,status:row.status,tags:snapshot?.tags||source.tags||[],feedback,
       contentState:row.content_state,contentOrigin:row.content_origin,archiveState:row.archive_state,bookmarkId:row.bookmark_id||null,
-      content:html.slice(0,contentLimit),contentTextLength:stripHTML(html).length,contentTruncated,contentUnavailable,canFetchFullText:canFetch,prepareAttempted,prepareImproved,
+      content:html.slice(0,contentLimit),contentTextLength:stripHTML(html).length,contentTruncated,contentUnavailable,canFetchFullText,prepareAttempted,prepareImproved,
       canAnnotate:!!this.config.karakeepToken&&row.content_state!=='META',note:noteState.note,noteBookmarkId:noteState.bookmarkId,notesConfigured:noteState.configured,noteUnavailable:noteState.unavailable};
   }
   async readerStatus(id) {
