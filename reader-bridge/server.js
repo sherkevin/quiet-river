@@ -203,7 +203,7 @@ function loadConfig(){
     proxyFeedsEnabled:process.env.QR_PUBLIC_FEED_PROXY==='true',
     miniflux:process.env.MINIFLUX_URL||'http://127.0.0.1:3061',minifluxToken:process.env.MINIFLUX_TOKEN,
     karakeep:process.env.KARAKEEP_URL||'http://127.0.0.1:3062',karakeepToken:process.env.KARAKEEP_TOKEN,
-    ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu','bilibili','twitter','instagram'].includes(p)),rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',xiaohongshuMcp:process.env.XHS_MCP_URL||'',v2exReady:process.env.V2EX_READY==='true',werssAK:process.env.WERSS_AK||'',werssSK:process.env.WERSS_SK||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
+    ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu','bilibili','twitter','instagram','reddit'].includes(p)),rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',xiaohongshuMcp:process.env.XHS_MCP_URL||'',v2exReady:process.env.V2EX_READY==='true',werssAK:process.env.WERSS_AK||'',werssSK:process.env.WERSS_SK||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
 }
 async function main(){
   const config=loadConfig();if(!config.minifluxToken)throw new Error('MINIFLUX_TOKEN required');

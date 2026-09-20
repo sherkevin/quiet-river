@@ -4,6 +4,7 @@ function normalize(job,rows){
   if(!Array.isArray(rows)||rows.length>50)throw new Error('Invalid OpenCLI list');
   if(job.platform==='twitter')return rows.filter(row=>!row?.isRetweet&&!row?.is_retweet).map(row=>normalizeTwitterRow(job,row));
   if(job.platform==='instagram')return rows.map(row=>normalizeInstagramRow(job,row));
+  if(job.platform==='reddit')return rows.map(row=>normalizeRedditRow(job,row));
   return rows.map(row=>{
     const original=originalLink(job,row.url);
     if(job.platform==='xiaohongshu'&&row.id&&String(row.id).toLowerCase()!==original.noteId)throw new Error('Original link identity mismatch');
@@ -29,6 +30,15 @@ function normalizeInstagramRow(job,row){
   const caption=String(row.caption||'').trim(),taken=Number(row.taken_at),published=Number.isFinite(taken)&&taken>0?Math.floor(taken*1000):null;
   const fallback=(job.name||('@'+author))+' 的 Instagram 帖子';
   return {title:(caption||fallback).slice(0,1000),link:original.link,published,summary:caption.slice(0,1500),author};
+}
+function normalizeRedditRow(job,row){
+  if(!row||typeof row!=='object')throw new Error('Invalid Reddit row');
+  const id=String(row.id||''),subreddit=String(row.subreddit||''),title=String(row.title||'').trim();
+  if(!/^t3_[a-z0-9]+$/i.test(id)||!subreddit||!title)throw new Error('Invalid Reddit identity');
+  if(subreddit.toLowerCase()!==String(job.authorId||'').toLowerCase())throw new Error('Reddit community mismatch');
+  const original=originalLink({...job,kind:'community.posts'},String(row.url||''));if(original.redditId.toLowerCase()!==id.toLowerCase())throw new Error('Reddit post identity mismatch');
+  let published=null;if(row.updated){const n=Date.parse(String(row.updated));if(Number.isFinite(n))published=n;}
+  return {title:title.slice(0,1000),link:original.link,published,summary:String(row.summary||'').trim().slice(0,1500),author:String(row.author||'').slice(0,100)};
 }
 function normalizeTwitterRow(job,row){
   if(!row||typeof row!=='object')throw new Error('Invalid Twitter row');

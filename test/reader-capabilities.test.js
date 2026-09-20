@@ -187,3 +187,13 @@ test('Instagram becomes healthy only after both backend canary and a real channe
   const [cap]=sourceCapabilities(ig,[channel],{collector:{online:true},backendStatus:{'opencli-instagram-shervin':{status:'ok',reason:'read-only canary passed',state:'READY'}}});
   assert.equal(cap.activeBackend,'opencli-instagram-shervin');assert.equal(cap.status,'ok');
 });
+
+test('Reddit community capability uses the dedicated zero-account RSS backend',()=>{
+ const community={id:'rd1',name:'r/LocalLLaMA',platform:'reddit',sourceType:'community',enabled:true};
+ const channel={id:'rdc',source_id:'rd1',label:'community.posts',transport:'desktop',enabled:true,state:'SUCCEEDED_NO_NEW'};
+ const [cap]=sourceCapabilities(community,[channel],{collector:{online:true}});
+ assert.equal(cap.id,'reddit.community.posts');
+ assert.deepEqual(cap.candidates.map(c=>c.id),['reddit-rss-shervin']);
+ assert.equal(cap.activeBackend,'reddit-rss-shervin');assert.equal(cap.status,'ok');
+ assert.equal(cap.candidates[0].name,'Reddit RSS @ Shervin');
+});

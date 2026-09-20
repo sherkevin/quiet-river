@@ -20,6 +20,7 @@ const BACKENDS = Object.freeze({
   xiaohongshu_mcp: {id:'xiaohongshu-mcp-ecs', name:'xiaohongshu-mcp @ ECS', kind:'service', description:'Agent-Reach-style server fallback for Xiaohongshu using an explicitly configured local MCP service'},
   v2ex: {id:'v2ex-public-api', name:'V2EX Public API', kind:'network', description:'Agent-Reach-derived public V2EX node/topic API backend'},
   bili_cli: {id:'bili-cli-shervin', name:'bili-cli @ Shervin', kind:'desktop', description:'Agent-Reach preferred Bilibili video detail/search backend; read-only and no login required for detail'},
+  reddit_rss: {id:'reddit-rss-shervin', name:'Reddit RSS @ Shervin', kind:'desktop', description:'Official Reddit Atom feed fetched through Shervin browser networking with credentials omitted'},
   twitter_cli: {id:'twitter-cli-shervin', name:'twitter-cli @ Shervin', kind:'desktop', description:'Agent-Reach preferred Twitter author-timeline backend; requires explicit TWITTER_AUTH_TOKEN + TWITTER_CT0'},
   opencli_twitter: {id:'opencli-twitter-shervin', name:'OpenCLI Twitter @ Shervin', kind:'desktop', description:'Twitter/X browser-session fallback using the user-controlled Shervin Chrome session'},
   opencli_instagram: {id:'opencli-instagram-shervin', name:'OpenCLI Instagram @ Shervin', kind:'desktop', description:'Instagram author-post backend using the user-controlled Shervin browser session'},
@@ -33,6 +34,7 @@ const CAPABILITY_POLICIES=Object.freeze({
   'xiaohongshu.notes':['opencli-shervin','xiaohongshu-mcp-ecs'],
   'twitter.author.posts':['twitter-cli-shervin','opencli-twitter-shervin','xgo-twitter-feed'],
   'instagram.posts':['opencli-instagram-shervin'],
+  'reddit.community.posts':['reddit-rss-shervin'],
 });
 
 function backendForTransport(transport) {
@@ -42,10 +44,12 @@ function backendForTransport(transport) {
 
 function capabilityId(source, channel) {
   if(source.platform==='twitter')return 'twitter.author.posts';
+  if(source.platform==='reddit')return 'reddit.community.posts';
   const label=String(channel.label||'feed').replace(/[^A-Za-z0-9._-]+/g,'-');
   return `${source.platform || 'unknown'}.${label}`;
 }
 function backendForChannel(source,channel){
+  if(source?.platform==='reddit'&&channel.transport==='desktop')return BACKENDS.reddit_rss;
   if(source?.platform==='twitter'&&channel.transport==='public'){
     try{if(new URL(channel.url).hostname==='api.xgo.ing')return BACKENDS.xgo_twitter;}catch{}
   }

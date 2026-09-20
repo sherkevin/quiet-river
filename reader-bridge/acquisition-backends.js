@@ -103,6 +103,7 @@ registerBackend('v2ex-public-api',v2exCommunity);
 registerBackend('opencli-shervin',async()=>{throw new Error('desktop acquisition backend is worker-owned by Shervin');});
 
 registerProbe('opencli-shervin',async service=>{const status=service.desktop?.status?.();return status?.online?{status:'ok',reason:'Shervin collector heartbeat is current',state:'READY'}:{status:'warn',reason:'Shervin collector is offline or has not checked in',state:'OFFLINE'};});
+registerProbe('reddit-rss-shervin',async service=>{const status=service.desktop?.status?.();return status?.online?{status:'warn',reason:'Shervin collector is online; Reddit RSS remains per-community canary-gated',state:'UNVERIFIED'}:{status:'off',reason:'Shervin collector is offline',state:'OFFLINE'};});
 registerProbe('twitter-cli-shervin',async service=>service.desktop?.backendStatus?.()['twitter-cli-shervin']||{status:'off',reason:'Shervin has not reported a verified twitter-cli backend',state:'NOT_CONFIGURED'});
 registerProbe('opencli-twitter-shervin',async service=>service.desktop?.backendStatus?.()['opencli-twitter-shervin']||{status:'off',reason:'Shervin has not reported a verified OpenCLI Twitter backend',state:'NOT_CONFIGURED'});
 registerProbe('opencli-instagram-shervin',async service=>service.desktop?.backendStatus?.()['opencli-instagram-shervin']||{status:'off',reason:'Shervin has not reported a verified Instagram author backend',state:'NOT_CONFIGURED'});

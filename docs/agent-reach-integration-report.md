@@ -424,3 +424,36 @@ The retained model cache is approximately 296 MiB total because the earlier base
 ### Production status
 
 Feature branch only. No production database transcript was written and no production deployment was performed.
+
+## 2026-09-20 — Reddit Community zero-account acquisition
+
+### Why this differs from Agent-Reach
+
+Agent-Reach correctly records that Reddit anonymous JSON endpoints are blocked and therefore prefers logged-in OpenCLI/rdt-cli. Quiet River has a different primary use case: scheduled community discovery rather than arbitrary Reddit search/API access. A strict anonymous canary found that `/about.json` and `/new.json` return 403 while the official `/r/<community>/.rss` Atom feed returns HTTP 200 when fetched in the Reddit browser origin with `credentials:'omit'`.
+
+### Implemented
+
+- new Community source identity for Reddit `/r/<community>` URLs;
+- dedicated capability/backend `reddit.community.posts -> reddit-rss-shervin`;
+- Windows `reddit-rss.cjs` wrapper uses the OpenCLI Browser Bridge only as browser-like network/TLS transport;
+- the RSS fetch explicitly uses `credentials:'omit'`; no Cookie or Authorization field is created;
+- only up to 20 Atom entries are returned;
+- stable item identity is Reddit's native `t3_<post_id>` and canonical link is `/r/<sub>/comments/<post_id>/`;
+- Windows and ECS both revalidate subreddit membership and t3/link identity;
+- comments are not discovery cards and remain future detail enrichment;
+- Chromium 152+ navigation instability is handled by `Page.startNetworkCapture('/r/')`, which keeps the debugger attached. Quiet River never calls `readNetworkCapture` and exports no trace records.
+
+### Live evidence
+
+- strict anonymous same-origin canary: Reddit `/about.json` = 403, `/new.json` = 403, `/.rss` = 200 valid Atom;
+- final wrapper canary against `r/LocalLLaMA`, limit 5: exit 0, count 5, all identities valid, t3 IDs unique, all timestamps valid, stderr length 0;
+- no Reddit login was performed and no Reddit credential was configured or requested.
+
+### Verification
+
+- focused Reddit/source/collector/capability/backend tests: 129/129 passed;
+- complete Quiet River regression after final navigation stabilization: 343/343 passed.
+
+### Deployment status
+
+Feature branch only. Do not deploy independently of the capability-router integration/WeRSS release gate. Reddit User source remains deferred until it passes a separate zero-account canary.

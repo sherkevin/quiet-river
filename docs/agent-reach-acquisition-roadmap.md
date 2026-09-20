@@ -152,24 +152,30 @@ Status:
 - do not enable Instagram in production and do not spend further integration time unless a stable zero-account public path appears later;
 - if that happens, restart from a fresh no-cookie canary instead of reviving the logged-in-session design.
 
-### E. P1 — Reddit Community/User source
+### E. P1 — Reddit Community — DONE on dedicated feature branch; User deferred
 
-Agent-Reach finding:
-- anonymous JSON path is no longer reliable;
-- new official API registration is not a practical default;
-- working paths are logged-in OpenCLI or explicit-cookie rdt-cli.
+Agent-Reach finding remains correct for anonymous JSON: Reddit JSON endpoints return 403 and new official API registration is not a practical default. Quiet River found a subscription-specific path that Agent-Reach does not use: the official subreddit Atom feed is anonymously readable through Shervin's browser network stack when the feed request explicitly uses `credentials:'omit'`.
 
-Target capabilities:
-- reddit.community.posts
-- reddit.user.posts
-Backend order: OpenCLI @ Shervin, then rdt-cli only with separately approved explicit credential storage.
+Implemented capability:
 
-Tasks:
-- [ ] generalize Source type beyond Author to Community
-- [ ] add subreddit canonical identity
-- [ ] normalize post + comments separately; subscription discovery imports posts only
-- [ ] keep comments as article enrichment, not extra feed cards
-- [ ] canary one public community under logged-in session
+reddit.community.posts
+1. Reddit RSS @ Shervin — zero-account, official Atom feed, credentials omitted
+
+Completed:
+- [x] reuse the generalized Community source type
+- [x] canonical subreddit identity from `/r/<community>` only
+- [x] stable item identity from Atom `<id>` = `t3_<post_id>`
+- [x] discovery imports posts only; comments remain future detail enrichment
+- [x] fixed read-only Windows wrapper; no Reddit login/search/write command
+- [x] RSS request explicitly omits credentials; no Cookie or Authorization header
+- [x] bounded Chromium 152+ navigation stabilization by keeping network capture attached; capture records are never read/exported
+- [x] cross-community and mismatched t3/URL identities rejected on Windows/ECS boundaries
+- [x] real zero-account `r/LocalLLaMA` canary: 5/5 rows valid, unique t3 IDs, valid canonical URLs/timestamps, stderr 0
+- [x] full regression after implementation: 343/343
+
+Deferred:
+- `reddit.user.posts` is not included in this release. The first user-RSS experiment hit Browser Bridge navigation failure and has not passed the same zero-account identity canary.
+- OpenCLI/rdt-cli logged-in backends remain optional future enrichment/fallback only; they are not required for Community discovery.
 
 ### F. P1 — Bilibili: keep author discovery, improve detail/search backends
 
