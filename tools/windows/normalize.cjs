@@ -2,7 +2,7 @@
 const {originalLink}=require('./original-link.cjs');
 function normalize(job,rows){
   if(!Array.isArray(rows)||rows.length>50)throw new Error('Invalid OpenCLI list');
-  if(job.platform==='twitter')return rows.map(row=>normalizeTwitterRow(job,row));
+  if(job.platform==='twitter')return rows.filter(row=>!row?.isRetweet&&!row?.is_retweet).map(row=>normalizeTwitterRow(job,row));
   return rows.map(row=>{
     const original=originalLink(job,row.url);
     if(job.platform==='xiaohongshu'&&row.id&&String(row.id).toLowerCase()!==original.noteId)throw new Error('Original link identity mismatch');

@@ -118,3 +118,46 @@ The existing xgo feed remains the active backend until a direct backend passes a
 ### Next
 
 Implement single scheduler-owner routing for `twitter.author.posts`: one persisted logical channel/job, with ECS/xgo ownership by default and Shervin ownership only when an explicit direct backend is proven usable. No duplicate simultaneous polling.
+
+## 2026-09-20 — P0 Twitter single-owner failover milestone
+
+### Design completed
+
+Quiet River now keeps exactly one persisted Twitter channel/job per subscribed author. The existing xgo channel is not duplicated or migrated.
+
+Routing semantics:
+
+- when no verified direct backend exists, ECS/Miniflux continues to refresh the existing xgo feed;
+- when Shervin reports a direct backend as verified and fresh, the same queued logical job is temporarily worker-owned by Shervin;
+- direct success imports into the same channel/feed identity and leaves the xgo physical health group untouched;
+- direct failure records backend-specific cooldown, requeues the same logical job and lets xgo take over immediately;
+- Shervin backend readiness reports expire after 120 seconds, so stale worker state cannot permanently steal scheduler ownership;
+- direct backend health and xgo feed health are separate failure domains.
+
+### Credential boundary
+
+Installed twitter-cli 0.8.5 is not invoked through its top-level authentication helper. A new read-only `tools/windows/twitter-explicit.py` wrapper imports `TwitterClient` directly and accepts credentials only from `TWITTER_AUTH_TOKEN` and `TWITTER_CT0`. It never imports `twitter_cli.auth`, `get_cookies`, or `browser_cookie3`.
+
+The collector reports `twitter-cli-shervin=off` when explicit credentials are absent. Credentials being present is still insufficient: an explicit read-only author canary must pass, and only a verification timestamp less than 24 hours old may produce backend status `ok`.
+
+OpenCLI Twitter follows the same rule: Browser Bridge connected is only `warn`; a successful explicit Twitter timeline canary is required for `ok`.
+
+### Failure-domain evidence
+
+A bounded diagnostic of the 28 existing xgo sources found only 4 sources returned within the test window; 24 did not complete within the bounded check. This is not treated as a permanent outage claim, but it reinforces that all 28 sources sharing one third-party host is a material reliability risk.
+
+Across 77 items from the four responsive feeds, the item-link handle always matched the subscribed handle (0 mismatches).
+
+### Verification
+
+- direct-backend claim uses the existing public xgo channel, not a second channel;
+- direct success does not mutate the xgo group;
+- direct failure returns `FALLBACK_QUEUED`, requeues the same job and restores xgo as active fallback;
+- ECS pump does not run xgo while Shervin owns the capability;
+- scheduler may give direct ownership even when the xgo physical group itself is unhealthy;
+- the explicit Python wrapper is tested with a fake twitter_cli package to prove explicit credential injection and retweet filtering;
+- full regression: 320/320 passed.
+
+### Remaining Twitter gate
+
+No direct backend is enabled in production yet. twitter-cli requires explicit user-supplied Twitter credentials and OpenCLI Twitter has not passed its author-timeline canary. Until one direct backend passes a real parity canary, xgo remains the active production path.

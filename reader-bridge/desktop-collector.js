@@ -2,7 +2,9 @@
 const crypto=require('node:crypto');
 const {channelsFor,escapeHTML,hash,stripHTML}=require('./core');
 const {originalLink}=require('../tools/windows/original-link.cjs');
-const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili']);
+const {sourceCapabilities}=require('./capabilities');
+const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter']);
+const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili']);
 const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
 const ENRICH_CAP='entry_body_v1',MAX_BODY_BYTES=1024*1024;
@@ -38,7 +40,12 @@ class DesktopCollector {
       entry_id INTEGER PRIMARY KEY,channel_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'QUEUED',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
       attempts INTEGER NOT NULL DEFAULT 0,next_attempt INTEGER NOT NULL DEFAULT 0,lease_id TEXT,expires_at INTEGER NOT NULL DEFAULT 0,digest TEXT,ack TEXT,error TEXT NOT NULL DEFAULT '');
       CREATE UNIQUE INDEX IF NOT EXISTS collector_enrichment_lease ON collector_enrichments(lease_id) WHERE lease_id IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS collector_enrichment_state ON collector_enrichments(state,next_attempt,created_at);`);
+      CREATE INDEX IF NOT EXISTS collector_enrichment_state ON collector_enrichments(state,next_attempt,created_at);
+      CREATE TABLE IF NOT EXISTS collector_backend_health(
+      id TEXT PRIMARY KEY,state TEXT NOT NULL DEFAULT 'UNKNOWN',last_success INTEGER NOT NULL DEFAULT 0,next_allowed INTEGER NOT NULL DEFAULT 0,
+      failures INTEGER NOT NULL DEFAULT 0,error TEXT NOT NULL DEFAULT '');`);
+    const leaseColumns=new Set(this.db.all('PRAGMA table_info(collector_leases)').map(c=>c.name));
+    if(!leaseColumns.has('backend_id'))this.db.db.exec("ALTER TABLE collector_leases ADD COLUMN backend_id TEXT NOT NULL DEFAULT ''");
     for(const channel of this.db.channels()){
       if(channel.transport==='desktop'&&['SUCCEEDED_PARTIAL','SUCCEEDED_NEW','SUCCEEDED_NO_NEW'].includes(channel.state)&&channel.error){
         this.db.run("UPDATE channels SET error='' WHERE id=?",channel.id);
@@ -47,7 +54,7 @@ class DesktopCollector {
   }
   async register(){
     const configured=this.s.config.adapters?.desktopPlatforms||[];
-    const sources=this.db.sources().filter(s=>configured.includes(s.platform)&&PLATFORMS.has(s.platform));
+    const sources=this.db.sources().filter(s=>configured.includes(s.platform)&&PHYSICAL_DESKTOP_PLATFORMS.has(s.platform));
     for(const source of sources){
       const previous=this.db.channels().filter(c=>c.source_id===source.id);
       this.db.putSource(source,channelsFor(source,this.s.config.adapters));
@@ -60,6 +67,47 @@ class DesktopCollector {
     const at=this.db.setting('collector_seen',0),now=Date.now();
     return {device:'Shervin',lastSeen:at,online:at>0&&now-at<120000,
       note:'Windows运行时接收更新任务；登录态留在本机，离线不代表博主无更新'};
+  }
+  recordBackendStatus(input,now=Date.now()){
+    const allowed=new Set(['twitter-cli-shervin','opencli-twitter-shervin']),backends={};
+    if(input&&typeof input==='object')for(const [id,value] of Object.entries(input)){
+      if(!allowed.has(id)||!value||!['ok','warn','error','off'].includes(value.status))continue;
+      backends[id]={status:value.status,reason:String(value.reason||value.status).slice(0,200),state:String(value.state||'LOCAL').slice(0,64)};
+    }
+    this.db.set('collector_backend_report',{at:now,backends});return backends;
+  }
+  backendStatus(now=Date.now()){
+    const report=this.db.setting('collector_backend_report',{});if(!report?.at||now-report.at>120000)return {};
+    const backends={...(report.backends||{})};
+    for(const row of this.db.all('SELECT * FROM collector_backend_health')){
+      if(!backends[row.id]||row.state==='OK'||row.next_allowed<=now)continue;
+      backends[row.id]={status:'error',reason:row.error||row.state,state:row.state};
+    }
+    return backends;
+  }
+  activeBackend(channel,source,now=Date.now()){
+    if(channel.transport==='desktop')return 'opencli-shervin';
+    const [cap]=sourceCapabilities(source,[channel],{collector:this.status(),backendStatus:this.backendStatus(now)});
+    return cap?.activeBackend||null;
+  }
+  ownsChannel(channel,source,now=Date.now()){
+    if(channel.transport==='desktop')return true;
+    return ['twitter-cli-shervin','opencli-twitter-shervin'].includes(this.activeBackend(channel,source,now));
+  }
+  twitterIdentity(source){
+    if(source?.platform!=='twitter')return null;
+    try{const u=new URL(source.url);const m=/^\/([A-Za-z0-9_]{1,15})\/?$/.exec(u.pathname);if(u.protocol==='https:'&&u.hostname==='x.com'&&m)return {authorId:m[1],kind:'tweets'};}catch{}
+    return null;
+  }
+  backendFailure(id,state,error,now=Date.now()){
+    const wait=state==='AUTH_REQUIRED'?86400000:state==='ACCESS_BLOCKED'?1800000:600000;
+    this.db.run(`INSERT INTO collector_backend_health(id,state,next_allowed,failures,error) VALUES(?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET state=excluded.state,next_allowed=excluded.next_allowed,failures=collector_backend_health.failures+1,error=excluded.error`,id,state,now+wait,1,String(error||state).slice(0,200));
+    return now+wait;
+  }
+  backendSuccess(id,now=Date.now()){
+    this.db.run(`INSERT INTO collector_backend_health(id,state,last_success,next_allowed,failures,error) VALUES(?,'OK',?,0,0,'')
+      ON CONFLICT(id) DO UPDATE SET state='OK',last_success=excluded.last_success,next_allowed=0,failures=0,error=''`,id,now);
   }
   enrichmentContext(entryId){
     const id=Number(entryId),entry=Number.isSafeInteger(id)?this.db.get('SELECT * FROM entries WHERE id=?',id):null;
@@ -140,13 +188,14 @@ class DesktopCollector {
     }
     return nearCooldown===null?null:{job:null,retryAfter:Math.max(8,Math.min(60,nearCooldown)),waitForCooldown:true};
   }
-  claim(platforms,capabilities=[]){
+  claim(platforms,capabilities=[],backendReport={}){
     const allowed=(this.s.config.adapters?.desktopPlatforms||[]).filter(p=>PLATFORMS.has(p)&&platforms.includes(p));
-    const now=Date.now();this.expire(now);this.db.set('collector_seen',now);
+    const now=Date.now();this.expire(now);this.db.set('collector_seen',now);this.recordBackendStatus(backendReport,now);
     const bySource=new Map(this.db.sources().map(s=>[s.id,s]));
-    const candidates=this.db.channels().filter(c=>c.transport==='desktop'&&c.enabled&&c.feed_id&&bySource.get(c.source_id)?.enabled&&allowed.includes(bySource.get(c.source_id).platform));
-    // Create only missing due jobs; browser-page refresh and scheduled jobs share this queue.
-    const due=candidates.filter(c=>{const g=this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.next_check<=now&&g?.state!=='AUTH_REQUIRED'&&(!g||g.next_allowed<=now)&&!this.db.get("SELECT id FROM jobs WHERE channel_id=? AND state IN ('QUEUED','RUNNING')",c.id);});
+    const candidates=this.db.channels().filter(c=>{const source=bySource.get(c.source_id);return c.enabled&&c.feed_id&&source?.enabled&&allowed.includes(source.platform)&&this.ownsChannel(c,source,now);});
+    // Create only missing due jobs. Logical Twitter direct backends deliberately
+    // ignore the xgo physical group; each direct backend has its own health table.
+    const due=candidates.filter(c=>{const source=bySource.get(c.source_id),direct=c.transport!=='desktop'&&this.ownsChannel(c,source,now),g=direct?null:this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.next_check<=now&&(direct||g?.state!=='AUTH_REQUIRED')&&(direct||!g||g.next_allowed<=now)&&!this.db.get("SELECT id FROM jobs WHERE channel_id=? AND state IN ('QUEUED','RUNNING')",c.id);});
     if(due.length)this.db.createRun(due,'scheduled');
     const jobs=this.db.all("SELECT * FROM jobs WHERE state='QUEUED' ORDER BY priority DESC,created_at,id");
     let nearCooldown=null;
@@ -156,23 +205,22 @@ class DesktopCollector {
     }
     for(const job of jobs){
       const c=candidates.find(x=>x.id===job.channel_id);if(!c)continue;
-      const g=this.db.get('SELECT * FROM groups WHERE id=?',c.group_key);
+      const source=bySource.get(c.source_id),backendId=this.activeBackend(c,source,now),direct=c.transport!=='desktop'&&['twitter-cli-shervin','opencli-twitter-shervin'].includes(backendId),g=direct?null:this.db.get('SELECT * FROM groups WHERE id=?',c.group_key);
       if(g?.state==='AUTH_REQUIRED'){this.s.finish(job,'AUTH_REQUIRED','Windows登录态需要重新授权');continue;}
       if(c.next_check>now){this.s.finish(job,'COOLDOWN','尚未到本来源允许的检查时间');continue;}
       if(g?.next_allowed>now){const seconds=Math.ceil((g.next_allowed-now)/1000);if(seconds<=60)nearCooldown=Math.min(nearCooldown??seconds,seconds);continue;}
       if(this.hasActiveLease(now))return {job:null,retryAfter:15};
-      const id=crypto.randomBytes(24).toString('hex'),source=bySource.get(c.source_id);
-      const authorId=c.author_id||source.adapter?.id,kind=c.desktop_kind||c.label;
-      if(!authorId){this.finish(job,'NOT_CONFIGURED','桌面采集来源缺少作者标识');continue;}
+      const id=crypto.randomBytes(24).toString('hex'),identity=direct?this.twitterIdentity(source):{authorId:c.author_id||source.adapter?.id,kind:c.desktop_kind||c.label};
+      if(!identity?.authorId){this.s.finish(job,'NOT_CONFIGURED','桌面采集来源缺少作者标识');continue;}
       this.db.db.exec('BEGIN IMMEDIATE');
       try{
-        this.db.run('INSERT INTO collector_leases(id,job_id,channel_id,expires_at) VALUES(?,?,?,?)',id,job.id,c.id,now+900000);
+        this.db.run('INSERT INTO collector_leases(id,job_id,channel_id,expires_at,backend_id) VALUES(?,?,?,?,?)',id,job.id,c.id,now+900000,backendId||'opencli-shervin');
         this.db.run("UPDATE jobs SET state='RUNNING' WHERE id=?",job.id);
         this.db.run("UPDATE channels SET last_check=?,state='RUNNING' WHERE id=?",now,c.id);
         this.db.db.exec('COMMIT');
       }catch(e){this.db.db.exec('ROLLBACK');throw e;}
-      return {job:{leaseId:id,sourceId:source.id,platform:source.platform,authorId,
-        name:source.name,kind,limit:20},retryAfter:8};
+      return {job:{leaseId:id,sourceId:source.id,platform:source.platform,authorId:identity.authorId,
+        name:source.name,kind:identity.kind,backendId:backendId||'opencli-shervin',limit:20},retryAfter:8};
     }
     const enrichment=this.claimEnrichment(allowed,capabilities,now,bySource);if(enrichment?.job)return enrichment;
     if(enrichment?.waitForCooldown)nearCooldown=Math.min(nearCooldown??enrichment.retryAfter,enrichment.retryAfter);
@@ -223,12 +271,14 @@ class DesktopCollector {
     if(lease.expires_at<Date.now()||lease.state==='EXPIRED')fail('expired lease',409);
     if(lease.digest&&lease.digest!==digest)fail('changed payload on retry',409);
     const c=this.db.channels().find(c=>c.id===lease.channel_id);
-    const source=this.db.sources().find(s=>s.id===c?.source_id);
-    if(!source?.enabled||c?.transport!=='desktop'||!c.enabled)fail('source no longer enabled',409);
+    const source=this.db.sources().find(s=>s.id===c?.source_id),backendId=lease.backend_id||'opencli-shervin';
+    const directTwitter=source?.platform==='twitter'&&c?.transport==='public'&&['twitter-cli-shervin','opencli-twitter-shervin'].includes(backendId);
+    if(!source?.enabled||!c?.enabled||(!directTwitter&&c.transport!=='desktop'))fail('source no longer enabled',409);
     if(!['OK',...STATES].includes(input.status))fail('invalid collector status');
-    const reportedStatus=input.status==='AUTH_REQUIRED'&&!AUTH_PLATFORMS.has(source.platform)?'ACCESS_BLOCKED':input.status;
-    const authorId=c.author_id||source.adapter?.id,kind=c.desktop_kind||c.label;
-    const items=reportedStatus==='OK'?validateItems({...c,platform:source.platform,authorId,label:kind},input.items):[];
+    const reportedStatus=directTwitter?input.status:input.status==='AUTH_REQUIRED'&&!AUTH_PLATFORMS.has(source.platform)?'ACCESS_BLOCKED':input.status;
+    const identity=directTwitter?this.twitterIdentity(source):{authorId:c.author_id||source.adapter?.id,kind:c.desktop_kind||c.label};
+    if(!identity?.authorId)fail('collector source identity unavailable',409);
+    const items=reportedStatus==='OK'?validateItems({...c,platform:source.platform,authorId:identity.authorId,label:identity.kind},input.items):[];
     this.db.run("UPDATE collector_leases SET state='APPLYING',digest=? WHERE id=?",digest,lease.id);
     let added=0;
     for(const item of items)added+=await this.s.importItem(c,item);
@@ -240,22 +290,30 @@ class DesktopCollector {
       state==='ACCESS_BLOCKED'?'浏览器导航被拒绝或平台访问受限，未绕过限制':'Windows采集失败，原有内容保留';
     if(ok){
       this.db.run("UPDATE channels SET last_success=?,next_check=?,state=?,error='',failures=0 WHERE id=?",now,now+c.interval_ms,state,c.id);
-      this.db.run("UPDATE groups SET state='OK',last_success=?,next_allowed=?,failures=0 WHERE id=?",now,now+Math.max(8000,c.min_gap_ms),c.group_key);
-    }else{
-      const retry=now+(state==='AUTH_REQUIRED'?86400000:state==='ACCESS_BLOCKED'?1800000:600000);
-      this.db.run('UPDATE channels SET state=?,error=?,next_check=?,failures=failures+1 WHERE id=?',state,message,retry,c.id);
-      this.db.run('UPDATE groups SET state=?,next_allowed=?,failures=failures+1 WHERE id=?',state,retry,c.group_key);
-      this.db.alert('desktop:'+c.group_key+':'+(this.db.get('SELECT last_success FROM groups WHERE id=?',c.group_key)?.last_success||0),'Windows采集需要处理',message);
+      if(directTwitter)this.backendSuccess(backendId,now);
+      else this.db.run("UPDATE groups SET state='OK',last_success=?,next_allowed=?,failures=0 WHERE id=?",now,now+Math.max(8000,c.min_gap_ms),c.group_key);
+      const ack={accepted:true,sourceId:source.id,received:items.length,added,state,backendId};
+      this.s.finish({id:lease.job_id},state,message);this.db.run("UPDATE collector_leases SET state='DONE',ack=? WHERE id=?",JSON.stringify(ack),lease.id);this.db.set('collector_seen',now);return ack;
     }
-    const ack={accepted:true,sourceId:source.id,received:items.length,added,state};
-    this.s.finish({id:lease.job_id},state,message);
-    this.db.run("UPDATE collector_leases SET state='DONE',ack=? WHERE id=?",JSON.stringify(ack),lease.id);
-    this.db.set('collector_seen',now);return ack;
+    if(directTwitter){
+      this.backendFailure(backendId,state,message,now);
+      const ack={accepted:true,sourceId:source.id,received:0,added:0,state:'FALLBACK_QUEUED',backendId,failedState:state};
+      this.db.run("UPDATE jobs SET state='QUEUED',error=? WHERE id=?",'Direct Twitter backend failed; fallback queued',lease.job_id);
+      this.db.run("UPDATE collector_leases SET state='DONE',ack=? WHERE id=?",JSON.stringify(ack),lease.id);this.db.set('collector_seen',now);
+      this.db.audit('backend-fallback',source.id,backendId+' -> xgo-twitter-feed');
+      setImmediate(()=>this.s.pump().catch(e=>this.db.audit('pump','twitter-fallback',e.message)));return ack;
+    }
+    const retry=now+(state==='AUTH_REQUIRED'?86400000:state==='ACCESS_BLOCKED'?1800000:600000);
+    this.db.run('UPDATE channels SET state=?,error=?,next_check=?,failures=failures+1 WHERE id=?',state,message,retry,c.id);
+    this.db.run('UPDATE groups SET state=?,next_allowed=?,failures=failures+1 WHERE id=?',state,retry,c.group_key);
+    this.db.alert('desktop:'+c.group_key+':'+(this.db.get('SELECT last_success FROM groups WHERE id=?',c.group_key)?.last_success||0),'Windows采集需要处理',message);
+    const ack={accepted:true,sourceId:source.id,received:0,added:0,state,backendId};
+    this.s.finish({id:lease.job_id},state,message);this.db.run("UPDATE collector_leases SET state='DONE',ack=? WHERE id=?",JSON.stringify(ack),lease.id);this.db.set('collector_seen',now);return ack;
   }
   async handle(input){
     if(this.busy)fail('collector operation in progress',503);this.busy=true;
     try{
-      if(input.op==='claim')return this.claim(Array.isArray(input.platforms)?input.platforms:[],Array.isArray(input.capabilities)?input.capabilities:[]);
+      if(input.op==='claim')return this.claim(Array.isArray(input.platforms)?input.platforms:[],Array.isArray(input.capabilities)?input.capabilities:[],input.backends&&typeof input.backends==='object'?input.backends:{});
       if(input.op==='submit')return await this.submit(input.result);
       if(input.op==='resume')return this.resume(String(input.platform||''));
       if(input.op==='status'){this.db.set('collector_seen',Date.now());return this.status();}

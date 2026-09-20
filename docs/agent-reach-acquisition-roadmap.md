@@ -102,7 +102,7 @@ Tasks:
 - [ ] canary one author with both backends and compare IDs/timestamps/body
 - [ ] canary backend failure: primary unavailable -> fallback without changing source identity
 - [ ] migrate 28 sources only after parity threshold is met
-- [ ] retain a reversible backend override during rollout
+- [x] implement reversible single-owner routing: the existing xgo channel/job is worker-owned only while a verified direct backend is healthy; direct failure requeues the same job to xgo
 - [ ] update report with before/after failure-domain reduction
 
 Success criteria:

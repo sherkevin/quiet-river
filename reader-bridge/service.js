@@ -72,10 +72,11 @@ class ReaderService {
     if(this.working||this.stopping)return;this.working=true;
     try {
       while(!this.stopping) {
-        const job=this.db.get("SELECT j.* FROM jobs j JOIN channels c ON c.id=j.channel_id WHERE j.state='QUEUED' AND COALESCE(json_extract(c.payload,'$.transport'),'')!='desktop' ORDER BY j.priority DESC,j.created_at,j.id LIMIT 1");
+        const queued=this.db.all("SELECT * FROM jobs WHERE state='QUEUED' ORDER BY priority DESC,created_at,id"),channels=this.db.channels(),sources=new Map(this.db.sources().map(s=>[s.id,s]));
+        const job=queued.find(j=>{const c=channels.find(x=>x.id===j.channel_id),source=c&&sources.get(c.source_id);return c&&c.transport!=='desktop'&&!this.desktop?.ownsChannel?.(c,source);});
         if(!job)break;
         this.db.run("UPDATE jobs SET state='RUNNING' WHERE id=?",job.id);
-        let c=this.db.channels().find(c=>c.id===job.channel_id);
+        let c=channels.find(c=>c.id===job.channel_id);
         if(!c){this.finish(job,'UPSTREAM_ERROR','来源已移除');continue;}
         const source=this.db.sources().find(s=>s.id===c.source_id);
         if(!source?.enabled){this.finish(job,'PAUSED','该来源已暂停采集');continue;}
@@ -428,8 +429,8 @@ class ReaderService {
     return {...doctor,capabilities:report.capabilities,summary:report.summary};
   }
   health() {
-    const sources=this.db.sources(), channels=this.db.channels(),collector=this.desktop?.status()||null;
-    const capability=capabilityReport(sources,channels,{collector,config:this.config});
+    const sources=this.db.sources(), channels=this.db.channels(),collector=this.desktop?.status()||null,backendStatus=this.desktop?.backendStatus?.()||{};
+    const capability=capabilityReport(sources,channels,{collector,config:this.config,backendStatus});
     return {collector,sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
       capabilities:capability.capabilities,capabilitySummary:capability.summary,
       groups:this.db.all('SELECT * FROM groups'),queue:this.db.get("SELECT count(*) n FROM jobs WHERE state IN ('QUEUED','RUNNING')").n,
@@ -462,8 +463,8 @@ class ReaderService {
     }
   }
   tick() {
-    const now=Date.now(), sourceIds=new Set(this.db.sources().filter(s=>s.enabled).map(s=>s.id));
-    const due=this.config.schedulerEnabled===false?[]:this.db.channels().filter(c=>{const g=this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now&&g?.state!=='AUTH_REQUIRED'&&(!g||g.next_allowed<=now);});
+    const now=Date.now(),sources=this.db.sources(),sourceById=new Map(sources.map(s=>[s.id,s])),sourceIds=new Set(sources.filter(s=>s.enabled).map(s=>s.id));
+    const due=this.config.schedulerEnabled===false?[]:this.db.channels().filter(c=>{const source=sourceById.get(c.source_id),workerOwned=c.transport!=='desktop'&&this.desktop?.ownsChannel?.(c,source,now);if(workerOwned)return c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now;const g=this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now&&g?.state!=='AUTH_REQUIRED'&&(!g||g.next_allowed<=now);});
     if(due.length)this.db.createRun(due,'scheduled');this.pump().catch(e=>this.db.audit('scheduler','error',e.message));
     this.monitor();this.sendNotifications().catch(()=>{});
     const timezone=this.db.setting('preferences',{}).timezone||'Asia/Shanghai';

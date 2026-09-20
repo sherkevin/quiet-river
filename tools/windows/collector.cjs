@@ -8,7 +8,7 @@ const root=process.env.QR_COLLECTOR_HOME||path.join(process.env.LOCALAPPDATA||os
 const configPath=path.join(root,'config.json'),args=process.argv.slice(2);
 const option=(name,fallback)=>args.includes(name)?args[args.indexOf(name)+1]:fallback;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-let config,locked=false,proxyTunnel=null,proxyRestart=null,exiting=false;
+let config,locked=false,proxyTunnel=null,proxyRestart=null,exiting=false,opencliReady=false;
 function log(message){console.log(new Date().toLocaleString()+' '+message);}
 function proxyTunnelArgs(cfg=config,rootDir=root){
   const key=path.join(rootDir,'proxy_tunnel_ed25519');
@@ -54,8 +54,36 @@ function preflight(){
   const version=spawnSync(process.execPath,[config.opencliMain,'--version'],{encoding:'utf8',timeout:15000});
   if(version.status!==0||!version.stdout.includes('1.8.7'))throw new Error('OpenCLI 1.8.7 contract required; revalidate before updating');
   const doctor=spawnSync(process.execPath,[config.opencliMain,'doctor'],{encoding:'utf8',timeout:20000});
-  if(doctor.status!==0||!/Extension: connected/.test(doctor.stdout))throw new Error('Open Chrome and connect the OpenCLI Browser Bridge extension');
-  transport({op:'status'});log('OpenCLI extension and restricted ECS connection verified. Cookies stay in Windows.');
+  opencliReady=doctor.status===0&&/Extension: connected/.test(doctor.stdout);
+  if(!opencliReady)log('OpenCLI Browser Bridge is not connected; OpenCLI-backed jobs remain unavailable, but independent backends may continue.');
+  transport({op:'status'});log('Restricted ECS connection verified. Cookies stay in Windows.');
+}
+function discoverTwitterPython(){
+  const candidates=[config.twitterPython,process.env.APPDATA&&path.join(process.env.APPDATA,'uv','tools','twitter-cli','Scripts','python.exe'),process.env.LOCALAPPDATA&&path.join(process.env.LOCALAPPDATA,'uv','tools','twitter-cli','Scripts','python.exe')].filter(Boolean);
+  return candidates.find(p=>fs.existsSync(p))||'';
+}
+function localBackendStatus(now=Date.now()){
+  const script=path.join(__dirname,'twitter-explicit.py'),python=discoverTwitterPython(),hasExplicit=!!(process.env.TWITTER_AUTH_TOKEN&&process.env.TWITTER_CT0),verified=Number(config.twitterCliVerifiedAt)||0;
+  const twitterCli=!python||!fs.existsSync(script)?{status:'off',reason:'twitter-cli explicit wrapper is not installed',state:'NOT_CONFIGURED'}:!hasExplicit?{status:'off',reason:'explicit TWITTER_AUTH_TOKEN + TWITTER_CT0 are not present; browser cookies will not be scanned',state:'NO_EXPLICIT_CREDENTIALS'}:verified&&now-verified<86400000?{status:'ok',reason:'explicit twitter-cli author-timeline canary passed within 24h',state:'READY'}:{status:'warn',reason:'explicit Twitter credentials exist but a current read-only canary has not passed',state:'UNVERIFIED'};
+  const opencliTwitter=opencliReady&&Number(config.opencliTwitterVerifiedAt)&&now-Number(config.opencliTwitterVerifiedAt)<86400000?{status:'ok',reason:'OpenCLI Twitter author-timeline canary passed within 24h',state:'READY'}:opencliReady?{status:'warn',reason:'OpenCLI bridge is connected but the Twitter adapter has not passed a current canary',state:'UNVERIFIED'}:{status:'off',reason:'OpenCLI Browser Bridge is not connected',state:'OFFLINE'};
+  return {'twitter-cli-shervin':twitterCli,'opencli-twitter-shervin':opencliTwitter};
+}
+function saveConfig(){fs.writeFileSync(configPath,JSON.stringify(config,null,2),{encoding:'utf8'});}
+function verifyTwitterCli(handle){
+  if(!/^[A-Za-z0-9_]{1,15}$/.test(handle))throw new Error('Invalid Twitter handle');
+  const python=discoverTwitterPython(),script=path.join(__dirname,'twitter-explicit.py');if(!python||!fs.existsSync(script))throw new Error('twitter-cli explicit wrapper is not installed');
+  if(!process.env.TWITTER_AUTH_TOKEN||!process.env.TWITTER_CT0)throw new Error('Set explicit TWITTER_AUTH_TOKEN and TWITTER_CT0 before verification');
+  const r=spawnSync(python,[script,handle,'1'],{encoding:'utf8',timeout:90000,maxBuffer:1024*1024,env:{...process.env,PYTHONUTF8:'1'}});if(r.error||r.status!==0)throw new Error('Twitter explicit canary failed');
+  let rows;try{rows=JSON.parse(r.stdout||'[]');}catch{throw new Error('Twitter explicit canary returned invalid JSON');}
+  const items=normalize({platform:'twitter',kind:'tweets',authorId:handle,name:handle},rows);if(!items.length)throw new Error('Twitter explicit canary returned no original posts');
+  config.twitterCliVerifiedAt=Date.now();config.twitterCliVerifiedHandle=handle;saveConfig();return {backend:'twitter-cli-shervin',verifiedAt:config.twitterCliVerifiedAt,count:items.length};
+}
+function verifyOpencliTwitter(handle){
+  if(!/^[A-Za-z0-9_]{1,15}$/.test(handle))throw new Error('Invalid Twitter handle');if(!opencliReady)throw new Error('OpenCLI Browser Bridge is not connected');
+  const r=runOpencliRead(config,[config.opencliMain,'twitter','tweets',handle,'--limit','1','-f','json','--trace','off','--site-session','ephemeral']);if(r.error||r.status!==0)throw new Error('OpenCLI Twitter canary failed');
+  let rows;try{rows=JSON.parse(r.stdout.replace(/^\uFEFF/,''));}catch{throw new Error('OpenCLI Twitter canary returned invalid JSON');}
+  const items=normalize({platform:'twitter',kind:'tweets',authorId:handle,name:handle},rows);if(!items.length)throw new Error('OpenCLI Twitter canary returned no original posts');
+  config.opencliTwitterVerifiedAt=Date.now();config.opencliTwitterVerifiedHandle=handle;saveConfig();return {backend:'opencli-twitter-shervin',verifiedAt:config.opencliTwitterVerifiedAt,count:items.length};
 }
 function runOpencliRead(cfg,argv,spawnFn=spawnSync){
   const options={encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:cfg.profile||process.env.OPENCLI_PROFILE||''}};
@@ -67,13 +95,24 @@ function runOpencliRead(cfg,argv,spawnFn=spawnSync){
   return result;
 }
 function collect(job,limitOverride){
-  if(!['zhihu','xiaohongshu','bilibili'].includes(job.platform)||!/^[-\w]+$/.test(job.authorId))throw new Error('Invalid job identity');
-  const command=job.platform==='xiaohongshu'?'user':job.platform==='bilibili'?'user-videos':job.kind==='answers'?'user-answers':job.kind==='articles'?'user-articles':null;
-  if(!command)throw new Error('Unsupported read-only command');
+  if(!['zhihu','xiaohongshu','bilibili','twitter'].includes(job.platform)||!/^[-\w]+$/.test(job.authorId))throw new Error('Invalid job identity');
   const limit=Math.min(20,Math.max(1,Number(limitOverride??job.limit??20)||20));
-  const argv=[config.opencliMain,job.platform,command,job.authorId,'--limit',String(limit),'-f','json','--trace','off','--site-session','ephemeral'];
-  const r=runOpencliRead(config,argv);
-  if(r.error||r.status!==0){const diagnostic=/Navigation rejected/i.test(r.stderr||'')?'navigation_rejected':'upstream_rejected';log('OpenCLI check failed: '+diagnostic);return {leaseId:job.leaseId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),items:[]};}
+  let r;
+  if(job.platform==='twitter'){
+    if(job.kind!=='tweets'||!['twitter-cli-shervin','opencli-twitter-shervin'].includes(job.backendId))throw new Error('Unsupported Twitter read-only backend');
+    if(job.backendId==='twitter-cli-shervin'){
+      const status=localBackendStatus()['twitter-cli-shervin'];if(status.status!=='ok')return {leaseId:job.leaseId,status:'AUTH_REQUIRED',items:[]};
+      const python=discoverTwitterPython(),script=path.join(__dirname,'twitter-explicit.py');r=spawnSync(python,[script,job.authorId,String(limit)],{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,PYTHONUTF8:'1'}});
+    }else{
+      if(localBackendStatus()['opencli-twitter-shervin'].status!=='ok')return {leaseId:job.leaseId,status:'BROWSER_OFFLINE',items:[]};
+      r=runOpencliRead(config,[config.opencliMain,'twitter','tweets',job.authorId,'--limit',String(limit),'-f','json','--trace','off','--site-session','ephemeral']);
+    }
+  }else{
+    const command=job.platform==='xiaohongshu'?'user':job.platform==='bilibili'?'user-videos':job.kind==='answers'?'user-answers':job.kind==='articles'?'user-articles':null;
+    if(!command)throw new Error('Unsupported read-only command');
+    r=runOpencliRead(config,[config.opencliMain,job.platform,command,job.authorId,'--limit',String(limit),'-f','json','--trace','off','--site-session','ephemeral']);
+  }
+  if(r.error||r.status!==0){const diagnostic=/Navigation rejected/i.test(r.stderr||'')?'navigation_rejected':'upstream_rejected';log('Read-only backend check failed: '+diagnostic);return {leaseId:job.leaseId,status:r.error?.code==='ETIMEDOUT'?'TIMEOUT':statusFor(r.status,r.stderr||r.error?.message||''),items:[]};}
   try{return {leaseId:job.leaseId,status:'OK',items:normalize(job,JSON.parse(r.stdout.replace(/^\uFEFF/,'')))};}
   catch{return {leaseId:job.leaseId,status:'UPSTREAM_ERROR',items:[]};}
 }
@@ -104,9 +143,9 @@ async function authRecovered(probe,collectFn=collect,sleepFn=sleep){
   await sleepFn(2000);return collectFn(probe,1).status==='OK';
 }
 async function main(){
-  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili] [--doctor]');return;}
-  preflight();if(args.includes('--doctor'))return;acquire();if(args.includes('--watch'))startProxyTunnel();
-  const platforms=option('--platform','zhihu,xiaohongshu,bilibili').split(',').filter(p=>['zhihu','xiaohongshu','bilibili'].includes(p));
+  if(args.includes('--help')){console.log('collector.cjs [--watch] [--max-jobs 20] [--platform zhihu|xiaohongshu|bilibili|twitter] [--doctor] [--verify-twitter HANDLE] [--verify-twitter-opencli HANDLE]');return;}
+  preflight();if(args.includes('--verify-twitter')){const handle=option('--verify-twitter','');const result=verifyTwitterCli(handle);log('Verified '+result.backend+' with an explicit read-only author canary; no browser cookie discovery was used.');return;}if(args.includes('--verify-twitter-opencli')){const handle=option('--verify-twitter-opencli','');const result=verifyOpencliTwitter(handle);log('Verified '+result.backend+' with an explicit read-only author canary.');return;}if(args.includes('--doctor')){for(const [id,s] of Object.entries(localBackendStatus()))log(id+': '+s.status+' · '+s.reason);return;}acquire();if(args.includes('--watch'))startProxyTunnel();
+  const platforms=option('--platform','zhihu,xiaohongshu,bilibili,twitter').split(',').filter(p=>['zhihu','xiaohongshu','bilibili','twitter'].includes(p));
   if(!platforms.length)throw new Error('Choose a supported platform');
   const max=Math.max(1,Math.min(1000,Number(option('--max-jobs',args.includes('--watch')?'1000':'20'))||20));
   const pending=path.join(root,'pending-result.json'),authProbeAt=new Map();let done=0,failures=0;
@@ -115,12 +154,12 @@ async function main(){
       if(fs.existsSync(pending)){
         const result=JSON.parse(fs.readFileSync(pending,'utf8'));
         try{const ack=transport({op:'submit',result});if(!ack.accepted)throw new Error('Missing acknowledgement');
-          if(!['SUCCEEDED_PARTIAL','ENRICHED'].includes(ack.state))failures++;
+          if(!['SUCCEEDED_PARTIAL','ENRICHED','FALLBACK_QUEUED'].includes(ack.state))failures++;
           fs.unlinkSync(pending);log(result.entryId?`ECS accepted article-body result; ${ack.state}`:`ECS accepted ${ack.received} records; ${ack.state}`);done++;
         }catch(e){if(e.status===409){fs.renameSync(pending,pending+'.expired-'+Date.now());log('Expired result retained locally; new collection required');}else throw e;}
         if(done>=max)break;
       }
-      const next=transport({op:'claim',platforms,capabilities:['entry_body_v1']});
+      const next=transport({op:'claim',platforms,capabilities:['entry_body_v1'],backends:localBackendStatus()});
       if(!next.job){
         let resumed=false;
         if(next.authProbe){

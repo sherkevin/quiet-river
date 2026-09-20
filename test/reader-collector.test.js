@@ -25,7 +25,7 @@ test('desktop routes preserve prior channel IDs while moving collection to Windo
 });
 test('claim returns only registered author metadata, never credentials or feed URLs',t=>{
  const f=fixture(t);const r=f.collector.claim(['zhihu']);assert.equal(r.job.authorId,'test-author');
- assert.deepEqual(Object.keys(r.job).sort(),['authorId','kind','leaseId','limit','name','platform','sourceId'].sort());
+ assert.deepEqual(Object.keys(r.job).sort(),['authorId','backendId','kind','leaseId','limit','name','platform','sourceId'].sort());
 });
 test('only one active browser task can be claimed',t=>{const f=fixture(t);assert.ok(f.collector.claim(['zhihu']).job);assert.equal(f.collector.claim(['zhihu']).job,null);});
 test('expired lease requeues the job instead of declaring collection success',t=>{
@@ -328,4 +328,103 @@ test('Twitter media-only rows still get a stable non-empty card title',()=>{
  const [item]=normalize(job,[{id:'2086848998204473743',text:'',author:{screenName:'karpathy'},createdAtISO:'2026-07-10T12:15:47Z'}]);
  assert.equal(item.title,'Andrej Karpathy 的 X 帖子');
  assert.equal(item.summary,'');
+});
+
+
+function twitterRouteFixture(t){
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'twitter-source',name:'Twitter Author',platform:'twitter',url:'https://x.com/karpathy',feeds:['https://api.xgo.ing/rss/user/abc'],tags:[],enabled:true};
+ const channel={id:'twitter-channel',source_id:source.id,label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',group_key:'api.xgo.ing',enabled:true,interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=7 WHERE id=?',channel.id);
+ const stored=[];
+ const service={db,config:{adapters:{desktopPlatforms:['twitter']}},provisionChannels:async()=>{},importItem:async(c,item)=>{stored.push({channel:c.id,item});return 1;},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=?,finished_at=? WHERE id=?',state,error,Date.now(),job.id),pump:async()=>{}};
+ const collector=new DesktopCollector(service);service.desktop=collector;
+ return {db,source,channel,service,collector,stored};
+}
+test('healthy Twitter direct backend claims the existing xgo logical channel without creating a second channel',t=>{
+ const f=twitterRouteFixture(t);f.db.createRun([f.channel],'manual');
+ const result=f.collector.claim(['twitter'],[],{'twitter-cli-shervin':{status:'ok',reason:'verified explicit client',state:'READY'}});
+ assert.ok(result.job);assert.equal(result.job.platform,'twitter');assert.equal(result.job.authorId,'karpathy');assert.equal(result.job.kind,'tweets');assert.equal(result.job.backendId,'twitter-cli-shervin');
+ const lease=f.db.get('SELECT channel_id,backend_id FROM collector_leases WHERE id=?',result.job.leaseId);
+ assert.equal(lease.channel_id,'twitter-channel');assert.equal(lease.backend_id,'twitter-cli-shervin');
+ assert.equal(f.db.channels().filter(c=>c.source_id==='twitter-source').length,1);
+ assert.equal(f.db.channels()[0].transport,'public');
+});
+test('successful Twitter direct collection updates the shared logical channel but not the xgo physical group',async t=>{
+ const f=twitterRouteFixture(t);f.db.createRun([f.channel],'manual');
+ const claim=f.collector.claim(['twitter'],[],{'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ const before=f.db.get('SELECT * FROM groups WHERE id=?','api.xgo.ing');
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,status:'OK',items:[{title:'tweet',link:'https://x.com/karpathy/status/2086848998204473743',published:1786378547000,summary:'tweet body'}]});
+ assert.equal(ack.state,'SUCCEEDED_PARTIAL');assert.equal(ack.backendId,'twitter-cli-shervin');assert.equal(f.stored.length,1);assert.equal(f.stored[0].item.guid,'2086848998204473743');
+ const after=f.db.get('SELECT * FROM groups WHERE id=?','api.xgo.ing');assert.deepEqual(after,before);
+ assert.equal(f.db.get('SELECT state FROM collector_backend_health WHERE id=?','twitter-cli-shervin').state,'OK');
+ assert.equal(f.db.get('SELECT state FROM jobs LIMIT 1').state,'SUCCEEDED_PARTIAL');
+});
+test('failed Twitter direct backend requeues the same job and restores xgo as the active fallback',async t=>{
+ const f=twitterRouteFixture(t);let pumps=0;f.service.pump=async()=>{pumps++;};
+ f.db.createRun([f.channel],'manual');
+ const claim=f.collector.claim(['twitter'],[],{'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,status:'TIMEOUT',items:[]});
+ assert.equal(ack.state,'FALLBACK_QUEUED');assert.equal(ack.failedState,'TIMEOUT');
+ assert.equal(f.db.get('SELECT state FROM jobs LIMIT 1').state,'QUEUED');
+ assert.equal(f.db.get('SELECT state FROM groups WHERE id=?','api.xgo.ing').state,'UNKNOWN');
+ assert.equal(f.db.get('SELECT state FROM collector_backend_health WHERE id=?','twitter-cli-shervin').state,'TIMEOUT');
+ assert.equal(f.collector.ownsChannel(f.db.channels()[0],f.db.sources()[0]),false);
+ const cap=require('../reader-bridge/capabilities').sourceCapabilities(f.db.sources()[0],f.db.channels(),{collector:f.collector.status(),backendStatus:f.collector.backendStatus()})[0];
+ assert.equal(cap.activeBackend,'xgo-twitter-feed');
+ await new Promise(r=>setImmediate(r));assert.equal(pumps,1);
+});
+
+
+test('ECS pump leaves a Twitter xgo job queued while a verified Shervin backend owns the capability, then uses xgo after backend failure',async t=>{
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'tw-pump',name:'Twitter Author',platform:'twitter',url:'https://x.com/karpathy',feeds:['https://api.xgo.ing/rss/user/abc'],tags:[],enabled:true};
+ const channel={id:'tw-pump-channel',source_id:source.id,label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',group_key:'api.xgo.ing',enabled:true,interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=7 WHERE id=?',channel.id);
+ let fetches=0;
+ const service=new ReaderService(db,{adapters:{desktopPlatforms:['twitter']},miniflux:'http://unused',karakeep:'http://unused'},{mf:{call:async()=>[]}});
+ service.refreshPublic=async()=>{fetches++;return 0;};
+ const collector=new DesktopCollector(service);service.desktop=collector;
+ collector.recordBackendStatus({'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ db.createRun([channel],'manual');await service.pump();
+ assert.equal(fetches,0);assert.equal(db.get('SELECT state FROM jobs LIMIT 1').state,'QUEUED');
+ collector.backendFailure('twitter-cli-shervin','TIMEOUT','timeout');
+ await service.pump();assert.equal(fetches,1);
+ assert.notEqual(db.get('SELECT state FROM jobs LIMIT 1').state,'QUEUED');
+});
+
+test('scheduled Twitter direct ownership ignores the xgo physical group health until fallback is needed',t=>{
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'tw-tick',name:'Twitter Author',platform:'twitter',url:'https://x.com/karpathy',feeds:['https://api.xgo.ing/rss/user/abc'],tags:[],enabled:true};
+ const channel={id:'tw-tick-channel',source_id:source.id,label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',group_key:'api.xgo.ing',enabled:true,interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=7,next_check=0 WHERE id=?',channel.id);db.run("UPDATE groups SET state='AUTH_REQUIRED',next_allowed=? WHERE id=?",Date.now()+86400000,'api.xgo.ing');
+ const service=new ReaderService(db,{schedulerEnabled:true,adapters:{desktopPlatforms:['twitter']},miniflux:'http://unused',karakeep:'http://unused'},{mf:{call:async()=>[]}});
+ service.monitor=()=>{};service.sendNotifications=async()=>{};service.pump=async()=>{};
+ const collector=new DesktopCollector(service);service.desktop=collector;collector.recordBackendStatus({'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ service.tick();assert.equal(db.get("SELECT count(*) n FROM jobs WHERE channel_id=? AND state='QUEUED'",channel.id).n,1);
+});
+
+test('explicit Twitter Python wrapper never imports browser-cookie auth and filters retweets',t=>{
+ const os=require('node:os'),fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'qr-twitter-wrapper-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const pkg=path.join(dir,'twitter_cli');fs.mkdirSync(pkg);fs.writeFileSync(path.join(pkg,'__init__.py'),'');
+ fs.writeFileSync(path.join(pkg,'client.py'),[
+   'from types import SimpleNamespace',
+   'class TwitterClient:',
+   '  def __init__(self, auth_token, ct0, rate_limit_config=None, cookie_string=None):',
+   '    assert auth_token == "explicit-auth" and ct0 == "explicit-ct0"',
+   '  def fetch_user(self, handle): return SimpleNamespace(id="u1", screen_name=handle)',
+   '  def fetch_user_tweets(self, user_id, limit):',
+   '    a=SimpleNamespace(screen_name="karpathy")',
+   '    return [SimpleNamespace(is_retweet=False, author=a, payload={"id":"1","text":"ok","author":{"screenName":"karpathy"},"createdAtISO":"2026-09-20T00:00:00Z"}), SimpleNamespace(is_retweet=True, author=a, payload={"id":"2"})]'
+ ].join('\n'));
+ fs.writeFileSync(path.join(pkg,'serialization.py'),'def tweet_to_dict(tweet): return tweet.payload\n');
+ const wrapper=path.join(__dirname,'../tools/windows/twitter-explicit.py');
+ const run=spawnSync('python3',[wrapper,'karpathy','20'],{encoding:'utf8',env:{...process.env,PYTHONPATH:dir,TWITTER_AUTH_TOKEN:'explicit-auth',TWITTER_CT0:'explicit-ct0'}});
+ assert.equal(run.status,0,run.stderr);const rows=JSON.parse(run.stdout);assert.equal(rows.length,1);assert.equal(rows[0].id,'1');
+ const code=fs.readFileSync(wrapper,'utf8');assert.doesNotMatch(code,/^\s*(?:from|import)\s+twitter_cli\.auth/m);assert.doesNotMatch(code,/browser_cookie3/);
+ const noCreds=spawnSync('python3',[wrapper,'karpathy','1'],{encoding:'utf8',env:{...process.env,PYTHONPATH:dir,TWITTER_AUTH_TOKEN:'',TWITTER_CT0:''}});
+ assert.equal(noCreds.status,77);
 });
