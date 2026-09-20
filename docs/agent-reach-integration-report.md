@@ -563,3 +563,34 @@ When the independently verified Bilibili subtitle branch was consolidated with t
 - the native article UI exposes `获取视频详情` and `补充 B站字幕` as separate explicit actions.
 
 Focused integration regression after this adaptation: 143/143 passed across collector, native workspace, Bilibili detail, backend registry and capability routing. Full combined regression is run only after the cherry-pick is finalized.
+
+## 2026-09-20 — Acquisition integration branch combined validation
+
+The independently verified Agent-Reach-inspired feature branches have now been consolidated on `chatgpt/acquisition-integration-v1` without reintroducing the obsolete early YouTube enrichment path.
+
+Integrated stack:
+- acquisition capability/router and ordered backend policies;
+- Twitter direct-backend failover framework, still disabled until explicit-credential parity canary succeeds;
+- Instagram code remains fail-closed/skipped by user credential policy;
+- V2EX Community remains prepared but disabled by real network canary failure;
+- GitHub public commit/compare detail enrichment;
+- YouTube explicit transcript enrichment using `yt-dlp @ Shervin -> OpenCLI transcript @ Shervin`;
+- Podcast RSS discovery plus Shervin-local faster-whisper transcription with no cloud ASR;
+- Reddit Community zero-account acquisition with stable native t3 identity;
+- Bilibili author discovery unchanged on Shervin;
+- Bilibili public video-detail enrichment at ECS;
+- Bilibili subtitle enrichment through the unified media transcript queue using `bilibili_subtitle_v1`.
+
+Important merge decisions:
+- early YouTube commit `c5751ff` was deliberately excluded; the validated `e0acdcc` implementation remains authoritative;
+- Bilibili detail was reapplied as Bilibili-only delta so its old YouTube parent behavior did not leak into the integration branch;
+- Bilibili subtitle was migrated from its historical `entry_transcript_v1` implementation into the newer `collector_transcripts` architecture;
+- YouTube, Bilibili and Podcast share lease/state infrastructure only; identity rules, backend IDs, markers and provenance remain platform-specific;
+- Reddit Community and Instagram/Twitter platform gates coexist without weakening Instagram fail-closed behavior.
+
+Combined verification on final functional bytes before this documentation-only summary:
+- focused Bilibili/media/router suite: 143/143;
+- full Quiet River regression: 382/382;
+- 0 failures, 0 skips, 0 todos.
+
+No production release or production database mutation was performed by this integration step. The WeRSS QR-login/single-source release gate remains authoritative before any production merge/deploy.
