@@ -34,10 +34,10 @@ function originalLink(job,value){
     return {link:`https://www.youtube.com/watch?v=${videoId}`,guid:'youtube:'+videoId,youtubeId:videoId,noteId:null};
   }
   if(job.platform==='reddit'){
-    if(kind!=='community.posts'||!['reddit.com','www.reddit.com','old.reddit.com'].includes(u.hostname))throw new Error('Original link mismatch');
+    if(!['community.posts','user.posts'].includes(kind)||!['reddit.com','www.reddit.com','old.reddit.com'].includes(u.hostname))throw new Error('Original link mismatch');
     const match=/^\/r\/([A-Za-z0-9_]{2,32})\/comments\/([a-z0-9]+)(?:\/[^/?#]+)?\/?$/i.exec(u.pathname);
     if(!match)throw new Error('Original link mismatch');
-    const expected=String(job.authorId||'').toLowerCase();if(!expected||match[1].toLowerCase()!==expected)throw new Error('Original link community mismatch');
+    if(kind==='community.posts'){const expected=String(job.authorId||'').toLowerCase();if(!expected||match[1].toLowerCase()!==expected)throw new Error('Original link community mismatch');}
     const id='t3_'+match[2].toLowerCase();
     return {link:`https://www.reddit.com/r/${match[1]}/comments/${match[2].toLowerCase()}/`,guid:id,redditId:id,subreddit:match[1]};
   }

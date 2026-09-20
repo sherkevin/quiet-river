@@ -626,9 +626,10 @@ test('Reddit community is claimable through the single-browser lease without bec
  assert.ok(claimed.job);assert.equal(claimed.job.platform,'reddit');assert.equal(claimed.job.authorId,'localllama');assert.equal(claimed.job.kind,'community.posts');assert.equal(claimed.job.backendId,'reddit-rss-shervin');
  assert.equal(db.channels().find(c=>c.id===channel.id).credential_group,undefined);
 });
-test('Windows collector maps Reddit only to the bounded RSS wrapper and never to login commands',()=>{
+test('Windows collector keeps distinct zero-account Reddit Community RSS and User OpenCLI read paths',()=>{
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
- assert.match(src,/reddit-rss\.cjs/);assert.match(src,/backendId!=='reddit-rss-shervin'/);
+ assert.match(src,/job\.kind==='community\.posts'&&job\.backendId==='reddit-rss-shervin'/);assert.match(src,/reddit-rss\.cjs/);
+ assert.match(src,/job\.kind==='user\.posts'&&job\.backendId==='opencli-reddit-user-shervin'/);assert.match(src,/config\.opencliMain,'reddit','user-posts',job\.authorId/);
  assert.doesNotMatch(src,/reddit.*login|rdt login/i);
 });
 
@@ -690,4 +691,37 @@ test('Windows Bilibili subtitle worker uses one fixed read-only OpenCLI command'
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
  assert.match(src,/function collectBilibiliSubtitle/);assert.match(src,/config\.opencliMain,'bilibili','subtitle',original\.link/);assert.match(src,/backendId:'opencli-bilibili-shervin'/);assert.match(src,/out\.push\('bilibili_subtitle_v1'\)/);
  assert.doesNotMatch(src,/bilibili.*login/i);
+});
+
+test('Reddit user-post rows derive stable t3 identity from canonical URL and keep publication unknown',()=>{
+ const job={platform:'reddit',kind:'user.posts',authorId:'rm-rf-rm',name:'u/rm-rf-rm'};
+ const row={title:'Biweekly megathread',subreddit:'LocalLLaMA',score:10,comments:5,url:'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/biweekly_megathread_project_showcase/'};
+ const [item]=normalize(job,[row]);
+ assert.equal(item.link,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/');
+ assert.equal(item.published,null);assert.equal(item.author,'rm-rf-rm');assert.equal(item.summary,'');
+ const [validated]=validateItems({platform:'reddit',label:'user.posts',authorId:'rm-rf-rm'},[item]);
+ assert.equal(validated.guid,'t3_1wgcpww');assert.equal(validated.content_state,'META');
+ assert.throws(()=>normalize(job,[{...row,id:'t3_wrong'}]),/identity mismatch/);
+ assert.throws(()=>validateItems({platform:'reddit',label:'user.posts',authorId:'rm-rf-rm'},[{...item,author:'someoneelse'}]),/author/);
+});
+
+test('Reddit user source is claimed through zero-account OpenCLI user-posts without a credential group',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'reddit-user-source',name:'u/rm-rf-rm',platform:'reddit',url:'https://www.reddit.com/user/rm-rf-rm/',sourceType:'author',tags:[],adapter:{platform:'reddit',id:'rm-rf-rm'},enabled:true};
+ const config={adapters:{desktopPlatforms:['reddit']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=24 WHERE id=?',channel.id);
+ const service={db,config,provisionChannels:async()=>{},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=? WHERE id=?',state,error,job.id)};
+ const collector=new DesktopCollector(service);service.desktop=collector;db.createRun([channel],'manual');
+ const claimed=collector.claim(['reddit']);
+ assert.ok(claimed.job);assert.equal(claimed.job.platform,'reddit');assert.equal(claimed.job.authorId,'rm-rf-rm');assert.equal(claimed.job.kind,'user.posts');assert.equal(claimed.job.backendId,'opencli-reddit-user-shervin');
+ assert.equal(db.channels().find(c=>c.id===channel.id).credential_group,undefined);
+});
+
+test('Windows Reddit user worker uses only the public user-posts read command and never login or comment history',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/job\.kind==='user\.posts'&&job\.backendId==='opencli-reddit-user-shervin'/);
+ assert.match(src,/config\.opencliMain,'reddit','user-posts',job\.authorId/);
+ assert.doesNotMatch(src,/reddit.*login|rdt login/i);
+ const userBranch=/job\.kind==='user\.posts'[\s\S]{0,500}?runOpencliRead\([^;]+\);/.exec(src)?.[0]||'';
+ assert.doesNotMatch(userBranch,/user-comments|home|saved|upvoted|subscribed/);
 });

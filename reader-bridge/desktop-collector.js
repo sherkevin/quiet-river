@@ -41,6 +41,7 @@ function validateItems(channel,items){
     catch{fail('collector original URL does not match platform');}
     if(typeof item.title!=='string'||!item.title.trim()||item.title.length>1000)fail('invalid title');
     if(channel.platform==='instagram'&&String(item.author||'').toLowerCase()!==String(channel.authorId||'').toLowerCase())fail('Instagram item author does not match registered source');
+    if(channel.platform==='reddit'&&channel.label==='user.posts'&&String(item.author||'').toLowerCase()!==String(channel.authorId||'').toLowerCase())fail('Reddit user item author does not match registered source');
     const published=item.published==null?null:Number(item.published);
     if(published!==null&&(!Number.isSafeInteger(published)||published<946684800000||published>Date.now()+300000))fail('invalid publication date');
     const summary=typeof item.summary==='string'?item.summary.slice(0,1500):'';
@@ -114,7 +115,7 @@ class DesktopCollector {
     return backends;
   }
   activeBackend(channel,source,now=Date.now()){
-    if(channel.transport==='desktop'&&source?.platform==='reddit')return 'reddit-rss-shervin';
+    if(channel.transport==='desktop'&&source?.platform==='reddit')return channel.label==='user.posts'?'opencli-reddit-user-shervin':'reddit-rss-shervin';
     if(channel.transport==='desktop'&&source?.platform!=='instagram')return 'opencli-shervin';
     const [cap]=sourceCapabilities(source,[channel],{collector:this.status(),backendStatus:this.backendStatus(now)});
     return cap?.activeBackend||null;

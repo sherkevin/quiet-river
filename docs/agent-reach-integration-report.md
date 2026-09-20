@@ -594,3 +594,71 @@ Combined verification on final functional bytes before this documentation-only s
 - 0 failures, 0 skips, 0 todos.
 
 No production release or production database mutation was performed by this integration step. The WeRSS QR-login/single-source release gate remains authoritative before any production merge/deploy.
+
+## 2026-09-20 — Reddit User zero-account acquisition
+
+### Backend decision
+
+Reddit User/Author subscriptions were re-tested after Community support was already integrated. The result differs from the earlier conservative assumption that User discovery would require login.
+
+The selected capability is:
+
+`reddit.user.posts -> opencli-reddit-user-shervin`
+
+Community and User deliberately use different physical backends:
+- Community: official `/r/<community>/.rss` through Shervin Browser Bridge with `credentials:'omit'`;
+- User: OpenCLI `reddit user-posts <registered username>`.
+
+They share Reddit post identity (`t3_<post_id>`) but do not share source identity or acquisition semantics.
+
+### Real no-login evidence
+
+Shervin was not logged into Reddit: the earlier `reddit whoami` probe exited 77.
+
+Using the public username `rm-rf-rm`, selected from a public `r/LocalLLaMA` post:
+- `reddit user rm-rf-rm`: exit 0;
+- `reddit user-posts rm-rf-rm --limit 3`: exit 0, 3 submitted-post rows;
+- `reddit user-comments rm-rf-rm --limit 3`: exit 0, 3 comment rows.
+
+The User source consumes only `user-posts`. Comments are explicitly excluded from Feed discovery.
+
+Observed `user-posts` row contract:
+- title;
+- subreddit;
+- score;
+- comments count;
+- canonical Reddit post URL;
+- no direct post ID;
+- no reliable publication timestamp.
+
+Therefore Quiet River derives stable `t3_<post_id>` from the canonical `/comments/<post_id>/` URL and preserves `published=null` instead of inferring a time.
+
+### Why User RSS was rejected
+
+Two obvious RSS routes were tested with no credentials:
+- `/user/rm-rf-rm/.rss?limit=3`: HTTP 200, but the feed is mixed user activity and the three sampled entries were comment URLs, not a submitted-post-only timeline;
+- `/user/rm-rf-rm/submitted/.rss?limit=3`: HTTP 429 in the same environment.
+
+So User discovery does not pretend those RSS paths are reliable. The already-working zero-account OpenCLI `user-posts` route is used instead.
+
+### Implemented safety/identity contract
+
+- `/user/<username>` and `/u/<username>` become Reddit Author sources;
+- subreddit pages remain Reddit Community sources;
+- post/comment pages are never accepted as source identities;
+- one `user.posts` desktop channel per User source, no credential group;
+- fixed worker command is read-only `opencli reddit user-posts <registered username> --limit N`;
+- worker does not call Reddit login, home, saved, upvoted, subscribed or user-comments;
+- canonical post URL yields stable `t3_<post_id>`;
+- ECS requires normalized item author to equal the registered username;
+- cross-source author substitution is rejected before import;
+- publication time remains unknown when the upstream row does not provide it;
+- source UI now labels Reddit as supporting both Community and Blogger/Author onboarding.
+
+### Verification
+
+Focused Reddit/source/collector/capability/backend suite after User integration: 156/156 passed, 0 failed.
+
+Production remains unchanged. This feature stays on `chatgpt/acquisition-integration-v1` behind the existing WeRSS release gate.
+
+Full combined Quiet River regression after the Reddit User functional/docs changes: **388/388 passed**, 0 failed, 0 skipped, 0 todo. This run still made no production deployment or production database mutation.

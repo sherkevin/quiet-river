@@ -64,10 +64,12 @@ function channelsFor(source, options = {}) {
   const adapter = source.adapter || {};
   const id = adapter.id || '';
   const base = options.rsshub || 'http://127.0.0.1:1200';
-  if (source.platform==='reddit'&&desktopPlatforms.includes('reddit')&&/^[A-Za-z0-9_]{2,32}$/.test(id)) {
-    add('community.posts','desktop',`https://quiet-river.invalid/desktop/reddit/${encodeURIComponent(id)}/community.posts`,{
-      enabled:true,group_key:'browser:reddit',author_id:id.toLowerCase(),desktop_kind:'community.posts',source_type:'community',browser:true,
-      windowNote:'Shervin 浏览器网络读取 Reddit 官方 RSS；Feed 请求 credentials=omit，不需要 Reddit 账号；单次最多20条，评论留给详情增强',min_gap_ms:5000,interval_ms:30*60000
+  if (source.platform==='reddit'&&desktopPlatforms.includes('reddit')&&/^[A-Za-z0-9_-]{2,32}$/.test(id)) {
+    const userSource=source.sourceType==='author',kind=userSource?'user.posts':'community.posts',sourceType=userSource?'author':'community';
+    add(kind,'desktop',`https://quiet-river.invalid/desktop/reddit/${encodeURIComponent(id)}/${kind}`,{
+      enabled:true,group_key:'browser:reddit',author_id:id.toLowerCase(),desktop_kind:kind,source_type:sourceType,browser:true,
+      windowNote:userSource?'Shervin OpenCLI 零账号读取 Reddit 用户公开投稿；单次最多20条，发布时间未知且评论不进入主 Feed':'Shervin 浏览器网络读取 Reddit 官方 RSS；Feed 请求 credentials=omit，不需要 Reddit 账号；单次最多20条，评论留给详情增强',
+      min_gap_ms:5000,interval_ms:30*60000
     });
   } else if (desktopPlatforms.includes(source.platform) && ['zhihu','xiaohongshu','instagram'].includes(source.platform) && id) {
     const kinds=source.platform==='zhihu'?['answers','articles']:source.platform==='xiaohongshu'?['notes']:['posts'];

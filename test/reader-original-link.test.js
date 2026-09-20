@@ -139,3 +139,11 @@ test('Reddit RSS wrapper uses official Atom endpoint with credentials omitted an
  assert.match(script,/const match=\/\^t3_/);assert.doesNotMatch(script,/readNetworkCapture|reddit_session|Authorization|Cookie|credentials:'include'/);
  for(const forbidden of ['POST','PUT','PATCH','DELETE','upvote','comment\\('])assert.doesNotMatch(script,new RegExp(forbidden,'i'));
 });
+
+test('Reddit user-post links derive stable t3 identity without pretending the post URL proves authorship',()=>{
+ const job={platform:'reddit',kind:'user.posts',authorId:'rm-rf-rm'};
+ const canonical=originalLink(job,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/biweekly_megathread_project_showcase/');
+ assert.equal(canonical.guid,'t3_1wgcpww');assert.equal(canonical.redditId,'t3_1wgcpww');
+ assert.equal(canonical.link,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/');
+ assert.throws(()=>originalLink(job,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/title/patzewg/'),/mismatch/);
+});

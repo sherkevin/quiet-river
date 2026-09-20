@@ -119,9 +119,13 @@ function collect(job,limitOverride){
   const limit=Math.min(20,Math.max(1,Number(limitOverride??job.limit??20)||20));
   let r;
   if(job.platform==='reddit'){
-    if(job.kind!=='community.posts'||job.backendId!=='reddit-rss-shervin')throw new Error('Unsupported Reddit read-only backend');if(!opencliReady)return {leaseId:job.leaseId,status:'BROWSER_OFFLINE',items:[]};
-    const script=path.join(__dirname,'reddit-rss.cjs');if(!fs.existsSync(script))throw new Error('Reddit RSS wrapper is missing');
-    r=spawnSync(process.execPath,[script,job.authorId,String(limit)],{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
+    if(!opencliReady)return {leaseId:job.leaseId,status:'BROWSER_OFFLINE',items:[]};
+    if(job.kind==='community.posts'&&job.backendId==='reddit-rss-shervin'){
+      const script=path.join(__dirname,'reddit-rss.cjs');if(!fs.existsSync(script))throw new Error('Reddit RSS wrapper is missing');
+      r=spawnSync(process.execPath,[script,job.authorId,String(limit)],{encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,OPENCLI_PROFILE:config.profile||process.env.OPENCLI_PROFILE||''}});
+    }else if(job.kind==='user.posts'&&job.backendId==='opencli-reddit-user-shervin'){
+      r=runOpencliRead(config,[config.opencliMain,'reddit','user-posts',job.authorId,'--limit',String(limit),'-f','json','--trace','off','--site-session','ephemeral']);
+    }else throw new Error('Unsupported Reddit read-only backend');
   }else if(job.platform==='instagram'){
     if(job.kind!=='posts'||job.backendId!=='opencli-instagram-shervin')throw new Error('Unsupported Instagram read-only backend');
     if(!job.authProbe&&localBackendStatus()['opencli-instagram-shervin'].status!=='ok')return {leaseId:job.leaseId,status:'AUTH_REQUIRED',items:[]};

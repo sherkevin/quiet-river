@@ -33,12 +33,19 @@ function normalizeInstagramRow(job,row){
 }
 function normalizeRedditRow(job,row){
   if(!row||typeof row!=='object')throw new Error('Invalid Reddit row');
-  const id=String(row.id||''),subreddit=String(row.subreddit||''),title=String(row.title||'').trim();
-  if(!/^t3_[a-z0-9]+$/i.test(id)||!subreddit||!title)throw new Error('Invalid Reddit identity');
-  if(subreddit.toLowerCase()!==String(job.authorId||'').toLowerCase())throw new Error('Reddit community mismatch');
-  const original=originalLink({...job,kind:'community.posts'},String(row.url||''));if(original.redditId.toLowerCase()!==id.toLowerCase())throw new Error('Reddit post identity mismatch');
-  let published=null;if(row.updated){const n=Date.parse(String(row.updated));if(Number.isFinite(n))published=n;}
-  return {title:title.slice(0,1000),link:original.link,published,summary:String(row.summary||'').trim().slice(0,1500),author:String(row.author||'').slice(0,100)};
+  const kind=String(job.kind||''),subreddit=String(row.subreddit||''),title=String(row.title||'').trim();
+  if(!['community.posts','user.posts'].includes(kind)||!subreddit||!title)throw new Error('Invalid Reddit identity');
+  if(kind==='community.posts'){
+    const id=String(row.id||'');if(!/^t3_[a-z0-9]+$/i.test(id))throw new Error('Invalid Reddit identity');
+    if(subreddit.toLowerCase()!==String(job.authorId||'').toLowerCase())throw new Error('Reddit community mismatch');
+    const original=originalLink({...job,kind},String(row.url||''));if(original.redditId.toLowerCase()!==id.toLowerCase())throw new Error('Reddit post identity mismatch');
+    let published=null;if(row.updated){const n=Date.parse(String(row.updated));if(Number.isFinite(n))published=n;}
+    return {title:title.slice(0,1000),link:original.link,published,summary:String(row.summary||'').trim().slice(0,1500),author:String(row.author||'').slice(0,100)};
+  }
+  const original=originalLink({...job,kind},String(row.url||'')),id=String(row.id||'');
+  if(id&&(!/^t3_[a-z0-9]+$/i.test(id)||id.toLowerCase()!==original.redditId.toLowerCase()))throw new Error('Reddit post identity mismatch');
+  const author=String(job.authorId||'').toLowerCase();if(!/^[a-z0-9_-]{3,20}$/.test(author))throw new Error('Invalid Reddit user identity');
+  return {title:title.slice(0,1000),link:original.link,published:null,summary:'',author};
 }
 function normalizeTwitterRow(job,row){
   if(!row||typeof row!=='object')throw new Error('Invalid Twitter row');

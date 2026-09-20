@@ -152,30 +152,36 @@ Status:
 - do not enable Instagram in production and do not spend further integration time unless a stable zero-account public path appears later;
 - if that happens, restart from a fresh no-cookie canary instead of reviving the logged-in-session design.
 
-### E. P1 — Reddit Community — DONE on dedicated feature branch; User deferred
+### E. P1 — Reddit Community + User — ZERO-ACCOUNT DISCOVERY DONE
 
-Agent-Reach finding remains correct for anonymous JSON: Reddit JSON endpoints return 403 and new official API registration is not a practical default. Quiet River found a subscription-specific path that Agent-Reach does not use: the official subreddit Atom feed is anonymously readable through Shervin's browser network stack when the feed request explicitly uses `credentials:'omit'`.
+Agent-Reach finding remains correct for several anonymous JSON paths: Reddit JSON endpoints can return 403 and new official API registration is not a practical default. Quiet River now has two subscription-specific zero-account routes: Community discovery uses the official subreddit Atom feed through Shervin with `credentials:'omit'`; User/Author discovery uses OpenCLI's public `user-posts` command after a no-login canary proved it returns submitted posts reliably while the obvious User RSS alternatives do not.
 
 Implemented capability:
 
 reddit.community.posts
 1. Reddit RSS @ Shervin — zero-account, official Atom feed, credentials omitted
 
-Completed:
-- [x] reuse the generalized Community source type
-- [x] canonical subreddit identity from `/r/<community>` only
-- [x] stable item identity from Atom `<id>` = `t3_<post_id>`
-- [x] discovery imports posts only; comments remain future detail enrichment
-- [x] fixed read-only Windows wrapper; no Reddit login/search/write command
-- [x] RSS request explicitly omits credentials; no Cookie or Authorization header
-- [x] bounded Chromium 152+ navigation stabilization by keeping network capture attached; capture records are never read/exported
-- [x] cross-community and mismatched t3/URL identities rejected on Windows/ECS boundaries
-- [x] real zero-account `r/LocalLLaMA` canary: 5/5 rows valid, unique t3 IDs, valid canonical URLs/timestamps, stderr 0
-- [x] full regression after implementation: 343/343
+reddit.user.posts
+1. OpenCLI Reddit User @ Shervin — zero-account public `user-posts`; comments/personalized feeds excluded
 
-Deferred:
-- `reddit.user.posts` is not included in this release. The first user-RSS experiment hit Browser Bridge navigation failure and has not passed the same zero-account identity canary.
-- OpenCLI/rdt-cli logged-in backends remain optional future enrichment/fallback only; they are not required for Community discovery.
+Completed:
+- [x] reuse the generalized Community source type for `/r/<community>`
+- [x] add Author source identity for `/user/<username>` and `/u/<username>`
+- [x] Community keeps official Atom RSS with stable `t3_<post_id>` identity and `credentials:'omit'`
+- [x] User discovery uses fixed read-only `opencli reddit user-posts <username>`; it does not call login/home/saved/upvoted/subscribed/user-comments
+- [x] User post identity is derived from canonical `/r/<sub>/comments/<post_id>/` URL -> `t3_<post_id>`
+- [x] User rows have no reliable publication field, so `published=null` is preserved instead of inventing a date
+- [x] ECS requires the normalized User item author to equal the registered username before import
+- [x] comments are excluded from the main Feed for both Community/User sources and remain future detail enrichment
+- [x] no credential group, Reddit account, Cookie import or automated login is required
+- [x] Community real canary: `r/LocalLLaMA`, 5/5 rows valid, unique t3 IDs, valid canonical URLs/timestamps
+- [x] User real canary while `whoami` remained unauthenticated: `user rm-rf-rm`, `user-posts --limit 3`, and `user-comments --limit 3` all exited 0; the User source intentionally consumes only the 3 submitted-post rows
+- [x] rejected RSS alternatives for User discovery: `/user/<name>/.rss` returns mixed comment activity; `/user/<name>/submitted/.rss` returned HTTP 429 in the same zero-account environment
+- [x] focused Reddit/source/collector/capability/backend regression after User integration: 156/156
+
+Remaining:
+- [ ] optional Reddit post detail/comments enrichment only if the native reader needs it; comments should not become independent Feed cards
+- logged-in Reddit home/saved/upvoted/subscribed backends remain out of scope unless the user later explicitly requests private/personalized Reddit features.
 
 ### F. P1 — Bilibili: keep author discovery, improve detail/search backends — DETAIL + SUBTITLE DONE
 

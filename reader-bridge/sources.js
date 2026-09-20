@@ -14,6 +14,8 @@ function authorIdentity(value) {
       (match=/^\/user\/profile\/([a-f\d]{24})\/?$/i.exec(u.pathname))) return {platform:'xiaohongshu',id:match[1]};
   if ((host==='instagram.com'||host==='www.instagram.com') &&
       (match=/^\/([A-Za-z0-9._]{1,30})\/?$/.exec(u.pathname)) && !['accounts','direct','explore','p','reel','reels','stories'].includes(match[1].toLowerCase())) return {platform:'instagram',id:match[1]};
+  if (['reddit.com','www.reddit.com','old.reddit.com'].includes(host) &&
+      (match=/^\/(?:user|u)\/([A-Za-z0-9_-]{3,20})\/?$/i.exec(u.pathname))) return {platform:'reddit',id:match[1].toLowerCase()};
   if (host==='juejin.cn' && (match=/^\/user\/(\d+)\/?$/.exec(u.pathname))) return {platform:'juejin',id:match[1]};
   return null;
 }

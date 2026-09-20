@@ -197,3 +197,13 @@ test('Reddit community capability uses the dedicated zero-account RSS backend',(
  assert.equal(cap.activeBackend,'reddit-rss-shervin');assert.equal(cap.status,'ok');
  assert.equal(cap.candidates[0].name,'Reddit RSS @ Shervin');
 });
+
+test('Reddit user capability uses zero-account OpenCLI user-posts instead of the Community RSS backend',()=>{
+ const user={id:'rdu',name:'u/rm-rf-rm',platform:'reddit',sourceType:'author',enabled:true};
+ const channel={id:'rduc',source_id:'rdu',label:'user.posts',transport:'desktop',enabled:true,state:'SUCCEEDED_NO_NEW'};
+ const [cap]=sourceCapabilities(user,[channel],{collector:{online:true}});
+ assert.equal(cap.id,'reddit.user.posts');
+ assert.deepEqual(cap.candidates.map(c=>c.id),['opencli-reddit-user-shervin']);
+ assert.equal(cap.activeBackend,'opencli-reddit-user-shervin');assert.equal(cap.status,'ok');
+ assert.equal(cap.candidates[0].name,'OpenCLI Reddit User @ Shervin');
+});
