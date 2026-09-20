@@ -11,6 +11,14 @@ function originalLink(job,value){
     if(!valid)throw new Error('Original link mismatch');
     return {link:u.href,guid:u.origin+u.pathname,noteId:null};
   }
+  if(job.platform==='twitter'){
+    if(!['tweets','author-posts'].includes(kind)||!['x.com','twitter.com','www.twitter.com'].includes(u.hostname))throw new Error('Original link mismatch');
+    const match=/^\/([A-Za-z0-9_]{1,15})\/status\/(\d{1,25})\/?$/.exec(u.pathname);
+    if(!match)throw new Error('Original link mismatch');
+    const expected=String(job.authorId||'').replace(/^@/,'');
+    if(!expected||match[1].toLowerCase()!==expected.toLowerCase())throw new Error('Original link author mismatch');
+    return {link:`https://x.com/${match[1]}/status/${match[2]}`,guid:match[2],tweetId:match[2],noteId:null};
+  }
   if(job.platform==='bilibili'){
     if(kind!=='videos'||u.hostname!=='www.bilibili.com')throw new Error('Original link mismatch');
     const match=/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/.exec(u.pathname);

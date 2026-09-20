@@ -136,3 +136,28 @@ test('explicit doctor can promote a probed fallback without mutating persisted c
     assert.deepEqual(db.get('SELECT state,error FROM channels WHERE id=?',authFailed.id),before);
   }finally{db.close();}
 });
+
+
+test('Twitter xgo feed is normalized into one stable author-posts capability',()=>{
+  const source={id:'tw1',name:'Author',platform:'twitter',url:'https://x.com/karpathy',enabled:true};
+  const channel={id:'twc',source_id:'tw1',label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',enabled:true,state:'SUCCEEDED_NO_NEW'};
+  const [cap]=sourceCapabilities(source,[channel],{});
+  assert.equal(cap.id,'twitter.author.posts');
+  assert.equal(cap.label,'author-posts');
+  assert.deepEqual(cap.candidates.map(c=>c.id),['twitter-cli-shervin','opencli-twitter-shervin','xgo-twitter-feed']);
+  assert.equal(cap.candidates[2].status,'ok');
+  assert.equal(cap.activeBackend,'xgo-twitter-feed');
+});
+
+test('Twitter direct backend can outrank xgo only after its own probe passes',()=>{
+  const source={id:'tw1',name:'Author',platform:'twitter',url:'https://x.com/karpathy',enabled:true};
+  const channel={id:'twc',source_id:'tw1',label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',enabled:true,state:'SUCCEEDED_NO_NEW'};
+  const [before]=sourceCapabilities(source,[channel],{});
+  assert.equal(before.activeBackend,'xgo-twitter-feed');
+  const [after]=sourceCapabilities(source,[channel],{backendStatus:{
+    'twitter-cli-shervin':{status:'ok',reason:'explicit credentials + user-posts canary passed',state:'READY'}
+  }});
+  assert.equal(after.activeBackend,'twitter-cli-shervin');
+  assert.equal(after.candidates[1].status,'off');
+  assert.equal(after.candidates[2].status,'ok');
+});

@@ -18,6 +18,9 @@ const BACKENDS = Object.freeze({
   rsshub: {id:'rsshub-ecs', name:'RSSHub @ ECS', kind:'service', description:'Self-hosted RSSHub adapter'},
   werss: {id:'werss-ecs', name:'WeRSS @ ECS', kind:'service', description:'Pinned WeRSS runtime for WeChat official accounts'},
   xiaohongshu_mcp: {id:'xiaohongshu-mcp-ecs', name:'xiaohongshu-mcp @ ECS', kind:'service', description:'Agent-Reach-style server fallback for Xiaohongshu using an explicitly configured local MCP service'},
+  twitter_cli: {id:'twitter-cli-shervin', name:'twitter-cli @ Shervin', kind:'desktop', description:'Agent-Reach preferred Twitter author-timeline backend; requires explicit TWITTER_AUTH_TOKEN + TWITTER_CT0'},
+  opencli_twitter: {id:'opencli-twitter-shervin', name:'OpenCLI Twitter @ Shervin', kind:'desktop', description:'Twitter/X browser-session fallback using the user-controlled Shervin Chrome session'},
+  xgo_twitter: {id:'xgo-twitter-feed', name:'api.xgo.ing Twitter Feed', kind:'network', description:'Existing third-party Twitter RSS feed retained as migration fallback'},
 });
 
 // Ordered backend policies are intentionally separate from persisted channels.
@@ -25,6 +28,7 @@ const BACKENDS = Object.freeze({
 // like Agent-Reach keeps an ordered candidate list independent of one runtime.
 const CAPABILITY_POLICIES=Object.freeze({
   'xiaohongshu.notes':['opencli-shervin','xiaohongshu-mcp-ecs'],
+  'twitter.author.posts':['twitter-cli-shervin','opencli-twitter-shervin','xgo-twitter-feed'],
 });
 
 function backendForTransport(transport) {
@@ -33,8 +37,15 @@ function backendForTransport(transport) {
 }
 
 function capabilityId(source, channel) {
+  if(source.platform==='twitter')return 'twitter.author.posts';
   const label=String(channel.label||'feed').replace(/[^A-Za-z0-9._-]+/g,'-');
   return `${source.platform || 'unknown'}.${label}`;
+}
+function backendForChannel(source,channel){
+  if(source?.platform==='twitter'&&channel.transport==='public'){
+    try{if(new URL(channel.url).hostname==='api.xgo.ing')return BACKENDS.xgo_twitter;}catch{}
+  }
+  return backendForTransport(channel.transport);
 }
 
 function backendById(id){return Object.values(BACKENDS).find(b=>b.id===id)||{id,name:id,kind:'unknown',description:'Policy backend'};}
@@ -51,8 +62,8 @@ function applyPolicy(capability,context={}){
   return {...capability,candidates:ordered};
 }
 
-function candidateStatus(channel, context={}) {
-  const backend=backendForTransport(channel.transport),collector=context.collector||null,state=channel.state||'UNKNOWN';
+function candidateStatus(channel, context={},source=null) {
+  const backend=backendForChannel(source,channel),collector=context.collector||null,state=channel.state||'UNKNOWN';
   let status='warn',reason=channel.error||state||'health not yet established';
   if(!channel.enabled||state==='NOT_CONFIGURED'){status='off';reason='backend is not configured/enabled';}
   else if(state==='AUTH_REQUIRED'){status='error';reason=channel.error||'credential group requires user re-authentication';}
@@ -67,8 +78,9 @@ function sourceCapabilities(source, channels, context={}) {
   const mine=channels.filter(c=>c.source_id===source.id);
   const grouped=new Map();
   for(const channel of mine){
-    const id=capabilityId(source,channel),candidate=candidateStatus(channel,context);
-    if(!grouped.has(id))grouped.set(id,{id,sourceId:source.id,platform:source.platform,label:channel.label||'feed',candidates:[]});
+    const id=capabilityId(source,channel),candidate=candidateStatus(channel,context,source);
+    const label=id==='twitter.author.posts'?'author-posts':channel.label||'feed';
+    if(!grouped.has(id))grouped.set(id,{id,sourceId:source.id,platform:source.platform,label,candidates:[]});
     grouped.get(id).candidates.push(candidate);
   }
   if(!mine.length)return [{id:`${source.platform||'unknown'}.unconfigured`,sourceId:source.id,platform:source.platform,label:'unconfigured',activeBackend:null,status:'off',candidates:[],reason:'no executable acquisition channel'}];

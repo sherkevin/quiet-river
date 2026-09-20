@@ -300,3 +300,32 @@ test('read-only OpenCLI does not retry unrelated failures',()=>{
  const result=runOpencliRead({profile:''},['opencli-main.js','xiaohongshu','user','author','--trace','off'],spawn);
  assert.equal(result.status,1);assert.equal(calls,1);assert.equal(result.qrNavigationRetried,undefined);
 });
+
+
+test('Twitter CLI and OpenCLI rows normalize to the same canonical tweet identity',()=>{
+ const job={platform:'twitter',kind:'tweets',authorId:'karpathy',name:'Andrej Karpathy'};
+ const id='2086848998204473743',when='Thu Jul 10 12:15:47 +0000 2026';
+ const cli=normalize(job,[{id,text:'same tweet text',author:{screenName:'karpathy'},createdAtISO:'2026-07-10T12:15:47Z'}])[0];
+ const opencli=normalize(job,[{id,text:'same tweet text',author:'karpathy',created_at:when,url:'https://x.com/karpathy/status/'+id}])[0];
+ assert.equal(cli.link,'https://x.com/karpathy/status/'+id);
+ assert.equal(opencli.link,cli.link);
+ assert.equal(cli.published,opencli.published);
+ assert.equal(cli.summary,'same tweet text');
+ assert.equal(opencli.summary,'same tweet text');
+ const validated=validateItems({platform:'twitter',label:'tweets',authorId:'karpathy'},[cli])[0];
+ assert.equal(validated.guid,id);
+ assert.equal(validated.link,cli.link);
+});
+
+test('Twitter normalization rejects another author even when tweet ID and URL shape are valid',()=>{
+ const job={platform:'twitter',kind:'tweets',authorId:'karpathy'};
+ assert.throws(()=>normalize(job,[{id:'2086848998204473743',text:'wrong author',author:'ylecun',created_at:'Thu Jul 10 12:15:47 +0000 2026',url:'https://x.com/ylecun/status/2086848998204473743'}]),/author mismatch/);
+ assert.throws(()=>validateItems({platform:'twitter',label:'tweets',authorId:'karpathy'},[{title:'wrong',link:'https://x.com/ylecun/status/2086848998204473743',published:null,summary:''}]),/original URL/);
+});
+
+test('Twitter media-only rows still get a stable non-empty card title',()=>{
+ const job={platform:'twitter',kind:'tweets',authorId:'karpathy',name:'Andrej Karpathy'};
+ const [item]=normalize(job,[{id:'2086848998204473743',text:'',author:{screenName:'karpathy'},createdAtISO:'2026-07-10T12:15:47Z'}]);
+ assert.equal(item.title,'Andrej Karpathy 的 X 帖子');
+ assert.equal(item.summary,'');
+});

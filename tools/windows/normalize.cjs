@@ -2,6 +2,7 @@
 const {originalLink}=require('./original-link.cjs');
 function normalize(job,rows){
   if(!Array.isArray(rows)||rows.length>50)throw new Error('Invalid OpenCLI list');
+  if(job.platform==='twitter')return rows.map(row=>normalizeTwitterRow(job,row));
   return rows.map(row=>{
     const original=originalLink(job,row.url);
     if(job.platform==='xiaohongshu'&&row.id&&String(row.id).toLowerCase()!==original.noteId)throw new Error('Original link identity mismatch');
@@ -16,6 +17,19 @@ function normalize(job,rows){
     }
     return {title:title.slice(0,1000),link:original.link,published,summary:''};
   });
+}
+function normalizeTwitterRow(job,row){
+  if(!row||typeof row!=='object')throw new Error('Invalid Twitter row');
+  const id=String(row.id||'');if(!/^\d{1,25}$/.test(id))throw new Error('Invalid Twitter tweet id');
+  const screen=String(typeof row.author==='object'?(row.author?.screenName||''):row.author||'').replace(/^@/,'');
+  if(!screen)throw new Error('Missing Twitter author');
+  const link=typeof row.url==='string'&&row.url?row.url:`https://x.com/${screen}/status/${id}`;
+  const original=originalLink({...job,kind:job.kind||'tweets'},link);
+  if(original.tweetId!==id)throw new Error('Twitter identity mismatch');
+  const text=String(row.text||'').trim(),rawDate=row.createdAtISO||row.created_at||row.createdAt||null;
+  let published=null;if(rawDate){const n=Date.parse(String(rawDate));if(Number.isFinite(n))published=n;}
+  const fallback=(job.name||('@'+screen))+' 的 X 帖子';
+  return {title:(text||fallback).slice(0,1000),link:original.link,published,summary:text.slice(0,1500)};
 }
 function selectFreshXhsNoteUrl(job,rows){
   if(job?.platform!=='xiaohongshu'||job?.kind!=='notes'||!Array.isArray(rows)||rows.length>100)throw new Error('Invalid Xiaohongshu refresh list');
