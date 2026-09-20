@@ -218,3 +218,9 @@ Instagram remains **prepared but not verified**. Do not enable scheduled Instagr
 ### Gate
 
 The implementation is prepared but **not connected**. Current runtime networks cannot reach V2EX. No scheduler traffic is enabled and no V2EX source is claimed working. A future network-path change must first pass the same read-only node canary, then explicitly set `V2EX_READY=true`.
+
+## 2026-09-20 — Instagram explicitly skipped by credential policy
+
+The user has no Instagram account and does not want an Instagram integration that requires account creation, cookies or a logged-in browser session. Agent-Reach's pinned Instagram channel explicitly depends on OpenCLI using the user's logged-in Chrome session. Quiet River's no-account NASA canary returned no rows and did not establish a zero-account path.
+
+Decision: mark Instagram **SKIPPED**, not merely blocked. Do not request Instagram credentials, do not automate login, and do not enable the prepared feature-branch code in production. Revisit only if a stable no-account public acquisition path is independently verified.

@@ -137,23 +137,19 @@ Success criteria:
 - note ID/xsec-token refresh semantics remain safe;
 - one logical author timeline has one scheduler owner.
 
-### D. P1 — Instagram Author source
+### D. P1 — Instagram Author source — SKIPPED
 
-Why:
-- Agent-Reach/OpenCLI already supports user search/profile/recent posts;
-- maps naturally to Quiet River's blogger model;
-- Quiet River currently has zero Instagram sources.
+Decision (2026-09-20): do not require the user to create an Instagram account or provide Instagram Cookie/session material.
 
-Target: instagram.author.posts -> OpenCLI @ Shervin
+Evidence:
+- Agent-Reach's pinned `InstagramChannel` explicitly uses OpenCLI with the user's logged-in Chrome session;
+- Quiet River's NASA read-only canary returned 0 rows and the OpenCLI/Browser-Bridge route was unavailable without a usable Instagram session;
+- no Instagram login was automated and no Instagram content was imported.
 
-Tasks:
-- [x] add platform/source validation
-- [x] add a bounded read-only Shervin wrapper over the same Instagram feed-by-username API used by OpenCLI
-- [x] normalize recent posts to Quiet River item contract with stable shortcode identity
-- [x] preserve caption/time/permalink without downloading private media
-- [x] add blogger/filter/UI platform support and Shervin-owned desktop channel
-- [ ] real backend canary — BLOCKED: OpenCLI 1.8.7 with Browser Bridge extension 1.0.21 returns BROWSER_CONNECT/EX_UNAVAILABLE for both official `instagram profile` and `instagram user`; the custom wrapper fails at the same bridge layer. No Instagram source is claimed working until the extension/runtime gate is resolved.
-- [ ] after a successful canary, add a concrete probe timestamp/status and only then allow scheduled production routing
+Status:
+- preparation code exists in feature-branch history but is not a verified/approved acquisition backend;
+- do not enable Instagram in production and do not spend further integration time unless a stable zero-account public path appears later;
+- if that happens, restart from a fresh no-cookie canary instead of reviving the logged-in-session design.
 
 ### E. P1 — Reddit Community/User source
 
