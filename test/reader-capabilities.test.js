@@ -171,3 +171,13 @@ test('V2EX community capability maps to its dedicated public API backend',()=>{
  assert.equal(cap.status,'ok');
  assert.equal(cap.candidates[0].name,'V2EX Public API');
 });
+
+test('Reddit community capability uses the dedicated zero-account RSS backend',()=>{
+ const community={id:'rd1',name:'r/LocalLLaMA',platform:'reddit',sourceType:'community',enabled:true};
+ const channel={id:'rdc',source_id:'rd1',label:'community.posts',transport:'desktop',enabled:true,state:'SUCCEEDED_NO_NEW'};
+ const [cap]=sourceCapabilities(community,[channel],{collector:{online:true}});
+ assert.equal(cap.id,'reddit.community.posts');
+ assert.deepEqual(cap.candidates.map(c=>c.id),['reddit-rss-shervin']);
+ assert.equal(cap.activeBackend,'reddit-rss-shervin');assert.equal(cap.status,'ok');
+ assert.equal(cap.candidates[0].name,'Reddit RSS @ Shervin');
+});

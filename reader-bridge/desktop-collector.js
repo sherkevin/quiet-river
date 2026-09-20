@@ -3,8 +3,8 @@ const crypto=require('node:crypto');
 const {channelsFor,escapeHTML,hash,stripHTML}=require('./core');
 const {originalLink}=require('../tools/windows/original-link.cjs');
 const {sourceCapabilities}=require('./capabilities');
-const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter','instagram']);
-const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','instagram']);
+const PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','twitter','instagram','reddit']);
+const PHYSICAL_DESKTOP_PLATFORMS=new Set(['zhihu','xiaohongshu','bilibili','instagram','reddit']);
 const AUTH_PLATFORMS=new Set(['zhihu','xiaohongshu','instagram']);
 const STATES=new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','BROWSER_OFFLINE']);
 const ENRICH_CAP='entry_body_v1',MAX_BODY_BYTES=1024*1024;
@@ -87,6 +87,7 @@ class DesktopCollector {
     return backends;
   }
   activeBackend(channel,source,now=Date.now()){
+    if(channel.transport==='desktop'&&source?.platform==='reddit')return 'reddit-rss-shervin';
     if(channel.transport==='desktop')return 'opencli-shervin';
     const [cap]=sourceCapabilities(source,[channel],{collector:this.status(),backendStatus:this.backendStatus(now)});
     return cap?.activeBackend||null;

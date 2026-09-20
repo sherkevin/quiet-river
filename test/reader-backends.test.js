@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const {backendIdForChannel,runBackend,listBackends,registerBackend,probeBackend,doctorBackends}=require('../reader-bridge/acquisition-backends');
 
 test('registry contains every persisted Quiet River transport backend',()=>{
-  assert.deepEqual(listBackends(),['direct-feed','opencli-shervin','opencli-twitter-shervin','quiet-river-native','rsshub-ecs','twitter-cli-shervin','v2ex-public-api','werss-ecs','xiaohongshu-mcp-ecs']);
+  assert.deepEqual(listBackends(),['direct-feed','opencli-shervin','opencli-twitter-shervin','quiet-river-native','reddit-rss-shervin','rsshub-ecs','twitter-cli-shervin','v2ex-public-api','werss-ecs','xiaohongshu-mcp-ecs']);
   assert.equal(backendIdForChannel({transport:'public'}),'direct-feed');
   assert.equal(backendIdForChannel({transport:'desktop'}),'opencli-shervin');
 });

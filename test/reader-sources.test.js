@@ -159,3 +159,17 @@ test('V2EX community stays NOT_CONFIGURED until a real network canary enables it
  assert.equal(channel.transport,'v2ex');
  assert.equal(channel.enabled,false);
 });
+
+test('Reddit subreddit URL becomes a Community source while post and user pages are not source identities',()=>{
+ assert.deepEqual(sourceIdentity('https://www.reddit.com/r/LocalLLaMA/'),{platform:'reddit',id:'localllama',sourceType:'community'});
+ assert.deepEqual(sourceIdentity('https://old.reddit.com/r/MachineLearning'),{platform:'reddit',id:'machinelearning',sourceType:'community'});
+ assert.equal(sourceIdentity('https://www.reddit.com/r/LocalLLaMA/comments/abc123/title/'),null);
+ assert.equal(sourceIdentity('https://www.reddit.com/user/example/'),null);
+});
+test('Reddit community produces one zero-account Shervin RSS channel',()=>{
+ const s={...base,id:'reddit-source',name:'r/LocalLLaMA',platform:'reddit',url:'https://www.reddit.com/r/LocalLLaMA/',sourceType:'community',feeds:[],adapter:{platform:'reddit',id:'localllama'}};
+ const [channel]=channelsFor(s,{desktopPlatforms:['reddit']});
+ assert.equal(channel.transport,'desktop');assert.equal(channel.label,'community.posts');assert.equal(channel.author_id,'localllama');
+ assert.equal(channel.desktop_kind,'community.posts');assert.equal(channel.source_type,'community');assert.equal(channel.credential_group,undefined);
+ assert.match(channel.windowNote,/credentials=omit/);
+});

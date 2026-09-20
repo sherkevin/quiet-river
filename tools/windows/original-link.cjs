@@ -25,6 +25,14 @@ function originalLink(job,value){
     if(!match)throw new Error('Original link mismatch');
     return {link:`https://www.instagram.com/${match[1]}/${match[2]}/`,guid:'instagram:'+match[2],instagramCode:match[2],noteId:null};
   }
+  if(job.platform==='reddit'){
+    if(kind!=='community.posts'||!['reddit.com','www.reddit.com','old.reddit.com'].includes(u.hostname))throw new Error('Original link mismatch');
+    const match=/^\/r\/([A-Za-z0-9_]{2,32})\/comments\/([a-z0-9]+)(?:\/[^/?#]+)?\/?$/i.exec(u.pathname);
+    if(!match)throw new Error('Original link mismatch');
+    const expected=String(job.authorId||'').toLowerCase();if(!expected||match[1].toLowerCase()!==expected)throw new Error('Original link community mismatch');
+    const id='t3_'+match[2].toLowerCase();
+    return {link:`https://www.reddit.com/r/${match[1]}/comments/${match[2].toLowerCase()}/`,guid:id,redditId:id,subreddit:match[1]};
+  }
   if(job.platform==='bilibili'){
     if(kind!=='videos'||u.hostname!=='www.bilibili.com')throw new Error('Original link mismatch');
     const match=/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)\/?$/.exec(u.pathname);

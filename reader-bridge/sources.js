@@ -1,7 +1,7 @@
 'use strict';
 const { safeURL } = require('./core');
 const PLATFORM_LABELS = { zhihu:'知乎', xiaohongshu:'小红书', wechat:'微信公众号',
-  blog:'博客', twitter:'X', instagram:'Instagram', v2ex:'V2EX', bilibili:'B站', github:'GitHub', podcast:'播客',
+  blog:'博客', twitter:'X', instagram:'Instagram', v2ex:'V2EX', reddit:'Reddit', bilibili:'B站', github:'GitHub', podcast:'播客',
   juejin:'掘金', csdn:'CSDN', arxiv:'arXiv', semanticscholar:'Semantic Scholar', youtube:'YouTube' };
 const FAILURES = new Set(['AUTH_REQUIRED','ACCESS_BLOCKED','TIMEOUT','UPSTREAM_ERROR','UNSAFE_URL']);
 const OK = new Set(['SUCCEEDED_NEW','SUCCEEDED_NO_NEW']);
@@ -22,6 +22,7 @@ function sourceIdentity(value) {
   const normalized=safeURL(value);if(!normalized)return null;
   const u=new URL(normalized),host=u.hostname.toLowerCase();let match;
   if((host==='v2ex.com'||host==='www.v2ex.com')&&(match=/^\/go\/([A-Za-z0-9_-]{1,64})\/?$/.exec(u.pathname)))return {platform:'v2ex',id:match[1],sourceType:'community'};
+  if(['reddit.com','www.reddit.com','old.reddit.com'].includes(host)&&(match=/^\/r\/([A-Za-z0-9_]{2,32})\/?$/.exec(u.pathname)))return {platform:'reddit',id:match[1].toLowerCase(),sourceType:'community'};
   return null;
 }
 function blockers(source, channels, config={}) {

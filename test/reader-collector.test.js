@@ -455,3 +455,33 @@ test('Instagram desktop source is claimable through the existing single-browser 
  const claimed=collector.claim(['instagram']);
  assert.ok(claimed.job);assert.equal(claimed.job.platform,'instagram');assert.equal(claimed.job.authorId,'nasa');assert.equal(claimed.job.kind,'posts');assert.equal(claimed.job.backendId,'opencli-shervin');
 });
+
+test('Reddit RSS rows normalize stable t3 identity, community, time and plain summary',()=>{
+ const job={platform:'reddit',kind:'community.posts',authorId:'localllama',name:'r/LocalLLaMA'};
+ const [item]=normalize(job,[{id:'t3_1wkxx8e',subreddit:'LocalLLaMA',author:'example',title:'A post',summary:'plain summary',updated:'2026-09-19T21:18:19+00:00',url:'https://www.reddit.com/r/LocalLLaMA/comments/1wkxx8e/'}]);
+ assert.equal(item.link,'https://www.reddit.com/r/LocalLLaMA/comments/1wkxx8e/');
+ assert.equal(item.published,Date.parse('2026-09-19T21:18:19+00:00'));assert.equal(item.author,'example');
+ const [validated]=validateItems({platform:'reddit',label:'community.posts',authorId:'localllama'},[item]);
+ assert.equal(validated.guid,'t3_1wkxx8e');assert.equal(validated.content_state,'PARTIAL');
+});
+test('Reddit RSS normalization rejects cross-community rows and mismatched t3 identity',()=>{
+ const job={platform:'reddit',kind:'community.posts',authorId:'localllama'};
+ assert.throws(()=>normalize(job,[{id:'t3_abc',subreddit:'MachineLearning',title:'x',url:'https://www.reddit.com/r/MachineLearning/comments/abc/x/'}]),/community mismatch/);
+ assert.throws(()=>normalize(job,[{id:'t3_wrong',subreddit:'LocalLLaMA',title:'x',url:'https://www.reddit.com/r/LocalLLaMA/comments/abc/x/'}]),/identity mismatch/);
+});
+test('Reddit community is claimable through the single-browser lease without becoming an auth credential group',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'reddit-source',name:'r/LocalLLaMA',platform:'reddit',url:'https://www.reddit.com/r/LocalLLaMA/',sourceType:'community',tags:[],adapter:{platform:'reddit',id:'localllama'},enabled:true};
+ const config={adapters:{desktopPlatforms:['reddit']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=23 WHERE id=?',channel.id);
+ const service={db,config,provisionChannels:async()=>{},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=? WHERE id=?',state,error,job.id)};
+ const collector=new DesktopCollector(service);service.desktop=collector;db.createRun([channel],'manual');
+ const claimed=collector.claim(['reddit']);
+ assert.ok(claimed.job);assert.equal(claimed.job.platform,'reddit');assert.equal(claimed.job.authorId,'localllama');assert.equal(claimed.job.kind,'community.posts');assert.equal(claimed.job.backendId,'reddit-rss-shervin');
+ assert.equal(db.channels().find(c=>c.id===channel.id).credential_group,undefined);
+});
+test('Windows collector maps Reddit only to the bounded RSS wrapper and never to login commands',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/reddit-rss\.cjs/);assert.match(src,/backendId!=='reddit-rss-shervin'/);
+ assert.doesNotMatch(src,/reddit.*login|rdt login/i);
+});
