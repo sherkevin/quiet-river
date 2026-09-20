@@ -9,6 +9,7 @@ const reading=require('./reading-history');
 const {capabilityReport}=require('./capabilities');
 const {runBackend,doctorBackends}=require('./acquisition-backends');
 const {githubDetailTarget,githubEnrichment}=require('./github-enrichment');
+const {youtubeVideoTarget,youtubeTranscript}=require('./youtube-enrichment');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
@@ -18,6 +19,7 @@ class ReaderService {
     this.kk=clients.kk || new ApiClient(config.karakeep,{Authorization:`Bearer ${config.karakeepToken || ''}`});
     this.internalFetch=clients.internalFetch || request;
     this.fetchNative=clients.fetchNative || fetchNativeMetadata;
+    this.youtubeTranscript=clients.youtubeTranscript || youtubeTranscript;
     meta.ensureSnapshots(db);
   }
   async importManifest(manifest,options={}) {
@@ -256,6 +258,9 @@ class ReaderService {
     const githubTarget=source.platform==='github'?githubDetailTarget(row.url):null,githubKind='github_rest_v1';
     const githubDone=githubTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,githubKind);
     const canGithubEnrich=!!githubTarget&&!githubDone;
+    const youtubeTarget=source.platform==='youtube'?youtubeVideoTarget(row.url):null,youtubeKind='youtube_transcript_v1';
+    const youtubeDone=youtubeTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,youtubeKind);
+    const canYoutubeEnrich=!!youtubeTarget&&!youtubeDone;
     const canFetch=channel?.transport==='public'&&['blog','github','csdn','juejin','wechat'].includes(source.platform)&&source.fullTextMode!=='feed'&&!['feed_full','metadata_only'].includes(source.content_policy);
     let upstream=null,html='',prepareAttempted=false,prepareImproved=false,contentUnavailable=false;
     try {
@@ -276,6 +281,22 @@ class ReaderService {
           this.db.audit('github-enrichment',id,'GitHub REST detail unavailable; existing content retained');
         }
       }
+      if(prepare&&canYoutubeEnrich){
+        prepareAttempted=true;
+        try{
+          const enriched=await this.youtubeTranscript(this,youtubeTarget),transcript=String(enriched.html||''),candidate=[html,transcript].filter(Boolean).join('<hr>');
+          if(stripHTML(transcript)){
+            html=candidate;prepareImproved=true;
+            await this.mf.call(`/v1/entries/${id}`,'PUT',{title:upstream.title||row.title,content:html});
+            this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,youtubeKind,'DONE',Date.now(),JSON.stringify({language:enriched.language,chars:enriched.chars,truncated:!!enriched.truncated}));
+            this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='youtube_subtitle_enrichment' WHERE entry_id=?",hash(html),id);
+            this.project({...upstream,content:html},channel,Date.now());this.db.run("UPDATE entries SET content_origin='youtube_subtitle_enrichment' WHERE id=?",id);row=this.db.get('SELECT * FROM entries WHERE id=?',id);
+          }
+        }catch(e){
+          this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,youtubeKind,'FAILED',Date.now(),String(e.message||e).slice(0,200));
+          this.db.audit('youtube-enrichment',id,'YouTube subtitle unavailable; existing content retained');
+        }
+      }
       if(prepare&&!prepareImproved&&canFetch&&stripHTML(html).length<1500){
         prepareAttempted=true;
         try {
@@ -287,13 +308,15 @@ class ReaderService {
     }catch{contentUnavailable=true;html=row.summary?`<p>${escapeHTML(row.summary)}</p>`:'';}
     const snapshot=meta.tagSnapshot(this.db,id),feedback=this.db.get('SELECT value FROM feedback WHERE entry_id=?',id)?.value||0,noteState=await this.articleNote(id);
     const githubDoneNow=githubTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,githubKind);
-    const canFetchFullText=githubTarget?!githubDoneNow:canFetch;
+    const youtubeDoneNow=youtubeTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,youtubeKind);
+    const prepareKind=githubTarget?(githubDoneNow?null:'github-detail'):youtubeTarget?(youtubeDoneNow?null:'youtube-transcript'):canFetch&&stripHTML(html).length<1500?'fulltext':null;
+    const canFetchFullText=!!prepareKind;
     const safeOriginal=safeURL(row.url)||null,contentLimit=2*1024*1024,contentTruncated=html.length>contentLimit;
     const readerMode=row.bookmark_id||row.content_state!=='META'?'reader':canFetchFullText?'fetchable':'original';
     return {id:row.id,title:row.title,author:row.author||source.name,source:source.name,sourceId:source.id,sourceUrl:safeURL(source.url)||null,platform:source.platform,readerMode,
       url:safeOriginal,published_at:row.published_at,discovered_at:row.discovered_at,status:row.status,tags:snapshot?.tags||source.tags||[],feedback,
       contentState:row.content_state,contentOrigin:row.content_origin,archiveState:row.archive_state,bookmarkId:row.bookmark_id||null,
-      content:html.slice(0,contentLimit),contentTextLength:stripHTML(html).length,contentTruncated,contentUnavailable,canFetchFullText,prepareAttempted,prepareImproved,
+      content:html.slice(0,contentLimit),contentTextLength:stripHTML(html).length,contentTruncated,contentUnavailable,canFetchFullText,prepareKind,prepareAttempted,prepareImproved,
       canAnnotate:!!this.config.karakeepToken&&row.content_state!=='META',note:noteState.note,noteBookmarkId:noteState.bookmarkId,notesConfigured:noteState.configured,noteUnavailable:noteState.unavailable};
   }
   async readerStatus(id) {

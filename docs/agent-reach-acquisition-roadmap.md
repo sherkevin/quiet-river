@@ -209,18 +209,32 @@ Remaining:
 - [ ] add issue/release/repository detail capabilities when a concrete Quiet River use case needs them
 - [ ] consider gh @ Shervin only for private/richer cases; do not replace public REST/Atom merely for uniformity
 
-### H. P1 — YouTube enrichment, not feed replacement
+### H. P1 — YouTube enrichment, not feed replacement — SUBTITLE DONE
 
-Current official YouTube channel feed stays discovery path.
+Current official YouTube channel feed remains the scheduler/discovery owner. yt-dlp is used only for explicit on-demand enrichment.
 
-Add:
-- youtube.video.subtitle -> yt-dlp
-- youtube.video.detail -> yt-dlp
+Backend:
+- youtube.video.subtitle -> pinned yt-dlp @ ECS
+- youtube.video.detail -> Atom metadata remains sufficient for now; no duplicate discovery path added
 
-Tasks:
-- [ ] subtitle extraction as native article enrichment
-- [ ] no video download by default
-- [ ] preserve channel feed as scheduler owner
+Completed:
+- [x] preserve official channel feed as scheduler owner
+- [x] install pinned yt-dlp 2026.08.19 with official SHA-256 verification
+- [x] add reproducible deploy/install-ytdlp.sh; no latest/pip drift
+- [x] only accept canonical YouTube video IDs/URLs
+- [x] subtitle extraction runs with --skip-download; no video/audio download
+- [x] use only loopback proxy path, bounded retries/socket timeout and 45s process timeout
+- [x] prefer English original automatic captions (en-orig), fallback to en
+- [x] parse JSON3 into escaped timestamped paragraphs with transcript/file size bounds
+- [x] cache success in entry_enrichments so repeated reads do not rerun yt-dlp
+- [x] append transcript to existing Atom description; preserve URL/publication/read state
+- [x] UI explicitly says 获取字幕 rather than generic 补全文
+- [x] failure retains existing Atom content
+- [x] real ACM RecSys canary passed: 48,934 transcript chars, 42 paragraphs, not truncated
+
+Runtime note:
+- direct YouTube access from ECS exceeded the time budget; the existing loopback Mihomo proxy 127.0.0.1:7890 completed the same public subtitle canary successfully.
+- no account cookie or YouTube credential is used.
 
 ### I. P2 — V2EX Community source
 

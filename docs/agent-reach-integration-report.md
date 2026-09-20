@@ -281,3 +281,52 @@ Do not replace official GitHub Atom feeds. Five active Quiet River GitHub source
 ### Credential boundary
 
 Shervin already has gh 2.92.0 authenticated through Windows keyring. That credential was not copied to ECS and is not required for public commit enrichment. gh remains a potential second backend for private/richer detail only.
+
+
+## 2026-09-20 — P1 YouTube subtitle enrichment
+
+### Decision
+
+Keep the official YouTube channel Atom feed as discovery. Add yt-dlp only as an explicit article enrichment backend for public subtitles; do not download video/audio and do not create a second scheduler path.
+
+### Runtime
+
+- upstream latest stable verified from official release metadata: yt-dlp 2026.08.19;
+- official yt-dlp asset SHA-256: 1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6;
+- installed at /opt/quiet-river-tools/yt-dlp/2026.08.19/yt-dlp;
+- repository installer deploy/install-ytdlp.sh pins both version and SHA and rejects version mismatch;
+- direct ECS YouTube extraction exceeded the bounded canary window;
+- existing loopback Mihomo proxy http://127.0.0.1:7890 succeeded and is the default bounded network path.
+
+### Implemented
+
+- canonical YouTube watch/youtu.be video identity parser;
+- pinned yt-dlp invocation with --ignore-config, --no-playlist, --skip-download, en-orig/en JSON3 automatic captions;
+- no cookies or browser-profile options;
+- socket timeout 10s, retries 1, extractor retries 1, process timeout 45s;
+- loopback-only proxy validation;
+- temporary subtitle directory always removed;
+- subtitle file maximum 4 MiB and rendered transcript maximum 500,000 characters;
+- JSON3 segments are normalized, consecutive duplicates removed and grouped into timestamped escaped paragraphs;
+- successful transcript is appended to the existing Atom body and cached via entry_enrichments/youtube_transcript_v1;
+- imports/entries provenance becomes youtube_subtitle_enrichment without changing article URL/publication/read state;
+- UI uses explicit 获取字幕 / 正在获取字幕 labels;
+- failure records enrichment failure while retaining the original Atom content.
+
+### Verification
+
+- focused YouTube/backend tests: 18/18 passed;
+- full regression: 350/350 passed;
+- real ACM RecSys public video canary:
+  - video ID TlR7douxQRM;
+  - yt-dlp doctor status READY;
+  - language en-orig;
+  - transcript 48,934 characters;
+  - 42 timestamped paragraphs;
+  - rendered HTML 51,515 characters;
+  - not truncated;
+  - no production database mutation and no media download.
+
+### Remaining
+
+No additional YouTube discovery work is needed. Optional future work is richer video metadata only if a concrete reader use case appears.

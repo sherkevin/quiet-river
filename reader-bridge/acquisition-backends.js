@@ -5,6 +5,8 @@
 // Quiet River keeps source/channel persistence stable while backend execution
 // becomes replaceable behind a small registry contract.
 
+const fs=require('node:fs');
+const {spawnSync}=require('node:child_process');
 const {ApiClient}=require('./network');
 const {parseFullFeed,safeURL,escapeHTML}=require('./core');
 const {backendForTransport}=require('./capabilities');
@@ -111,5 +113,11 @@ registerProbe('rsshub-ecs',service=>probeLocalHttp(service,service.config.adapte
 registerProbe('werss-ecs',service=>probeLocalHttp(service,service.config.adapters?.werss));
 registerProbe('xiaohongshu-mcp-ecs',service=>probeLocalHttp(service,service.config.adapters?.xiaohongshuMcp));
 registerProbe('v2ex-public-api',async()=>({status:'warn',reason:'public API backend is built in; real availability is measured by scheduled/source checks, doctor does not fetch platform content',state:'UNVERIFIED'}));
+registerProbe('yt-dlp-ecs',async service=>{
+  const bin=service.config.tools?.ytDlp||'';if(!bin||!fs.existsSync(bin))return {status:'off',reason:'pinned yt-dlp runtime is not installed',state:'NOT_CONFIGURED'};
+  const r=spawnSync(bin,['--version'],{encoding:'utf8',timeout:3000,maxBuffer:65536,env:{...process.env,NO_COLOR:'1'}});
+  if(r.error||r.status!==0)return {status:'error',reason:'yt-dlp runtime exists but version probe failed',state:'BROKEN'};
+  const version=String(r.stdout||'').trim();return {status:version==='2026.08.19'?'ok':'warn',reason:'yt-dlp local runtime '+version,state:version==='2026.08.19'?'READY':'UNPINNED'};
+});
 
 module.exports={registerBackend,registerProbe,backendIdForChannel,runBackend,listBackends,probeBackend,doctorBackends};
