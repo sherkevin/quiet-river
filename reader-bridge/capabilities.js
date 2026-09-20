@@ -19,7 +19,7 @@ const BACKENDS = Object.freeze({
   werss: {id:'werss-ecs', name:'WeRSS @ ECS', kind:'service', description:'Pinned WeRSS runtime for WeChat official accounts'},
   xiaohongshu_mcp: {id:'xiaohongshu-mcp-ecs', name:'xiaohongshu-mcp @ ECS', kind:'service', description:'Agent-Reach-style server fallback for Xiaohongshu using an explicitly configured local MCP service'},
   v2ex: {id:'v2ex-public-api', name:'V2EX Public API', kind:'network', description:'Agent-Reach-derived public V2EX node/topic API backend'},
-  bili_cli: {id:'bili-cli-shervin', name:'bili-cli @ Shervin', kind:'desktop', description:'Agent-Reach preferred Bilibili video detail/search backend; read-only and no login required for detail'},
+  bili_public: {id:'bilibili-public-detail-api', name:'Bilibili Public Detail API', kind:'network', description:'Zero-credential public video detail backend validated across all current Quiet River Bilibili authors'},
   reddit_rss: {id:'reddit-rss-shervin', name:'Reddit RSS @ Shervin', kind:'desktop', description:'Official Reddit Atom feed fetched through Shervin browser networking with credentials omitted'},
   twitter_cli: {id:'twitter-cli-shervin', name:'twitter-cli @ Shervin', kind:'desktop', description:'Agent-Reach preferred Twitter author-timeline backend; requires explicit TWITTER_AUTH_TOKEN + TWITTER_CT0'},
   opencli_twitter: {id:'opencli-twitter-shervin', name:'OpenCLI Twitter @ Shervin', kind:'desktop', description:'Twitter/X browser-session fallback using the user-controlled Shervin Chrome session'},

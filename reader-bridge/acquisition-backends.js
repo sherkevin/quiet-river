@@ -107,7 +107,7 @@ registerProbe('reddit-rss-shervin',async service=>{const status=service.desktop?
 registerProbe('twitter-cli-shervin',async service=>service.desktop?.backendStatus?.()['twitter-cli-shervin']||{status:'off',reason:'Shervin has not reported a verified twitter-cli backend',state:'NOT_CONFIGURED'});
 registerProbe('opencli-twitter-shervin',async service=>service.desktop?.backendStatus?.()['opencli-twitter-shervin']||{status:'off',reason:'Shervin has not reported a verified OpenCLI Twitter backend',state:'NOT_CONFIGURED'});
 registerProbe('opencli-instagram-shervin',async service=>service.desktop?.backendStatus?.()['opencli-instagram-shervin']||{status:'off',reason:'Shervin has not reported a verified Instagram author backend',state:'NOT_CONFIGURED'});
-registerProbe('bili-cli-shervin',async service=>service.desktop?.backendStatus?.()['bili-cli-shervin']||{status:'off',reason:'Shervin has not reported a usable bili-cli runtime',state:'NOT_CONFIGURED'});
+registerProbe('bilibili-public-detail-api',async()=>({status:'warn',reason:'public detail API is built in; doctor does not contact Bilibili, target availability is measured by explicit article enrichment',state:'UNVERIFIED'}));
 registerProbe('rsshub-ecs',service=>probeLocalHttp(service,service.config.adapters?.rsshub));
 registerProbe('werss-ecs',service=>probeLocalHttp(service,service.config.adapters?.werss));
 registerProbe('xiaohongshu-mcp-ecs',service=>probeLocalHttp(service,service.config.adapters?.xiaohongshuMcp));
