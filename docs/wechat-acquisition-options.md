@@ -118,3 +118,36 @@ The 16 unresolved WeChat sources were audited against the current BestBlogs 375-
 Low-cost next action is public-provider inclusion rather than private Wechat2RSS deployment. xlab explicitly accepts WeChat public-account recommendations for inclusion. BestBlogs publicly welcomes RSS-source recommendations, but current GitHub issue creation is restricted, so contact/discussion/email is the practical path there.
 
 A provider result is accepted only after feed/account identity parity and duplicate-safety checks. One valid recent mp.weixin.qq.com article URL per source is the preferred external onboarding identity; internal Quiet River source IDs and MP_WXS metadata remain private unless explicitly required by the provider.
+
+## Private Wechat2RSS activation gate
+
+Current official facts checked on 2026-09-21:
+- private software license: CNY 15/month or CNY 150/year;
+- private deployment is self-hosted software, not a managed online service;
+- official recommended deployment size: at least 512 MiB RAM;
+- one WeRead-authorized WeChat account can, based on the public-service example, support 400+ subscriptions with roughly half of updates under 4 hours and about 6 hours average;
+- risk control uses exponential wait: 15m -> 30m -> 60m -> 120m ... capped at 6h, then resets after recovery;
+- current release remains actively maintained through v1.4.9 (2026-07-31);
+- private deployment requires LIC_EMAIL + LIC_CODE, and the user must maintain at least one WeRead-authorized WeChat login.
+
+Current Quiet River ECS headroom:
+- total RAM about 1.7 GiB;
+- currently used about 1.2 GiB;
+- currently available about 462 MiB;
+- swap: 2 GiB, currently unused;
+- Karakeep currently uses about 364 MiB and Miniflux about 43 MiB;
+- disk headroom is about 20 GiB.
+
+Therefore the license price is not the limiting factor. The two real costs are:
+1. maintaining one WeRead-authorized WeChat account and handling occasional risk-control/login recovery;
+2. memory headroom: current available RAM is slightly below the official >=512 MiB recommendation, so deploying private Wechat2RSS on the existing ECS is possible only with swap/pressure and is not the preferred default.
+
+Activation rule for Quiet River:
+- keep using public BestBlogs/xlab feeds whenever available;
+- keep unresolved sources disabled rather than fabricate coverage;
+- do not deploy private Wechat2RSS solely because 16 sources are missing;
+- reconsider private deployment if at least several of the 16 are confirmed must-have long-term sources and public-provider inclusion remains unavailable;
+- if activated, prefer either upgrading the ECS memory or placing Wechat2RSS on a separate small instance rather than squeezing it into the current 1.7 GiB host;
+- keep Wechat2RSS outside the Quiet River scheduler: Quiet River consumes only RSS/JSON Feed output.
+
+This supersedes any implication that the low CNY 150/year license alone makes private deployment automatically worthwhile.
