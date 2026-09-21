@@ -42,4 +42,6 @@ Updated: 2026-09-19
 
 ## Remaining follow-up
 
-- open — WeRSS runtime is still not configured, so the 16 newly identified WeChat sources are registered but not yet automatically refreshed.
+- skipped — Per user decision, do not continue WeRSS. The 16 verified `MP_WXS_*` WeChat sources keep their adapter/identity metadata but are intentionally not automatically refreshed unless a non-WeRSS source becomes available later. The standalone WeRSS container was stopped/removed; port 8001 is closed; `/opt/quiet-river-platform/werss-data` and the recovery backup remain preserved for rollback/history. Repository WeRSS wiring commit `36f1f77` was explicitly reverted by `ce494d7`, so WeRSS is no longer a release gate and no further QR/login work should be requested.
+
+- update — Agent-Reach acquisition work continues independently of WeRSS. Consolidated branch `chatgpt/acquisition-integration-v1` is pushed through `33508cc6fa9c4a48dd4ded41e44b4e05e23830ad` (`feat: add zero-account Reddit user sources`). It includes capability/router, Twitter fallback framework, Instagram fail-closed skip, V2EX prepared/network-blocked, GitHub detail, validated YouTube transcript chain, Shervin-local Podcast transcription, zero-account Reddit Community + User, Bilibili public detail, and Bilibili subtitle on the unified media-transcript queue. Exact final serial evidence: 388/388 passed, 0 failed/skipped/todo, `worktree_unchanged=true`, log SHA-256 `6fc2f0b1f9200bd7310d7cb085c9f971ac9dd6630cd9fbd90ffa22da8807cdb6`. This branch is not deployed yet.
