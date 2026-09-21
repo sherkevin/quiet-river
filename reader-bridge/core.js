@@ -64,11 +64,23 @@ function channelsFor(source, options = {}) {
   const adapter = source.adapter || {};
   const id = adapter.id || '';
   const base = options.rsshub || 'http://127.0.0.1:1200';
-  if (desktopPlatforms.includes(source.platform) && ['zhihu','xiaohongshu'].includes(source.platform) && id) {
-    const kinds=source.platform==='zhihu'?['answers','articles']:['notes'];
+  if (source.platform==='reddit'&&desktopPlatforms.includes('reddit')&&/^[A-Za-z0-9_-]{2,32}$/.test(id)) {
+    const userSource=source.sourceType==='author',kind=userSource?'user.posts':'community.posts',sourceType=userSource?'author':'community';
+    add(kind,'desktop',`https://quiet-river.invalid/desktop/reddit/${encodeURIComponent(id)}/${kind}`,{
+      enabled:true,group_key:'browser:reddit',author_id:id.toLowerCase(),desktop_kind:kind,source_type:sourceType,browser:true,
+      windowNote:userSource?'Shervin OpenCLI 零账号读取 Reddit 用户公开投稿；单次最多20条，发布时间未知且评论不进入主 Feed':'Shervin 浏览器网络读取 Reddit 官方 RSS；Feed 请求 credentials=omit，不需要 Reddit 账号；单次最多20条，评论留给详情增强',
+      min_gap_ms:5000,interval_ms:30*60000
+    });
+  } else if (desktopPlatforms.includes(source.platform) && ['zhihu','xiaohongshu','instagram'].includes(source.platform) && id) {
+    const kinds=source.platform==='zhihu'?['answers','articles']:source.platform==='xiaohongshu'?['notes']:['posts'];
     for(const kind of kinds)add(kind,'desktop',`https://quiet-river.invalid/desktop/${source.platform}/${encodeURIComponent(id)}/${kind}`,{
       enabled:true,group_key:'credential:'+source.platform,credential_group:source.platform,
-      windowNote:'Shervin浏览器采集，单次最多20条；电脑离线时等待连接',min_gap_ms:8000,interval_ms:6*3600000
+      author_id:id,desktop_kind:kind,windowNote:'Shervin浏览器采集，单次最多20条；电脑离线时等待连接',min_gap_ms:8000,interval_ms:6*3600000
+    });
+  } else if (source.platform === 'v2ex' && /^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    add('community.posts','v2ex',`https://www.v2ex.com/api/topics/show.json?node_name=${encodeURIComponent(id)}&page=1`,{
+      enabled:Boolean(options.v2exReady),group_key:'api.v2ex.com',v2ex_node:id,source_type:'community',interval_ms:30*60000,min_gap_ms:2000,
+      windowNote:'V2EX 公开 API 节点首页；只导入主题，回复留给详情增强'
     });
   } else if (source.platform === 'juejin' && /^\d+$/.test(id)) {
     add('metadata', 'native', 'https://api.juejin.cn/content_api/v1/article/query_list', {
@@ -112,6 +124,8 @@ function parseFullFeed(body, base) {
     result.items.forEach((item, i) => {
       item.content = raw[i]?.content_html || (raw[i]?.content_text ? `<p>${escapeHTML(raw[i].content_text)}</p>` : '');
       item.content_state = item.content ? 'TEXT' : item.summary ? 'PARTIAL' : 'META';
+      const attachment=(raw[i]?.attachments||[]).find(a=>a&&/^audio\//i.test(String(a.mime_type||''))&&safeURL(a.url,base));
+      item.enclosure=attachment?{url:safeURL(attachment.url,base),type:String(attachment.mime_type||''),length:Number(attachment.size_in_bytes)||null}:null;
     });
   } else {
     const doc = xml.parseXML(body);
@@ -129,6 +143,9 @@ function parseFullFeed(body, base) {
       const partial = xml.child(n, 'description') || xml.child(n, 'summary');
       item.content = full?.text || partial?.text || '';
       item.content_state = full?.text ? 'TEXT' : item.content ? 'PARTIAL' : 'META';
+      const enclosure=xml.child(n,'enclosure')||xml.children(n,'link').find(c=>xml.attr(c,'rel')==='enclosure');
+      const enclosureURL=enclosure&&safeURL(xml.attr(enclosure,'url')||xml.attr(enclosure,'href'),base),enclosureType=String(enclosure?xml.attr(enclosure,'type')||'':'');
+      item.enclosure=enclosureURL&&(!enclosureType||/^audio\//i.test(enclosureType))?{url:enclosureURL,type:enclosureType,length:Number(xml.attr(enclosure,'length'))||null}:null;
       // XHTML with mixed children cannot be reconstructed by the legacy lightweight parser.
       if (full?.children?.length) item.content_state = 'PARTIAL';
     });

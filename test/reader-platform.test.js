@@ -2,6 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+const http=require('node:http');
 const {Database}=require('../reader-bridge/database');
 const {ReaderService}=require('../reader-bridge/service');
 const {createApp,secureEqual,cookies,validPreferences}=require('../reader-bridge/server');
@@ -14,14 +15,14 @@ function entry(id,extra={}){return {id,feed_id:1,title:'Agent 工具学习',url:
 
 test('all sources survive migration including manual and multiple channels',()=>{const z={...source,platform:'zhihu',feeds:[],adapter:{id:'alice'}};assert.equal(channelsFor(z).length,2);assert.equal(channelsFor({...source,platform:'wechat',feeds:[],manual:true}).length,0);});
 test('existing third-party author feeds remain enabled',()=>{const c=channelsFor({...source,platform:'wechat',feeds:['https://relay.example/feed/a']});assert.equal(c[0].transport,'public');assert.equal(c[0].enabled,true);});
-test('declared WeRSS IDs are bound to the blogger and do not need a side mapping',()=>{
+test('declared WeRSS IDs remain bound to the blogger but stay disabled after runtime skip',()=>{
   const s={...source,platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'MP_WXS_1234567890'}};
-  const c=channelsFor(s,{werss:'http://127.0.0.1:8001'});
+  const c=channelsFor(s,{});
   assert.equal(c.length,1);assert.equal(c[0].transport,'werss');assert.equal(c[0].mp_id,'MP_WXS_1234567890');
-  assert.equal(c[0].url,'http://127.0.0.1:8001/feed/MP_WXS_1234567890');assert.equal(c[0].enabled,true);
+  assert.equal(c[0].enabled,false);assert.equal(c[0].credential_group,'wechat');assert.equal(c[0].source_id,s.id);
 });
 test('invalid declared WeRSS IDs are not turned into executable channels',()=>{
-  const c=channelsFor({...source,platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'guess-me'}},{werss:'http://127.0.0.1:8001'});
+  const c=channelsFor({...source,platform:'wechat',feeds:[],adapter:{platform:'wechat',mp_id:'guess-me'}},{});
   assert.equal(c.length,0);
 });
 test('credential-gated routes do not claim readiness without credentials',()=>{const c=channelsFor({...source,platform:'zhihu',feeds:[],adapter:{id:'alice'}},{rsshub:'http://127.0.0.1:1200'});assert.equal(c[0].enabled,false);assert.equal(c[0].credential_group,'zhihu');});
@@ -118,4 +119,25 @@ test('renamed WeChat blogger keeps the historical source id and the mistaken rep
   assert.equal(renamed?.adapter?.mp_id,'MP_WXS_3216764246');
   assert.equal(manifest.subscriptions.some(s=>s.name==='丁丁丁写字的地方'),false);
   assert.equal(manifest.subscriptions.some(s=>s.name==='搜广推学习笔记'),false);
+});
+test('HTTP acquisition doctor is authenticated, read-only and does not require mutation action header',async()=>{
+  const {db,service}=setup();const app=createApp(service,{accessToken:'test-only-token'});
+  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
+  try{
+    assert.equal((await fetch(base+'/desk/api/acquisition/doctor')).status,401);
+    const response=await fetch(base+'/desk/api/acquisition/doctor',{headers:{'X-Qr-Token':'test-only-token'}});
+    assert.equal(response.status,200);const doctor=await response.json();
+    assert.equal(doctor.backends['direct-feed'].status,'ok');
+    assert.equal(doctor.backends['xiaohongshu-mcp-ecs'].status,'off');
+    assert.ok(Array.isArray(doctor.capabilities));
+  }finally{await new Promise(r=>app.close(r));db.close();}
+});
+
+test('RSS and JSON Feed expose bounded audio enclosure metadata for transcript enrichment',()=>{
+ const rss=parseFullFeed('<rss><channel><title>T</title><item><guid>1</guid><title>A</title><link>https://example.com/e1</link><enclosure url="https://cdn.example.com/a.mp3" type="audio/mpeg" length="12345"/></item></channel></rss>','https://example.com/feed');
+ assert.deepEqual(rss.items[0].enclosure,{url:'https://cdn.example.com/a.mp3',type:'audio/mpeg',length:12345});
+ const jsonFeed=parseFullFeed(JSON.stringify({version:'https://jsonfeed.org/version/1',items:[{id:'2',url:'https://example.com/e2',attachments:[{url:'https://cdn.example.com/a.jpg',mime_type:'image/jpeg'},{url:'https://cdn.example.com/a.m4a',mime_type:'audio/mp4',size_in_bytes:456}]}]}),'https://example.com/feed');
+ assert.deepEqual(jsonFeed.items[0].enclosure,{url:'https://cdn.example.com/a.m4a',type:'audio/mp4',length:456});
+ const unsafe=parseFullFeed('<rss><channel><title>T</title><item><guid>3</guid><title>A</title><link>https://example.com/e3</link><enclosure url="file:///etc/passwd" type="audio/mpeg"/></item></channel></rss>','https://example.com/feed');
+ assert.equal(unsafe.items[0].enclosure,null);
 });

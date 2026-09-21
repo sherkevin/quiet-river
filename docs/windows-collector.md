@@ -132,3 +132,13 @@ Clash Party 当前订阅 URL 不能被普通 HTTP 客户端直接 GET，因此 E
 固定只读命令为：知乎回答 `answer-detail`（完整纯文本）、小红书 `note`（正文描述文本）、知乎文章 `web read --stdout --download-images false`（Markdown 文本）。小红书存量 `xsec_token` 可能过期，因此正文任务会先用已登记 authorId 读取最多 50 条作者当前列表，要求 `row.id`、URL 中 noteId 与目标三者一致后，只在 Shervin 内存中使用新的 signed URL；fresh token 不上传 ECS，也不改文章原 URL。Shervin 当前 Chrome 153 会触发 OpenCLI 上游 issue #2487：Chromium 152+ 在 debugger detach 后立即 `chrome.tabs.update` 会返回 `Navigation rejected`；collector 平时仍使用 `--trace off`，只有精确命中该错误时才对同一个只读命令重试一次 `--trace retain-on-failure`，利用上游已确认的 network-capture workaround。其他 403、登录失效、超时等错误不双请求。Windows 在启动 Browser Bridge 前再次校验服务端下发的已知原链；ECS 无法下发任意命令、参数数组或文件路径。
 
 正文上传只包含 `entryId + content`，最大 1 MiB。ECS 不信任该文本为 HTML，而是统一 escape 后按段落写入 Miniflux；更新请求不发送 read/unread 状态。原 URL、发布时间、文章标签和已读状态保留，空正文、登录页、短验证码/风控页不会覆盖已经保存的文本。
+
+## 11. Twitter direct backend safety (feature branch)
+
+Twitter direct acquisition is designed as an optional Shervin backend over the existing xgo logical channel; it does not create a second subscription. `twitter-explicit.py` is a required runtime file together with `collector.cjs`, `normalize.cjs` and `original-link.cjs`.
+
+`twitter-cli` is never launched through its default cookie discovery flow. Quiet River uses `twitter-explicit.py`, which directly constructs the upstream `TwitterClient` from explicit `TWITTER_AUTH_TOKEN` and `TWITTER_CT0` environment values. If either value is absent, the backend is `off`. Presence of credentials does not make it active: run `collector.cjs --verify-twitter <handle>` explicitly; only a successful read-only author canary records a 24-hour local verification timestamp. Tokens are not written into `config.json` or sent to ECS.
+
+OpenCLI Twitter is separately verified with `collector.cjs --verify-twitter-opencli <handle>`. A connected Browser Bridge alone is only a degraded/unverified state.
+
+When neither direct backend is verified, the existing xgo feed remains the scheduler owner.

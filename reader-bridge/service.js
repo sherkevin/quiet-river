@@ -6,6 +6,10 @@ const {fetchNativeMetadata}=require('./native-metadata');
 const {normalizeTags,containsAllTags,requestedTags}=require('./tags');
 const meta=require('./article-metadata');
 const reading=require('./reading-history');
+const {capabilityReport}=require('./capabilities');
+const {runBackend,doctorBackends}=require('./acquisition-backends');
+const {githubDetailTarget,githubEnrichment}=require('./github-enrichment');
+const {bilibiliVideoTarget,bilibiliDetail}=require('./bilibili-enrichment');
 const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 
 class ReaderService {
@@ -15,6 +19,7 @@ class ReaderService {
     this.kk=clients.kk || new ApiClient(config.karakeep,{Authorization:`Bearer ${config.karakeepToken || ''}`});
     this.internalFetch=clients.internalFetch || request;
     this.fetchNative=clients.fetchNative || fetchNativeMetadata;
+    this.bilibiliDetail=clients.bilibiliDetail || bilibiliDetail;
     meta.ensureSnapshots(db);
   }
   async importManifest(manifest,options={}) {
@@ -70,10 +75,11 @@ class ReaderService {
     if(this.working||this.stopping)return;this.working=true;
     try {
       while(!this.stopping) {
-        const job=this.db.get("SELECT j.* FROM jobs j JOIN channels c ON c.id=j.channel_id WHERE j.state='QUEUED' AND COALESCE(json_extract(c.payload,'$.transport'),'')!='desktop' ORDER BY j.priority DESC,j.created_at,j.id LIMIT 1");
+        const queued=this.db.all("SELECT * FROM jobs WHERE state='QUEUED' ORDER BY priority DESC,created_at,id"),channels=this.db.channels(),sources=new Map(this.db.sources().map(s=>[s.id,s]));
+        const job=queued.find(j=>{const c=channels.find(x=>x.id===j.channel_id),source=c&&sources.get(c.source_id);return c&&c.transport!=='desktop'&&!this.desktop?.ownsChannel?.(c,source);});
         if(!job)break;
         this.db.run("UPDATE jobs SET state='RUNNING' WHERE id=?",job.id);
-        let c=this.db.channels().find(c=>c.id===job.channel_id);
+        let c=channels.find(c=>c.id===job.channel_id);
         if(!c){this.finish(job,'UPSTREAM_ERROR','来源已移除');continue;}
         const source=this.db.sources().find(s=>s.id===c.source_id);
         if(!source?.enabled){this.finish(job,'PAUSED','该来源已暂停采集');continue;}
@@ -87,7 +93,7 @@ class ReaderService {
         if(this.stopping){this.db.run("UPDATE jobs SET state='QUEUED' WHERE id=?",job.id);break;}
         this.db.run('UPDATE channels SET last_check=?,state=? WHERE id=?',Date.now(),'RUNNING',c.id);
         try {
-          const result=c.transport==='public'?await this.refreshPublic(c):await this.refreshAdapter(c);
+          const result=await runBackend(this,c);
           const added=typeof result==='number'?result:result.added;
           const finalState=result?.partial?'SUCCEEDED_PARTIAL':added?'SUCCEEDED_NEW':'SUCCEEDED_NO_NEW';
           const success=Date.now();
@@ -163,25 +169,9 @@ class ReaderService {
     return old?0:1;
   }
   async refreshAdapter(c) {
-    if(c.transport==='native'){
-      const result=await this.fetchNative(c);let added=0;
-      for(const item of result.items)added+=await this.importItem(c,item);
-      return {added,partial:result.moreAvailable};
-    }
-    if(c.browser && !this.config.adapters?.browserEnabled)throw new Error('missing configuration: browser acceptance');
-    const base=c.transport==='werss'?this.config.adapters?.werss:this.config.adapters?.rsshub;
-    if(!base||new URL(c.url).origin!==new URL(base).origin)throw new Error('not configured: trusted adapter origin');
-    if(c.transport==='werss') {
-      const wx=new ApiClient(base,{Authorization:`Bearer ${this.config.adapters.werssToken||''}`});
-      const result=await wx.call(`/api/v1/wx/mps/update/${encodeURIComponent(c.mp_id)}?start_page=0&end_page=1`,'GET',undefined,{timeout:120000});
-      if(result?.code && ![0,200].includes(result.code))throw new Error('WeRSS update did not confirm success');
-      // Merely returning HTTP 200 is not a full-content guarantee; each entry below retains its content state.
-    }
-    const r=await this.internalFetch(c.url,{trusted:true,timeout:c.browser?120000:45000});
-    if(r.status!==200){const e=new Error('adapter HTTP error');e.status=r.status;throw e;}
-    const parsed=parseFullFeed(r.body.toString('utf8'),c.url);let added=0;
-    for(const item of parsed.items){if(!safeURL(item.link))continue;added+=await this.importItem(c,item);}
-    return added;
+    // Backward-compatible method retained for tests/callers; execution is now
+    // delegated to the backend registry instead of hard-coded transport branches.
+    return runBackend(this,c);
   }
   async findImported(c,payload) {
     let offset=0;
@@ -227,6 +217,34 @@ class ReaderService {
   backend() {return require('./article-actions').backend(this);}
   bodyEnrichment(id){return this.desktop?this.desktop.enrichmentStatus(id):{entryId:Number(id),eligible:false,state:'UNAVAILABLE',error:'Shervin collector is not configured',collector:null};}
   requestBodyEnrichment(id){if(!this.desktop)throw Object.assign(new Error('Shervin collector is not configured'),{status:503});return this.desktop.queueEnrichment(id);}
+  transcriptStatus(id){return this.desktop?this.desktop.transcriptStatus(id):{entryId:Number(id),eligible:false,state:'UNAVAILABLE',error:'Shervin collector is not configured',collector:null};}
+  youtubeTranscript(id){return this.transcriptStatus(id);}
+  async requestTranscript(id){
+    if(!this.desktop)throw Object.assign(new Error('Shervin collector is not configured'),{status:503});
+    const ctx=this.desktop.transcriptContext(id),media=ctx.kind==='podcast_transcript_v1'?await this.resolvePodcastAudio(id):null;
+    return this.desktop.queueTranscript(id,Date.now(),media);
+  }
+  requestYoutubeTranscript(id){return this.requestTranscript(id);}
+  async resolvePodcastAudio(id){
+    const entry=this.db.get('SELECT * FROM entries WHERE id=?',Number(id));if(!entry)throw Object.assign(new Error('entry not found'),{status:404});
+    const source=this.db.sources().find(s=>s.id===entry.source_id);if(source?.platform!=='podcast')throw Object.assign(new Error('entry is not a podcast episode'),{status:409});
+    const target=safeURL(entry.url);if(!target)throw Object.assign(new Error('podcast episode URL is invalid'),{status:409});
+    let matched=false;
+    for(const feed of source.feeds||[]){
+      const feedURL=safeURL(feed);if(!feedURL)continue;
+      const response=await this.internalFetch(feedURL,{timeout:20000,maxBytes:8*1024*1024});
+      if(response.status!==200)continue;
+      const parsed=parseFullFeed(response.body.toString('utf8'),feedURL),item=parsed.items.find(x=>safeURL(x.link,feedURL)===target);
+      if(!item)continue;matched=true;
+      const audio=item.enclosure,audioURL=safeURL(audio?.url);
+      if(!audioURL)throw Object.assign(new Error('podcast episode has no public audio enclosure'),{status:409});
+      const length=Number(audio.length)||0;if(length>512*1024*1024)throw Object.assign(new Error('podcast audio exceeds 512 MiB limit'),{status:413});
+      const probe=await this.internalFetch(audioURL,{method:'HEAD',timeout:10000,maxBytes:4096});
+      if([401,403,404].includes(probe.status)||probe.status>=500)throw Object.assign(new Error('podcast audio enclosure is not publicly readable'),{status:409});
+      return {url:safeURL(probe.url)||audioURL,length,type:String(audio.type||probe.headers?.['content-type']||'').slice(0,120)};
+    }
+    throw Object.assign(new Error(matched?'podcast audio enclosure is unavailable':'podcast episode is not present in its registered feed'),{status:409});
+  }
   feedback(id,value){if(![-1,0,1].includes(value)||!this.db.get('SELECT id FROM entries WHERE id=?',id))throw new Error('invalid feedback');this.db.run('INSERT INTO feedback VALUES(?,?,?) ON CONFLICT(entry_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at',id,value,Date.now());}
   async _articleNoteBookmark(row,{create=false}={}) {
     if(!this.config.karakeepToken){if(create)throw Object.assign(new Error('not configured: notes'),{status:503});return null;}
@@ -265,11 +283,49 @@ class ReaderService {
     let row=this.db.get('SELECT * FROM entries WHERE id=?',id);if(!row)throw Object.assign(new Error('entry not found'),{status:404});
     const source=this.db.sources().find(s=>s.id===row.source_id),channel=this.db.channels().find(c=>c.id===row.channel_id);
     if(!source)throw Object.assign(new Error('source not found'),{status:404});
+    const githubTarget=source.platform==='github'?githubDetailTarget(row.url):null,githubKind='github_rest_v1';
+    const githubDone=githubTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,githubKind);
+    const canGithubEnrich=!!githubTarget&&!githubDone;
+    const bilibiliTarget=source.platform==='bilibili'?bilibiliVideoTarget(row.url):null,bilibiliKind='bilibili_detail_v1';
+    const bilibiliDone=bilibiliTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,bilibiliKind);
+    const canBilibiliEnrich=!!bilibiliTarget&&!bilibiliDone;
     const canFetch=channel?.transport==='public'&&['blog','github','csdn','juejin','wechat'].includes(source.platform)&&source.fullTextMode!=='feed'&&!['feed_full','metadata_only'].includes(source.content_policy);
     let upstream=null,html='',prepareAttempted=false,prepareImproved=false,contentUnavailable=false;
     try {
       upstream=await this.mf.call(`/v1/entries/${id}`);html=String(upstream?.content||'');
-      if(prepare&&canFetch&&stripHTML(html).length<1500){
+      if(prepare&&canGithubEnrich){
+        prepareAttempted=true;
+        try{
+          const enriched=await githubEnrichment(this,githubTarget),candidate=String(enriched.html||'');
+          if(stripHTML(candidate)){
+            html=candidate;prepareImproved=true;
+            await this.mf.call(`/v1/entries/${id}`,'PUT',{title:upstream.title||row.title,content:html});
+            this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,githubKind,'DONE',Date.now(),JSON.stringify({rateRemaining:enriched.rateRemaining}));
+            this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='github_rest_enrichment' WHERE entry_id=?",hash(html),id);
+            this.project({...upstream,content:html},channel,Date.now());this.db.run("UPDATE entries SET content_origin='github_rest_enrichment' WHERE id=?",id);row=this.db.get('SELECT * FROM entries WHERE id=?',id);
+          }
+        }catch(e){
+          this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,githubKind,'FAILED',Date.now(),String(e.message||e).slice(0,200));
+          this.db.audit('github-enrichment',id,'GitHub REST detail unavailable; existing content retained');
+        }
+      }
+      if(prepare&&canBilibiliEnrich){
+        prepareAttempted=true;
+        try{
+          const enriched=await this.bilibiliDetail(this,bilibiliTarget,{expectedOwnerId:channel?.author_id||source.adapter?.id||''}),candidate=String(enriched.html||'');
+          if(stripHTML(candidate)){
+            html=candidate;prepareImproved=true;
+            await this.mf.call(`/v1/entries/${id}`,'PUT',{title:upstream.title||row.title,content:html});
+            this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,bilibiliKind,'DONE',Date.now(),JSON.stringify({bvid:enriched.bvid,ownerId:enriched.ownerId}));
+            this.db.run("UPDATE imports SET content_hash=?,content_state='TEXT',content_origin='bilibili_public_detail_enrichment' WHERE entry_id=?",hash(html),id);
+            this.project({...upstream,content:html},channel,Date.now());this.db.run("UPDATE entries SET content_origin='bilibili_public_detail_enrichment' WHERE id=?",id);row=this.db.get('SELECT * FROM entries WHERE id=?',id);
+          }
+        }catch(e){
+          this.db.run("INSERT INTO entry_enrichments(entry_id,kind,state,updated_at,detail) VALUES(?,?,?,?,?) ON CONFLICT(entry_id,kind) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at,detail=excluded.detail",id,bilibiliKind,'FAILED',Date.now(),String(e.message||e).slice(0,200));
+          this.db.audit('bilibili-enrichment',id,'Bilibili detail unavailable; existing content retained');
+        }
+      }
+      if(prepare&&!prepareImproved&&canFetch&&stripHTML(html).length<1500){
         prepareAttempted=true;
         try {
           const fetched=await this.mf.call(`/v1/entries/${id}/fetch-content?update_content=false`,'GET',undefined,{timeout:20000});
@@ -279,12 +335,16 @@ class ReaderService {
       }
     }catch{contentUnavailable=true;html=row.summary?`<p>${escapeHTML(row.summary)}</p>`:'';}
     const snapshot=meta.tagSnapshot(this.db,id),feedback=this.db.get('SELECT value FROM feedback WHERE entry_id=?',id)?.value||0,noteState=await this.articleNote(id);
+    const githubDoneNow=githubTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,githubKind);
+    const bilibiliDoneNow=bilibiliTarget&&!!this.db.get("SELECT 1 ok FROM entry_enrichments WHERE entry_id=? AND kind=? AND state='DONE'",id,bilibiliKind);
+    const prepareKind=githubTarget?(githubDoneNow?null:'github-detail'):bilibiliTarget?(bilibiliDoneNow?null:'bilibili-detail'):canFetch&&stripHTML(html).length<1500?'fulltext':null;
+    const canFetchFullText=!!prepareKind;
     const safeOriginal=safeURL(row.url)||null,contentLimit=2*1024*1024,contentTruncated=html.length>contentLimit;
-    const readerMode=row.bookmark_id||row.content_state!=='META'?'reader':canFetch?'fetchable':'original';
+    const readerMode=row.bookmark_id||row.content_state!=='META'?'reader':canFetchFullText?'fetchable':'original';
     return {id:row.id,title:row.title,author:row.author||source.name,source:source.name,sourceId:source.id,sourceUrl:safeURL(source.url)||null,platform:source.platform,readerMode,
       url:safeOriginal,published_at:row.published_at,discovered_at:row.discovered_at,status:row.status,tags:snapshot?.tags||source.tags||[],feedback,
       contentState:row.content_state,contentOrigin:row.content_origin,archiveState:row.archive_state,bookmarkId:row.bookmark_id||null,
-      content:html.slice(0,contentLimit),contentTextLength:stripHTML(html).length,contentTruncated,contentUnavailable,canFetchFullText:canFetch,prepareAttempted,prepareImproved,
+      content:html.slice(0,contentLimit),contentTextLength:stripHTML(html).length,contentTruncated,contentUnavailable,canFetchFullText,prepareKind,prepareAttempted,prepareImproved,
       canAnnotate:!!this.config.karakeepToken&&row.content_state!=='META',note:noteState.note,noteBookmarkId:noteState.bookmarkId,notesConfigured:noteState.configured,noteUnavailable:noteState.unavailable};
   }
   async readerStatus(id) {
@@ -436,9 +496,16 @@ class ReaderService {
     if(!old)this.db.alert('digest:'+day,'Quiet River 日报',`${day}：优先阅读 ${items.length} 篇；另有 ${issues.length} 个通道需要关注。请在私人阅读器查看。`);
     return digest;
   }
+  async acquisitionDoctor() {
+    const doctor=await doctorBackends(this),sources=this.db.sources(),channels=this.db.channels(),collector=this.desktop?.status()||null;
+    const report=capabilityReport(sources,channels,{collector,config:this.config,backendStatus:doctor.backends});
+    return {...doctor,capabilities:report.capabilities,summary:report.summary};
+  }
   health() {
-    const sources=this.db.sources(), channels=this.db.channels();
-    return {collector:this.desktop?.status()||null,sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
+    const sources=this.db.sources(), channels=this.db.channels(),collector=this.desktop?.status()||null,backendStatus=this.desktop?.backendStatus?.()||{};
+    const capability=capabilityReport(sources,channels,{collector,config:this.config,backendStatus});
+    return {collector,sources:sources.length,configuredSources:sources.filter(s=>s.enabled&&channels.some(c=>c.source_id===s.id&&c.enabled)).length,unconfiguredSources:sources.filter(s=>s.enabled&&!channels.some(c=>c.source_id===s.id)).map(s=>({id:s.id,name:s.name})),channels:channels.map(c=>({id:c.id,sourceId:c.source_id,state:c.state,enabled:c.enabled,lastCheck:c.last_check,lastSuccess:c.last_success,nextCheck:c.next_check,error:c.error,transport:c.transport,feedId:c.feed_id,windowNote:c.windowNote||null})),
+      capabilities:capability.capabilities,capabilitySummary:capability.summary,
       groups:this.db.all('SELECT * FROM groups'),queue:this.db.get("SELECT count(*) n FROM jobs WHERE state IN ('QUEUED','RUNNING')").n,
       entries:this.db.get('SELECT count(*) n FROM entries').n,readerConfigured:!!this.config.karakeepToken,
       notifications:this.db.all('SELECT created_at,payload,state,attempts FROM outbox ORDER BY created_at DESC LIMIT 30').map(r=>({...r,payload:json(r.payload,{})}))};
@@ -469,8 +536,8 @@ class ReaderService {
     }
   }
   tick() {
-    const now=Date.now(), sourceIds=new Set(this.db.sources().filter(s=>s.enabled).map(s=>s.id));
-    const due=this.config.schedulerEnabled===false?[]:this.db.channels().filter(c=>{const g=this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now&&g?.state!=='AUTH_REQUIRED'&&(!g||g.next_allowed<=now);});
+    const now=Date.now(),sources=this.db.sources(),sourceById=new Map(sources.map(s=>[s.id,s])),sourceIds=new Set(sources.filter(s=>s.enabled).map(s=>s.id));
+    const due=this.config.schedulerEnabled===false?[]:this.db.channels().filter(c=>{const source=sourceById.get(c.source_id),workerOwned=c.transport!=='desktop'&&this.desktop?.ownsChannel?.(c,source,now);if(workerOwned)return c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now;const g=this.db.get('SELECT state,next_allowed FROM groups WHERE id=?',c.group_key);return c.enabled&&sourceIds.has(c.source_id)&&c.next_check<=now&&g?.state!=='AUTH_REQUIRED'&&(!g||g.next_allowed<=now);});
     if(due.length)this.db.createRun(due,'scheduled');this.pump().catch(e=>this.db.audit('scheduler','error',e.message));
     this.monitor();this.sendNotifications().catch(()=>{});
     const timezone=this.db.setting('preferences',{}).timezone||'Asia/Shanghai';

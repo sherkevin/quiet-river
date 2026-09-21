@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {Database}=require('../reader-bridge/database');
 const {channelsFor}=require('../reader-bridge/core');
 const {DesktopCollector,validateItems}=require('../reader-bridge/desktop-collector');
-const {normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
+const {normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,normalizeBilibiliSubtitle,selectFreshXhsNoteUrl,statusFor}=require('../tools/windows/normalize.cjs');
 const {confirmedCollect,authRecovered,proxyTunnelArgs,runOpencliRead}=require('../tools/windows/collector.cjs');
 const {createApp}=require('../reader-bridge/server');
 function fixture(t,platform='zhihu'){
@@ -25,7 +25,7 @@ test('desktop routes preserve prior channel IDs while moving collection to Windo
 });
 test('claim returns only registered author metadata, never credentials or feed URLs',t=>{
  const f=fixture(t);const r=f.collector.claim(['zhihu']);assert.equal(r.job.authorId,'test-author');
- assert.deepEqual(Object.keys(r.job).sort(),['authorId','kind','leaseId','limit','name','platform','sourceId'].sort());
+ assert.deepEqual(Object.keys(r.job).sort(),['authorId','backendId','kind','leaseId','limit','name','platform','sourceId'].sort());
 });
 test('only one active browser task can be claimed',t=>{const f=fixture(t);assert.ok(f.collector.claim(['zhihu']).job);assert.equal(f.collector.claim(['zhihu']).job,null);});
 test('expired lease requeues the job instead of declaring collection success',t=>{
@@ -270,7 +270,7 @@ test('native body enrichment status is authenticated and queueing is action-gate
 });
 test('Windows collector advertises enrichment capability without changing normal source-list result shape',()=>{
  const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
- assert.match(src,/capabilities:\['entry_body_v1'\]/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/web','read/);
+ assert.match(src,/function workerCapabilities\(\)/);assert.match(src,/out\.push\('bilibili_subtitle_v1'\)/);assert.match(src,/out\.push\('podcast_transcript_v1'\)/);assert.match(src,/taskType==='entry_body_v1'/);assert.match(src,/taskType==='bilibili_subtitle_v1'/);assert.match(src,/answer-detail/);assert.match(src,/xiaohongshu','user'/);assert.match(src,/--limit','50'/);assert.match(src,/xiaohongshu','note/);assert.match(src,/bilibili','subtitle/);assert.match(src,/web','read/);
  assert.match(src,/result\.entryId\?`ECS accepted article-body result/);assert.doesNotMatch(src,/job\.command|job\.argv|job\.output/);
 });
 test('Windows enrichment normalizer rejects short login and challenge bodies before upload',()=>{
@@ -299,4 +299,429 @@ test('read-only OpenCLI does not retry unrelated failures',()=>{
  let calls=0;const spawn=()=>{calls++;return {status:1,stderr:'HTTP 403 access denied',stdout:''};};
  const result=runOpencliRead({profile:''},['opencli-main.js','xiaohongshu','user','author','--trace','off'],spawn);
  assert.equal(result.status,1);assert.equal(calls,1);assert.equal(result.qrNavigationRetried,undefined);
+});
+
+
+test('Twitter CLI and OpenCLI rows normalize to the same canonical tweet identity',()=>{
+ const job={platform:'twitter',kind:'tweets',authorId:'karpathy',name:'Andrej Karpathy'};
+ const id='2086848998204473743',when='Thu Jul 10 12:15:47 +0000 2026';
+ const cli=normalize(job,[{id,text:'same tweet text',author:{screenName:'karpathy'},createdAtISO:'2026-07-10T12:15:47Z'}])[0];
+ const opencli=normalize(job,[{id,text:'same tweet text',author:'karpathy',created_at:when,url:'https://x.com/karpathy/status/'+id}])[0];
+ assert.equal(cli.link,'https://x.com/karpathy/status/'+id);
+ assert.equal(opencli.link,cli.link);
+ assert.equal(cli.published,opencli.published);
+ assert.equal(cli.summary,'same tweet text');
+ assert.equal(opencli.summary,'same tweet text');
+ const validated=validateItems({platform:'twitter',label:'tweets',authorId:'karpathy'},[cli])[0];
+ assert.equal(validated.guid,id);
+ assert.equal(validated.link,cli.link);
+});
+
+test('Twitter normalization rejects another author even when tweet ID and URL shape are valid',()=>{
+ const job={platform:'twitter',kind:'tweets',authorId:'karpathy'};
+ assert.throws(()=>normalize(job,[{id:'2086848998204473743',text:'wrong author',author:'ylecun',created_at:'Thu Jul 10 12:15:47 +0000 2026',url:'https://x.com/ylecun/status/2086848998204473743'}]),/author mismatch/);
+ assert.throws(()=>validateItems({platform:'twitter',label:'tweets',authorId:'karpathy'},[{title:'wrong',link:'https://x.com/ylecun/status/2086848998204473743',published:null,summary:''}]),/original URL/);
+});
+
+test('Twitter media-only rows still get a stable non-empty card title',()=>{
+ const job={platform:'twitter',kind:'tweets',authorId:'karpathy',name:'Andrej Karpathy'};
+ const [item]=normalize(job,[{id:'2086848998204473743',text:'',author:{screenName:'karpathy'},createdAtISO:'2026-07-10T12:15:47Z'}]);
+ assert.equal(item.title,'Andrej Karpathy 的 X 帖子');
+ assert.equal(item.summary,'');
+});
+
+
+function twitterRouteFixture(t){
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'twitter-source',name:'Twitter Author',platform:'twitter',url:'https://x.com/karpathy',feeds:['https://api.xgo.ing/rss/user/abc'],tags:[],enabled:true};
+ const channel={id:'twitter-channel',source_id:source.id,label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',group_key:'api.xgo.ing',enabled:true,interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=7 WHERE id=?',channel.id);
+ const stored=[];
+ const service={db,config:{adapters:{desktopPlatforms:['twitter']}},provisionChannels:async()=>{},importItem:async(c,item)=>{stored.push({channel:c.id,item});return 1;},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=?,finished_at=? WHERE id=?',state,error,Date.now(),job.id),pump:async()=>{}};
+ const collector=new DesktopCollector(service);service.desktop=collector;
+ return {db,source,channel,service,collector,stored};
+}
+test('healthy Twitter direct backend claims the existing xgo logical channel without creating a second channel',t=>{
+ const f=twitterRouteFixture(t);f.db.createRun([f.channel],'manual');
+ const result=f.collector.claim(['twitter'],[],{'twitter-cli-shervin':{status:'ok',reason:'verified explicit client',state:'READY'}});
+ assert.ok(result.job);assert.equal(result.job.platform,'twitter');assert.equal(result.job.authorId,'karpathy');assert.equal(result.job.kind,'tweets');assert.equal(result.job.backendId,'twitter-cli-shervin');
+ const lease=f.db.get('SELECT channel_id,backend_id FROM collector_leases WHERE id=?',result.job.leaseId);
+ assert.equal(lease.channel_id,'twitter-channel');assert.equal(lease.backend_id,'twitter-cli-shervin');
+ assert.equal(f.db.channels().filter(c=>c.source_id==='twitter-source').length,1);
+ assert.equal(f.db.channels()[0].transport,'public');
+});
+test('successful Twitter direct collection updates the shared logical channel but not the xgo physical group',async t=>{
+ const f=twitterRouteFixture(t);f.db.createRun([f.channel],'manual');
+ const claim=f.collector.claim(['twitter'],[],{'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ const before=f.db.get('SELECT * FROM groups WHERE id=?','api.xgo.ing');
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,status:'OK',items:[{title:'tweet',link:'https://x.com/karpathy/status/2086848998204473743',published:1786378547000,summary:'tweet body'}]});
+ assert.equal(ack.state,'SUCCEEDED_PARTIAL');assert.equal(ack.backendId,'twitter-cli-shervin');assert.equal(f.stored.length,1);assert.equal(f.stored[0].item.guid,'2086848998204473743');
+ const after=f.db.get('SELECT * FROM groups WHERE id=?','api.xgo.ing');assert.deepEqual(after,before);
+ assert.equal(f.db.get('SELECT state FROM collector_backend_health WHERE id=?','twitter-cli-shervin').state,'OK');
+ assert.equal(f.db.get('SELECT state FROM jobs LIMIT 1').state,'SUCCEEDED_PARTIAL');
+});
+test('failed Twitter direct backend requeues the same job and restores xgo as the active fallback',async t=>{
+ const f=twitterRouteFixture(t);let pumps=0;f.service.pump=async()=>{pumps++;};
+ f.db.createRun([f.channel],'manual');
+ const claim=f.collector.claim(['twitter'],[],{'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,status:'TIMEOUT',items:[]});
+ assert.equal(ack.state,'FALLBACK_QUEUED');assert.equal(ack.failedState,'TIMEOUT');
+ assert.equal(f.db.get('SELECT state FROM jobs LIMIT 1').state,'QUEUED');
+ assert.equal(f.db.get('SELECT state FROM groups WHERE id=?','api.xgo.ing').state,'UNKNOWN');
+ assert.equal(f.db.get('SELECT state FROM collector_backend_health WHERE id=?','twitter-cli-shervin').state,'TIMEOUT');
+ assert.equal(f.collector.ownsChannel(f.db.channels()[0],f.db.sources()[0]),false);
+ const cap=require('../reader-bridge/capabilities').sourceCapabilities(f.db.sources()[0],f.db.channels(),{collector:f.collector.status(),backendStatus:f.collector.backendStatus()})[0];
+ assert.equal(cap.activeBackend,'xgo-twitter-feed');
+ await new Promise(r=>setImmediate(r));assert.equal(pumps,1);
+});
+
+
+test('ECS pump leaves a Twitter xgo job queued while a verified Shervin backend owns the capability, then uses xgo after backend failure',async t=>{
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'tw-pump',name:'Twitter Author',platform:'twitter',url:'https://x.com/karpathy',feeds:['https://api.xgo.ing/rss/user/abc'],tags:[],enabled:true};
+ const channel={id:'tw-pump-channel',source_id:source.id,label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',group_key:'api.xgo.ing',enabled:true,interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=7 WHERE id=?',channel.id);
+ let fetches=0;
+ const service=new ReaderService(db,{adapters:{desktopPlatforms:['twitter']},miniflux:'http://unused',karakeep:'http://unused'},{mf:{call:async()=>[]}});
+ service.refreshPublic=async()=>{fetches++;return 0;};
+ const collector=new DesktopCollector(service);service.desktop=collector;
+ collector.recordBackendStatus({'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ db.createRun([channel],'manual');await service.pump();
+ assert.equal(fetches,0);assert.equal(db.get('SELECT state FROM jobs LIMIT 1').state,'QUEUED');
+ collector.backendFailure('twitter-cli-shervin','TIMEOUT','timeout');
+ await service.pump();assert.equal(fetches,1);
+ assert.notEqual(db.get('SELECT state FROM jobs LIMIT 1').state,'QUEUED');
+});
+
+test('scheduled Twitter direct ownership ignores the xgo physical group health until fallback is needed',t=>{
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'tw-tick',name:'Twitter Author',platform:'twitter',url:'https://x.com/karpathy',feeds:['https://api.xgo.ing/rss/user/abc'],tags:[],enabled:true};
+ const channel={id:'tw-tick-channel',source_id:source.id,label:'https://api.xgo.ing/rss/user/abc',transport:'public',url:'https://api.xgo.ing/rss/user/abc',group_key:'api.xgo.ing',enabled:true,interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=7,next_check=0 WHERE id=?',channel.id);db.run("UPDATE groups SET state='AUTH_REQUIRED',next_allowed=? WHERE id=?",Date.now()+86400000,'api.xgo.ing');
+ const service=new ReaderService(db,{schedulerEnabled:true,adapters:{desktopPlatforms:['twitter']},miniflux:'http://unused',karakeep:'http://unused'},{mf:{call:async()=>[]}});
+ service.monitor=()=>{};service.sendNotifications=async()=>{};service.pump=async()=>{};
+ const collector=new DesktopCollector(service);service.desktop=collector;collector.recordBackendStatus({'twitter-cli-shervin':{status:'ok',reason:'verified',state:'READY'}});
+ service.tick();assert.equal(db.get("SELECT count(*) n FROM jobs WHERE channel_id=? AND state='QUEUED'",channel.id).n,1);
+});
+
+test('explicit Twitter Python wrapper never imports browser-cookie auth and filters retweets',t=>{
+ const os=require('node:os'),fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'qr-twitter-wrapper-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const pkg=path.join(dir,'twitter_cli');fs.mkdirSync(pkg);fs.writeFileSync(path.join(pkg,'__init__.py'),'');
+ fs.writeFileSync(path.join(pkg,'client.py'),[
+   'from types import SimpleNamespace',
+   'class TwitterClient:',
+   '  def __init__(self, auth_token, ct0, rate_limit_config=None, cookie_string=None):',
+   '    assert auth_token == "explicit-auth" and ct0 == "explicit-ct0"',
+   '  def fetch_user(self, handle): return SimpleNamespace(id="u1", screen_name=handle)',
+   '  def fetch_user_tweets(self, user_id, limit):',
+   '    a=SimpleNamespace(screen_name="karpathy")',
+   '    return [SimpleNamespace(is_retweet=False, author=a, payload={"id":"1","text":"ok","author":{"screenName":"karpathy"},"createdAtISO":"2026-09-20T00:00:00Z"}), SimpleNamespace(is_retweet=True, author=a, payload={"id":"2"})]'
+ ].join('\n'));
+ fs.writeFileSync(path.join(pkg,'serialization.py'),'def tweet_to_dict(tweet): return tweet.payload\n');
+ const wrapper=path.join(__dirname,'../tools/windows/twitter-explicit.py');
+ const run=spawnSync('python3',[wrapper,'karpathy','20'],{encoding:'utf8',env:{...process.env,PYTHONPATH:dir,TWITTER_AUTH_TOKEN:'explicit-auth',TWITTER_CT0:'explicit-ct0'}});
+ assert.equal(run.status,0,run.stderr);const rows=JSON.parse(run.stdout);assert.equal(rows.length,1);assert.equal(rows[0].id,'1');
+ const code=fs.readFileSync(wrapper,'utf8');assert.doesNotMatch(code,/^\s*(?:from|import)\s+twitter_cli\.auth/m);assert.doesNotMatch(code,/browser_cookie3/);
+ const noCreds=spawnSync('python3',[wrapper,'karpathy','1'],{encoding:'utf8',env:{...process.env,PYTHONPATH:dir,TWITTER_AUTH_TOKEN:'',TWITTER_CT0:''}});
+ assert.equal(noCreds.status,77);
+});
+
+
+test('Instagram rows normalize stable shortcode identity, time and author',()=>{
+ const job={platform:'instagram',kind:'posts',authorId:'nasa',name:'NASA'};
+ const [item]=normalize(job,[{id:'1234567890123456789',code:'ABC_def-12',author:'nasa',caption:'Moon image',taken_at:1789700000,media_type:1,url:'https://www.instagram.com/p/ABC_def-12/'}]);
+ assert.equal(item.link,'https://www.instagram.com/p/ABC_def-12/');
+ assert.equal(item.published,1789700000000);
+ assert.equal(item.title,'Moon image');assert.equal(item.summary,'Moon image');assert.equal(item.author,'nasa');
+ const [validated]=validateItems({platform:'instagram',label:'posts',authorId:'nasa'},[item]);
+ assert.equal(validated.guid,'instagram:ABC_def-12');assert.equal(validated.author,'nasa');assert.equal(validated.content_state,'PARTIAL');
+});
+test('Instagram item author and shortcode mismatch are rejected on both worker and ECS boundaries',()=>{
+ const job={platform:'instagram',kind:'posts',authorId:'nasa'};
+ assert.throws(()=>normalize(job,[{id:'1',code:'ABC_def-12',author:'other',caption:'x',taken_at:1789700000,url:'https://www.instagram.com/p/ABC_def-12/'}]),/author mismatch/);
+ assert.throws(()=>normalize(job,[{id:'1',code:'DIFFERENT1',author:'nasa',caption:'x',taken_at:1789700000,url:'https://www.instagram.com/p/ABC_def-12/'}]),/shortcode mismatch/);
+ assert.throws(()=>validateItems({platform:'instagram',label:'posts',authorId:'nasa'},[{title:'x',link:'https://www.instagram.com/p/ABC_def-12/',published:1789900000000,summary:'x',author:'other'}]),/author/);
+});
+test('Instagram desktop source is only claimable after its platform backend passes an explicit canary',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'ig-source',name:'NASA',platform:'instagram',url:'https://www.instagram.com/nasa/',tags:[],adapter:{platform:'instagram',id:'nasa'},enabled:true};
+ const config={adapters:{desktopPlatforms:['instagram']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=19 WHERE id=?',channel.id);
+ const service={db,config,provisionChannels:async()=>{},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=? WHERE id=?',state,error,job.id)};
+ const collector=new DesktopCollector(service);service.desktop=collector;db.createRun([channel],'manual');
+ const blocked=collector.claim(['instagram'],[],{'opencli-instagram-shervin':{status:'off',reason:'login canary not verified',state:'UNVERIFIED'}});
+ assert.equal(blocked.job,null);
+ const claimed=collector.claim(['instagram'],[],{'opencli-instagram-shervin':{status:'ok',reason:'read-only canary passed',state:'READY'}});
+ assert.ok(claimed.job);assert.equal(claimed.job.platform,'instagram');assert.equal(claimed.job.authorId,'nasa');assert.equal(claimed.job.kind,'posts');assert.equal(claimed.job.backendId,'opencli-instagram-shervin');
+});
+
+test('Instagram auth recovery probe names the platform backend and is explicitly read-only',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'ig-source',name:'NASA',platform:'instagram',url:'https://www.instagram.com/nasa/',tags:[],adapter:{platform:'instagram',id:'nasa'},enabled:true};
+ const config={adapters:{desktopPlatforms:['instagram']}},channel=channelsFor(source,config.adapters)[0];db.putSource(source,[channel]);db.run("UPDATE channels SET feed_id=19,state='AUTH_REQUIRED' WHERE id=?",channel.id);db.run("INSERT OR REPLACE INTO groups(id,state,next_allowed,last_success,failures) VALUES('credential:instagram','AUTH_REQUIRED',0,0,1)");
+ const service={db,config,provisionChannels:async()=>{},finish:()=>{}};const collector=new DesktopCollector(service);service.desktop=collector;
+ const probe=collector.authProbe(['instagram']);assert.equal(probe.platform,'instagram');assert.equal(probe.authorId,'nasa');assert.equal(probe.kind,'posts');assert.equal(probe.backendId,'opencli-instagram-shervin');assert.equal(probe.authProbe,true);
+});
+
+function youtubeTranscriptFixture(t){
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'yt-source',name:'YouTube source',platform:'youtube',url:'https://www.youtube.com/@example',tags:[],feeds:['https://www.youtube.com/feeds/videos.xml?channel_id=UCfixture'],enabled:true};
+ const channel={id:'yt-channel',source_id:source.id,label:'rss',transport:'public',url:source.feeds[0],enabled:true,group_key:'youtube.com',interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=23,last_success=?,state=? WHERE id=?',1234567890,'SUCCEEDED_NO_NEW',channel.id);
+ let upstream={id:901,title:'Video',url:'https://www.youtube.com/watch?v=TlR7douxQRM',author:'Channel',published_at:'2026-09-20T00:00:00Z',content:'<p>Feed body</p>',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/901'&&method==='GET')return upstream;if(path==='/v1/entries/901'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const service=new ReaderService(db,{karakeep:'http://unused',karakeepToken:'',adapters:{}},{mf});service.project(upstream,channel);
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,puts,getUpstream:()=>upstream};
+}
+
+test('YouTube original links normalize watch and youtu.be routes to one video identity',()=>{
+ const {originalLink}=require('../tools/windows/original-link.cjs');
+ const a=originalLink({platform:'youtube',kind:'transcript'},'https://www.youtube.com/watch?v=TlR7douxQRM');
+ const b=originalLink({platform:'youtube',kind:'transcript'},'https://youtu.be/TlR7douxQRM');
+ assert.equal(a.guid,'youtube:TlR7douxQRM');assert.equal(b.guid,a.guid);assert.equal(b.link,a.link);
+ assert.throws(()=>originalLink({platform:'youtube',kind:'transcript'},'https://www.youtube.com/playlist?list=PL123'),/mismatch/);
+});
+
+test('yt-dlp JSON3 subtitles normalize into bounded transcript rows',()=>{
+ const job={taskType:'youtube_transcript_v1',platform:'youtube',entryId:901,url:'https://www.youtube.com/watch?v=TlR7douxQRM'};
+ const payload={events:[
+  {tStartMs:0,segs:[{utf8:'Hello '},{utf8:'world'}]},
+  {tStartMs:1200,segs:[{utf8:'Second line'}]},
+  {tStartMs:2400,segs:[{utf8:'Second line'}]},
+  {tStartMs:65000,segs:[{utf8:'After a minute'}]}
+ ]};
+ const out=normalizeYtDlpJson3(job,payload);
+ assert.equal(out.videoId,'TlR7douxQRM');assert.equal(out.segmentCount,3);
+ assert.match(out.content,/\[0:00\] Hello world/);assert.match(out.content,/\[1:05\] After a minute/);
+});
+
+test('YouTube transcript queue is explicit and uses the existing entry identity',t=>{
+ const f=youtubeTranscriptFixture(t);
+ const initial=f.collector.transcriptStatus(901);assert.equal(initial.state,'NONE');assert.equal(initial.eligible,true);
+ const queued=f.collector.queueTranscript(901);assert.equal(queued.state,'QUEUED');
+ const claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);assert.equal(claim.job.taskType,'youtube_transcript_v1');assert.equal(claim.job.entryId,901);
+ assert.equal(claim.job.url,'https://www.youtube.com/watch?v=TlR7douxQRM');assert.equal(claim.job.kind,'transcript');
+});
+
+test('successful YouTube transcript enrichment preserves read state, publication time and source health',async t=>{
+ const f=youtubeTranscriptFixture(t);f.collector.queueTranscript(901);const claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);
+ const before=f.db.get('SELECT status,published_at,url FROM entries WHERE id=901'),channelBefore=f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id);
+ const result={leaseId:claim.job.leaseId,entryId:901,status:'OK',backendId:'opencli-youtube-shervin',videoId:'TlR7douxQRM',segmentCount:2,content:'[0:00] hello\n[0:05] world'};
+ const ack=await f.collector.submit(result);assert.equal(ack.state,'TRANSCRIPT_ENRICHED');assert.equal(ack.backendId,'opencli-youtube-shervin');
+ const row=f.db.get('SELECT status,published_at,url,content_origin FROM entries WHERE id=901');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.url,before.url);assert.equal(row.content_origin,'youtube_transcript_enrichment');
+ assert.deepEqual(f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id),channelBefore);
+ assert.equal(f.puts.length,1);assert.match(f.puts[0].content,/data-qr-youtube-transcript="TlR7douxQRM"/);assert.match(f.puts[0].content,/\[0:00\] hello/);
+ const detail=JSON.parse(f.db.get("SELECT detail FROM entry_enrichments WHERE entry_id=901 AND kind='youtube_transcript_v1'").detail);assert.equal(detail.backend,'opencli-youtube-shervin');
+ assert.deepEqual(await f.collector.submit(result),ack);await assert.rejects(f.collector.submit({...result,content:'changed'}),/changed transcript replay/);
+});
+
+test('YouTube transcript submit rejects mismatched video or unknown backend before Miniflux write',async t=>{
+ const f=youtubeTranscriptFixture(t);f.collector.queueTranscript(901);let claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:901,status:'OK',backendId:'opencli-youtube-shervin',videoId:'AAAAAAAAAAA',segmentCount:1,content:'x'}),/video mismatch/);
+ assert.equal(f.puts.length,0);
+ f.db.run("UPDATE collector_transcripts SET state='QUEUED',lease_id=NULL,expires_at=0,digest=NULL,next_attempt=0 WHERE entry_id=901");claim=f.collector.claim(['youtube'],['youtube_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:901,status:'OK',backendId:'unknown',videoId:'TlR7douxQRM',segmentCount:1,content:'x'}),/invalid transcript backend/);
+ assert.equal(f.puts.length,0);
+});
+
+test('YouTube worker implements Agent-Reach retry chain without downloading video',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/function collectYoutubeViaYtDlp/);assert.match(src,/--skip-download/);assert.match(src,/--sub-format','json3'/);assert.match(src,/fs\.rmSync\(dir/);
+ assert.match(src,/backendId:'yt-dlp-shervin'/);assert.match(src,/backendId:'opencli-youtube-shervin'/);
+ assert.ok(src.indexOf("collectYoutubeViaYtDlp(job)")<src.indexOf("config.opencliMain,'youtube','transcript'"));
+});
+
+test('native YouTube transcript status is authenticated and queueing is action-gated',async t=>{
+ const f=youtubeTranscriptFixture(t),app=createApp(f.service,{accessToken:'reader-test',collectorToken:'collector-test'});await new Promise(r=>app.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>app.close(r)));
+ const base='http://127.0.0.1:'+app.address().port,auth={'X-Qr-Token':'reader-test','Content-Type':'application/json'},write={...auth,'X-QR-Action':'1'};
+ assert.equal((await fetch(base+'/desk/api/entries/901/transcript')).status,401);
+ let response=await fetch(base+'/desk/api/entries/901/transcript',{headers:auth});assert.equal(response.status,200);assert.equal((await response.json()).state,'NONE');
+ assert.equal((await fetch(base+'/desk/api/entries/901/transcript',{method:'POST',headers:auth,body:'{}'})).status,403);
+ response=await fetch(base+'/desk/api/entries/901/transcript',{method:'POST',headers:write,body:'{}'});assert.equal(response.status,202);assert.equal((await response.json()).state,'QUEUED');
+});
+
+function podcastTranscriptFixture(t,{length=82430062}={}){
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const feed='https://feeds.transistor.fm/recsperts-recommender-systems-experts',episode='https://share.transistor.fm/s/c07c7bf6',audio='https://media.transistor.fm/c07c7bf6/8a10e95d.mp3';
+ const source={id:'pod-source',name:'Recsperts',platform:'podcast',url:'https://podcasts.apple.com/us/podcast/id1587222271',tags:[],feeds:[feed],enabled:true};
+ const channel={id:'pod-channel',source_id:source.id,label:feed,transport:'public',url:feed,enabled:true,group_key:'feeds.transistor.fm',interval_ms:1800000,min_gap_ms:0};
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=24,last_success=?,state=? WHERE id=?',1234567890,'SUCCEEDED_NO_NEW',channel.id);
+ let upstream={id:902,title:'Episode',url:episode,author:'Recsperts',published_at:'2026-09-20T00:00:00Z',content:'<p>Feed notes</p>',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/902'&&method==='GET')return upstream;if(path==='/v1/entries/902'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const xml='<rss><channel><title>R</title><item><guid>g</guid><title>Episode</title><link>'+episode+'</link><enclosure url="'+audio+'" type="audio/mpeg" length="'+length+'"/></item></channel></rss>';
+ const calls=[],internalFetch=async(url,opts={})=>{calls.push({url,opts});if(url===feed)return {status:200,body:Buffer.from(xml),headers:{},url};if(url===audio&&opts.method==='HEAD')return {status:200,body:Buffer.alloc(0),headers:{'content-type':'audio/mpeg'},url};throw new Error('unexpected fetch '+url);};
+ const service=new ReaderService(db,{karakeep:'http://unused',karakeepToken:'',adapters:{}},{mf,internalFetch});service.project(upstream,channel);
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,feed,episode,audio,calls,puts,getUpstream:()=>upstream};
+}
+
+test('Podcast transcript request resolves audio only from the registered feed before queueing',async t=>{
+ const f=podcastTranscriptFixture(t);const state=await f.service.requestTranscript(902);
+ assert.equal(state.state,'QUEUED');assert.equal(state.kind,'podcast_transcript_v1');
+ const task=f.db.get('SELECT kind,media_url,media_length FROM collector_transcripts WHERE entry_id=902');
+ assert.equal(task.kind,'podcast_transcript_v1');assert.equal(task.media_url,f.audio);assert.equal(task.media_length,82430062);
+ assert.deepEqual(f.calls.map(x=>[x.url,x.opts.method||'GET']),[[f.feed,'GET'],[f.audio,'HEAD']]);
+ const claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ assert.equal(claim.job.taskType,'podcast_transcript_v1');assert.equal(claim.job.audioUrl,f.audio);assert.equal(claim.job.mediaLength,82430062);
+ assert.equal(f.db.get('SELECT expires_at FROM collector_transcripts WHERE entry_id=902').expires_at>Date.now()+50*60*1000,true);
+});
+
+test('Podcast audio larger than the local-transcription limit is refused before worker queueing',async t=>{
+ const f=podcastTranscriptFixture(t,{length:513*1024*1024});
+ await assert.rejects(f.service.requestTranscript(902),e=>e.status===413);
+ assert.equal(f.db.get('SELECT count(*) n FROM collector_transcripts').n,0);
+});
+
+test('successful local Podcast transcript preserves entry identity, read state and source health',async t=>{
+ const f=podcastTranscriptFixture(t);await f.service.requestTranscript(902);const claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ const before=f.db.get('SELECT status,published_at,url FROM entries WHERE id=902'),channelBefore=f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id);
+ const mediaSha256=require('../reader-bridge/core').hash(f.audio),result={leaseId:claim.job.leaseId,entryId:902,status:'OK',backendId:'faster-whisper-local',mediaSha256,model:'base',language:'en',segmentCount:2,content:'[0:00] hello\n[0:05] world'};
+ const ack=await f.collector.submit(result);assert.equal(ack.state,'TRANSCRIPT_ENRICHED');assert.equal(ack.backendId,'faster-whisper-local');
+ const row=f.db.get('SELECT status,published_at,url,content_origin FROM entries WHERE id=902');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.url,before.url);assert.equal(row.content_origin,'podcast_local_transcript_enrichment');
+ assert.deepEqual(f.db.get('SELECT last_success,state FROM channels WHERE id=?',f.channel.id),channelBefore);
+ assert.equal(f.puts.length,1);assert.match(f.puts[0].content,/data-qr-podcast-transcript="902"/);assert.match(f.puts[0].content,/\[0:00\] hello/);
+ const detail=JSON.parse(f.db.get("SELECT detail FROM entry_enrichments WHERE entry_id=902 AND kind='podcast_transcript_v1'").detail);assert.equal(detail.backend,'faster-whisper-local');assert.equal(detail.model,'base');assert.equal(detail.language,'en');assert.equal(detail.mediaUrlHash,mediaSha256);
+ assert.deepEqual(await f.collector.submit(result),ack);
+});
+
+test('Podcast transcript rejects worker media substitution and cloud backends before Miniflux write',async t=>{
+ const f=podcastTranscriptFixture(t);await f.service.requestTranscript(902);let claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:902,status:'OK',backendId:'faster-whisper-local',mediaSha256:'0'.repeat(64),model:'base',language:'en',segmentCount:1,content:'x'}),/media mismatch/);assert.equal(f.puts.length,0);
+ f.db.run("UPDATE collector_transcripts SET state='QUEUED',lease_id=NULL,expires_at=0,digest=NULL,next_attempt=0 WHERE entry_id=902");claim=f.collector.claim(['podcast'],['podcast_transcript_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:902,status:'OK',backendId:'groq-whisper',mediaSha256:require('../reader-bridge/core').hash(f.audio),model:'base',language:'en',segmentCount:1,content:'x'}),/invalid transcript backend/);assert.equal(f.puts.length,0);
+});
+
+test('Podcast local wrapper is local-only, SSRF-aware and deletes temporary audio',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/podcast-local-whisper.py'),'utf8');
+ assert.match(src,/ipaddress\.ip_address/);assert.match(src,/ip\.is_global/);assert.match(src,/HTTPRedirectHandler/);assert.match(src,/TemporaryDirectory/);assert.match(src,/shell=False/);
+ assert.match(src,/faster_whisper/);assert.match(src,/compute_type="int8"/);assert.match(src,/MODEL = "base"/);assert.match(src,/faster-whisper-local/);
+ assert.doesNotMatch(src,/groq|openai|requests\.post|api_key/i);
+});
+
+test('Reddit RSS rows normalize stable t3 identity, community, time and plain summary',()=>{
+ const job={platform:'reddit',kind:'community.posts',authorId:'localllama',name:'r/LocalLLaMA'};
+ const [item]=normalize(job,[{id:'t3_1wkxx8e',subreddit:'LocalLLaMA',author:'example',title:'A post',summary:'plain summary',updated:'2026-09-19T21:18:19+00:00',url:'https://www.reddit.com/r/LocalLLaMA/comments/1wkxx8e/'}]);
+ assert.equal(item.link,'https://www.reddit.com/r/LocalLLaMA/comments/1wkxx8e/');
+ assert.equal(item.published,Date.parse('2026-09-19T21:18:19+00:00'));assert.equal(item.author,'example');
+ const [validated]=validateItems({platform:'reddit',label:'community.posts',authorId:'localllama'},[item]);
+ assert.equal(validated.guid,'t3_1wkxx8e');assert.equal(validated.content_state,'PARTIAL');
+});
+test('Reddit RSS normalization rejects cross-community rows and mismatched t3 identity',()=>{
+ const job={platform:'reddit',kind:'community.posts',authorId:'localllama'};
+ assert.throws(()=>normalize(job,[{id:'t3_abc',subreddit:'MachineLearning',title:'x',url:'https://www.reddit.com/r/MachineLearning/comments/abc/x/'}]),/community mismatch/);
+ assert.throws(()=>normalize(job,[{id:'t3_wrong',subreddit:'LocalLLaMA',title:'x',url:'https://www.reddit.com/r/LocalLLaMA/comments/abc/x/'}]),/identity mismatch/);
+});
+test('Reddit community is claimable through the single-browser lease without becoming an auth credential group',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'reddit-source',name:'r/LocalLLaMA',platform:'reddit',url:'https://www.reddit.com/r/LocalLLaMA/',sourceType:'community',tags:[],adapter:{platform:'reddit',id:'localllama'},enabled:true};
+ const config={adapters:{desktopPlatforms:['reddit']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=23 WHERE id=?',channel.id);
+ const service={db,config,provisionChannels:async()=>{},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=? WHERE id=?',state,error,job.id)};
+ const collector=new DesktopCollector(service);service.desktop=collector;db.createRun([channel],'manual');
+ const claimed=collector.claim(['reddit']);
+ assert.ok(claimed.job);assert.equal(claimed.job.platform,'reddit');assert.equal(claimed.job.authorId,'localllama');assert.equal(claimed.job.kind,'community.posts');assert.equal(claimed.job.backendId,'reddit-rss-shervin');
+ assert.equal(db.channels().find(c=>c.id===channel.id).credential_group,undefined);
+});
+test('Windows collector keeps distinct zero-account Reddit Community RSS and User OpenCLI read paths',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/job\.kind==='community\.posts'&&job\.backendId==='reddit-rss-shervin'/);assert.match(src,/reddit-rss\.cjs/);
+ assert.match(src,/job\.kind==='user\.posts'&&job\.backendId==='opencli-reddit-user-shervin'/);assert.match(src,/config\.opencliMain,'reddit','user-posts',job\.authorId/);
+ assert.doesNotMatch(src,/reddit.*login|rdt login/i);
+});
+
+function bilibiliSubtitleFixture(t){
+ const {ReaderService}=require('../reader-bridge/service');
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'bili-sub-source',name:'AITIME',platform:'bilibili',url:'https://space.bilibili.com/503316308',tags:[],feeds:['http://127.0.0.1:1200/bilibili/user/video/503316308'],enabled:true};
+ const config={adapters:{desktopPlatforms:['bilibili']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=23,last_success=?,state=?,next_check=? WHERE id=?',1234567890,'SUCCEEDED_NO_NEW',Date.now()+3600000,channel.id);
+ let upstream={id:903,title:'Known Bilibili video',url:'https://www.bilibili.com/video/BV1AaJP6iEch',author:'AITIME',published_at:'2026-09-20T00:00:00Z',content:'<section><h2>Bilibili Video 详情</h2><p>existing detail</p></section>',status:'unread'},puts=[];
+ const mf={call:async(path,method='GET',payload)=>{if(path==='/v1/entries/903'&&method==='GET')return upstream;if(path==='/v1/entries/903'&&method==='PUT'){puts.push(payload);upstream={...upstream,title:payload.title??upstream.title,content:payload.content??upstream.content};return {};}throw new Error('unexpected mf '+method+' '+path);}};
+ const service=new ReaderService(db,{...config,karakeep:'http://unused',karakeepToken:'',adapters:config.adapters},{mf});service.project(upstream,channel);
+ const collector=new DesktopCollector(service);service.desktop=collector;return {db,service,collector,source,channel,puts,getUpstream:()=>upstream};
+}
+
+test('Bilibili subtitle queue remains eligible after public detail already made the article TEXT',t=>{
+ const f=bilibiliSubtitleFixture(t),initial=f.collector.transcriptStatus(903);
+ assert.equal(initial.eligible,true);assert.equal(initial.kind,'bilibili_subtitle_v1');assert.equal(initial.state,'NONE');
+ const queued=f.collector.queueTranscript(903);assert.equal(queued.state,'QUEUED');
+ assert.equal(f.collector.claim(['bilibili'],['entry_body_v1']).job,null);
+ const claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ assert.equal(claim.job.taskType,'bilibili_subtitle_v1');assert.equal(claim.job.platform,'bilibili');assert.equal(claim.job.kind,'videos');
+ assert.equal(claim.job.url,'https://www.bilibili.com/video/BV1AaJP6iEch');
+});
+
+test('successful Bilibili subtitle appends to existing detail and preserves discovery health/read metadata',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueTranscript(903);const claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ const before=f.db.get('SELECT status,published_at,url FROM entries WHERE id=903'),channelBefore=f.db.get('SELECT last_success,state,error FROM channels WHERE id=?',f.channel.id),groupBefore=f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key);
+ const result={leaseId:claim.job.leaseId,entryId:903,status:'OK',backendId:'opencli-bilibili-shervin',bilibiliId:'BV1AaJP6iEch',segmentCount:2,content:'[4.00s - 6.00s] first line <script>text only</script>\n[6.00s - 8.00s] second subtitle line'};
+ const ack=await f.collector.submit(result);assert.equal(ack.state,'TRANSCRIPT_ENRICHED');assert.equal(ack.backendId,'opencli-bilibili-shervin');
+ const row=f.db.get('SELECT status,published_at,url,content_origin FROM entries WHERE id=903');assert.equal(row.status,before.status);assert.equal(row.published_at,before.published_at);assert.equal(row.url,before.url);assert.equal(row.content_origin,'bilibili_subtitle_enrichment');
+ assert.deepEqual(f.db.get('SELECT last_success,state,error FROM channels WHERE id=?',f.channel.id),channelBefore);assert.deepEqual(f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),groupBefore);
+ assert.equal(f.puts.length,1);assert.match(f.puts[0].content,/existing detail/);assert.match(f.puts[0].content,/data-qr-bilibili-subtitle="BV1AaJP6iEch"/);assert.match(f.puts[0].content,/&lt;script&gt;/);assert.doesNotMatch(f.puts[0].content,/<script>/);
+ const detail=JSON.parse(f.db.get("SELECT detail FROM entry_enrichments WHERE entry_id=903 AND kind='bilibili_subtitle_v1'").detail);assert.equal(detail.backend,'opencli-bilibili-shervin');assert.equal(detail.bilibiliId,'BV1AaJP6iEch');
+});
+
+test('Bilibili subtitle auth failure requeues only the subtitle task and never freezes author discovery',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueTranscript(903);const claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']),groupBefore=f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),channelBefore=f.db.get('SELECT state,error FROM channels WHERE id=?',f.channel.id);
+ const ack=await f.collector.submit({leaseId:claim.job.leaseId,entryId:903,status:'AUTH_REQUIRED',backendId:'opencli-bilibili-shervin'});
+ assert.equal(ack.state,'AUTH_REQUIRED');assert.equal(f.db.get('SELECT state FROM collector_transcripts WHERE entry_id=903').state,'QUEUED');
+ assert.deepEqual(f.db.get('SELECT * FROM groups WHERE id=?',f.channel.group_key),groupBefore);assert.deepEqual(f.db.get('SELECT state,error FROM channels WHERE id=?',f.channel.id),channelBefore);
+});
+
+test('Bilibili subtitle rejects BV substitution and wrong backend before Miniflux write',async t=>{
+ const f=bilibiliSubtitleFixture(t);f.collector.queueTranscript(903);let claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:903,status:'OK',backendId:'opencli-bilibili-shervin',bilibiliId:'BV1BBBBBBBBBB',segmentCount:1,content:'[1.00s - 2.00s] x'}),/video mismatch/);assert.equal(f.puts.length,0);
+ f.db.run("UPDATE collector_transcripts SET state='QUEUED',lease_id=NULL,expires_at=0,digest=NULL,next_attempt=0 WHERE entry_id=903");claim=f.collector.claim(['bilibili'],['bilibili_subtitle_v1']);
+ await assert.rejects(f.collector.submit({leaseId:claim.job.leaseId,entryId:903,status:'OK',backendId:'yt-dlp-shervin',bilibiliId:'BV1AaJP6iEch',segmentCount:1,content:'[1.00s - 2.00s] x'}),/invalid transcript backend/);assert.equal(f.puts.length,0);
+});
+
+test('Windows Bilibili subtitle normalizer emits bounded timestamped text and stable BV identity',()=>{
+ const job={taskType:'bilibili_subtitle_v1',entryId:903,platform:'bilibili',kind:'videos',url:'https://www.bilibili.com/video/BV1AaJP6iEch'};
+ const result=normalizeBilibiliSubtitle(job,[{from:'4.00s',to:'6.00s',content:' first subtitle line '},{from:'6.00s',to:'8.00s',content:'first subtitle line'},{from:'8.00s',to:'10.00s',content:'second line with enough text for a real transcript payload'}]);
+ assert.equal(result.entryId,903);assert.equal(result.bilibiliId,'BV1AaJP6iEch');assert.equal(result.segmentCount,2);assert.match(result.content,/\[4\.00s - 6\.00s\] first subtitle line/);assert.match(result.content,/\[8\.00s - 10\.00s\] second line/);
+ assert.throws(()=>normalizeBilibiliSubtitle(job,[{from:'9.00s',to:'8.00s',content:'bad timestamp that is long enough'}]),/timestamp/);
+});
+
+test('Windows Bilibili subtitle worker uses one fixed read-only OpenCLI command',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/function collectBilibiliSubtitle/);assert.match(src,/config\.opencliMain,'bilibili','subtitle',original\.link/);assert.match(src,/backendId:'opencli-bilibili-shervin'/);assert.match(src,/out\.push\('bilibili_subtitle_v1'\)/);
+ assert.doesNotMatch(src,/bilibili.*login/i);
+});
+
+test('Reddit user-post rows derive stable t3 identity from canonical URL and keep publication unknown',()=>{
+ const job={platform:'reddit',kind:'user.posts',authorId:'rm-rf-rm',name:'u/rm-rf-rm'};
+ const row={title:'Biweekly megathread',subreddit:'LocalLLaMA',score:10,comments:5,url:'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/biweekly_megathread_project_showcase/'};
+ const [item]=normalize(job,[row]);
+ assert.equal(item.link,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/');
+ assert.equal(item.published,null);assert.equal(item.author,'rm-rf-rm');assert.equal(item.summary,'');
+ const [validated]=validateItems({platform:'reddit',label:'user.posts',authorId:'rm-rf-rm'},[item]);
+ assert.equal(validated.guid,'t3_1wgcpww');assert.equal(validated.content_state,'META');
+ assert.throws(()=>normalize(job,[{...row,id:'t3_wrong'}]),/identity mismatch/);
+ assert.throws(()=>validateItems({platform:'reddit',label:'user.posts',authorId:'rm-rf-rm'},[{...item,author:'someoneelse'}]),/author/);
+});
+
+test('Reddit user source is claimed through zero-account OpenCLI user-posts without a credential group',t=>{
+ const db=new Database(':memory:');t.after(()=>db.close());
+ const source={id:'reddit-user-source',name:'u/rm-rf-rm',platform:'reddit',url:'https://www.reddit.com/user/rm-rf-rm/',sourceType:'author',tags:[],adapter:{platform:'reddit',id:'rm-rf-rm'},enabled:true};
+ const config={adapters:{desktopPlatforms:['reddit']}},channel=channelsFor(source,config.adapters)[0];
+ db.putSource(source,[channel]);db.run('UPDATE channels SET feed_id=24 WHERE id=?',channel.id);
+ const service={db,config,provisionChannels:async()=>{},finish:(job,state,error)=>db.run('UPDATE jobs SET state=?,error=? WHERE id=?',state,error,job.id)};
+ const collector=new DesktopCollector(service);service.desktop=collector;db.createRun([channel],'manual');
+ const claimed=collector.claim(['reddit']);
+ assert.ok(claimed.job);assert.equal(claimed.job.platform,'reddit');assert.equal(claimed.job.authorId,'rm-rf-rm');assert.equal(claimed.job.kind,'user.posts');assert.equal(claimed.job.backendId,'opencli-reddit-user-shervin');
+ assert.equal(db.channels().find(c=>c.id===channel.id).credential_group,undefined);
+});
+
+test('Windows Reddit user worker uses only the public user-posts read command and never login or comment history',()=>{
+ const fs=require('node:fs'),path=require('node:path'),src=fs.readFileSync(path.join(__dirname,'../tools/windows/collector.cjs'),'utf8');
+ assert.match(src,/job\.kind==='user\.posts'&&job\.backendId==='opencli-reddit-user-shervin'/);
+ assert.match(src,/config\.opencliMain,'reddit','user-posts',job\.authorId/);
+ assert.doesNotMatch(src,/reddit.*login|rdt login/i);
+ const userBranch=/job\.kind==='user\.posts'[\s\S]{0,500}?runOpencliRead\([^;]+\);/.exec(src)?.[0]||'';
+ assert.doesNotMatch(userBranch,/user-comments|home|saved|upvoted|subscribed/);
 });

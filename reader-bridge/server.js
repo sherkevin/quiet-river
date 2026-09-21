@@ -8,7 +8,7 @@ const {Database}=require('./database');
 const {DesktopCollector}=require('./desktop-collector');
 const {ReaderService}=require('./service');
 const {safeURL,hash,json}=require('./core');
-const {authorIdentity}=require('./sources');
+const {sourceIdentity}=require('./sources');
 const {normalizeTags}=require('./tags');
 const {historyPage}=require('./reading-history');
 const {request,ApiClient}=require('./network');
@@ -88,7 +88,8 @@ function createApp(service,config,clients={}){
         res.setHeader('Set-Cookie',await readerWebSession(config));
         res.writeHead(302,{Location:'/dashboard/'+target,'Cache-Control':'no-store'});return res.end();
       }
-      if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),tags:service.tagCatalog(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
+      if(p==='/desk/api/state'&&req.method==='GET')return reply(res,200,{sources:service.db.sources().map(s=>({id:s.id,name:s.name,platform:s.platform,sourceType:s.sourceType||'author',tags:s.tags,url:s.url,visible:s.visible,enabled:s.enabled})),health:service.health(),tags:service.tagCatalog(),preferences:service.db.setting('preferences',{}),version:'1.0.0'});
+      if(p==='/desk/api/acquisition/doctor'&&req.method==='GET')return reply(res,200,await service.acquisitionDoctor());
       if(p==='/desk/api/entries'&&req.method==='GET'){
         const offset=Math.max(0,Number(u.searchParams.get('offset'))||0), limit=Math.max(1,Math.min(100,Number(u.searchParams.get('limit'))||30));
         return reply(res,200,service.list({mode:u.searchParams.get('mode')||'latest',sourceId:u.searchParams.get('source')||undefined,platform:u.searchParams.get('platform')||undefined,tags:u.searchParams.has('tag')?u.searchParams.getAll('tag'):[],order:u.searchParams.get('order')||'desc',unread:u.searchParams.get('unread')==='1',offset,limit,asOf:Math.min(Date.now(),Number(u.searchParams.get('asOf'))||Date.now())}));
@@ -98,6 +99,9 @@ function createApp(service,config,clients={}){
       const bodyEnrichment=/^\/desk\/api\/entries\/(\d+)\/enrichment$/.exec(p);
       if(bodyEnrichment&&req.method==='GET')return reply(res,200,service.bodyEnrichment(Number(bodyEnrichment[1])));
       if(bodyEnrichment&&req.method==='POST')return reply(res,202,service.requestBodyEnrichment(Number(bodyEnrichment[1])));
+      const mediaTranscript=/^\/desk\/api\/entries\/(\d+)\/transcript$/.exec(p);
+      if(mediaTranscript&&req.method==='GET')return reply(res,200,service.transcriptStatus(Number(mediaTranscript[1])));
+      if(mediaTranscript&&req.method==='POST')return reply(res,202,await service.requestTranscript(Number(mediaTranscript[1])));
       const articlePrepare=/^\/desk\/api\/entries\/(\d+)\/prepare$/.exec(p);
       if(articlePrepare&&req.method==='POST')return reply(res,200,await service.articleDetail(Number(articlePrepare[1]),{prepare:true}));
       const articleNote=/^\/desk\/api\/entries\/(\d+)\/note$/.exec(p);
@@ -142,8 +146,8 @@ function createApp(service,config,clients={}){
         const b=await bodyJSON(req), url=safeURL(b.url),feed=safeURL(b.feedUrl);
         if(!String(b.name||'').trim()||(!url&&!feed))return reply(res,400,{error:'需要来源名称以及主页或 Feed 地址'});
         const source={id:crypto.randomBytes(8).toString('hex'),name:String(b.name).slice(0,150),url:url||feed,platform:String(b.platform||'blog').slice(0,40),tags:normalizeTags(b.tags===undefined?[]:b.tags),feeds:feed?[feed]:[],manual:!feed};
-        const identity=authorIdentity(source.url);
-        if(identity){source.platform=identity.platform;source.adapter=identity;source.manual=false;}
+        const identity=sourceIdentity(source.url);
+        if(identity){source.platform=identity.platform;source.sourceType=identity.sourceType;source.adapter={platform:identity.platform,id:identity.id};source.manual=false;}
         await service.importManifest({subscriptions:[source]});return reply(res,201,{source});
       }
       const configureMatch=/^\/desk\/api\/sources\/([\w-]+)\/configure$/.exec(p);
@@ -199,7 +203,7 @@ function loadConfig(){
     proxyFeedsEnabled:process.env.QR_PUBLIC_FEED_PROXY==='true',
     miniflux:process.env.MINIFLUX_URL||'http://127.0.0.1:3061',minifluxToken:process.env.MINIFLUX_TOKEN,
     karakeep:process.env.KARAKEEP_URL||'http://127.0.0.1:3062',karakeepToken:process.env.KARAKEEP_TOKEN,
-    ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu','bilibili'].includes(p)),rsshub:process.env.RSSHUB_URL||'',werss:process.env.WERSS_URL||'',werssToken:process.env.WERSS_TOKEN||'',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
+    ntfy:process.env.NTFY_URL||'',adapters:{desktopPlatforms:String(process.env.QR_DESKTOP_PLATFORMS||'').split(',').filter(p=>['zhihu','xiaohongshu','bilibili','twitter','instagram','reddit'].includes(p)),rsshub:process.env.RSSHUB_URL||'',xiaohongshuMcp:process.env.XHS_MCP_URL||'',v2exReady:process.env.V2EX_READY==='true',zhihuReady:process.env.ZHIHU_READY==='true',xhsReady:process.env.XHS_READY==='true',browserEnabled:process.env.BROWSER_ACCEPTED==='true'}};
 }
 async function main(){
   const config=loadConfig();if(!config.minifluxToken)throw new Error('MINIFLUX_TOKEN required');

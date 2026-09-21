@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {authorIdentity}=require('../reader-bridge/sources');
+const {authorIdentity,sourceIdentity,blockers}=require('../reader-bridge/sources');
 const {channelsFor}=require('../reader-bridge/core');
 const {fetchNativeMetadata}=require('../reader-bridge/native-metadata');
 const {Database}=require('../reader-bridge/database');
@@ -115,4 +115,72 @@ test('source-first landing preserves notes navigation but makes Latest the initi
  assert.match(html,/id="platform-filter"/);assert.match(html,/data-view="notes"/);
  assert.match(app,/return Object\.hasOwn\(titles,next\)\?next:'latest'/);assert.match(app,/await switchView\(initialView\(\)\);if\(view!=='article'\)refresh\(\)/);
  assert.match(fs.readFileSync(path.join(__dirname,'../reader-bridge/public/workspace-ui.js'),'utf8'),/<a class="primary" data-article>站内阅读<\/a>/);
+});
+
+test('Instagram profile is a stable author identity while content/system routes are not',()=>{
+ assert.deepEqual(authorIdentity('https://www.instagram.com/nasa/'),{platform:'instagram',id:'nasa'});
+ assert.deepEqual(authorIdentity('https://instagram.com/open.ai'),{platform:'instagram',id:'open.ai'});
+ for(const url of ['https://www.instagram.com/p/ABC123/','https://www.instagram.com/reel/ABC123/','https://www.instagram.com/explore/','https://www.instagram.com/accounts/login/'])assert.equal(authorIdentity(url),null,url);
+});
+test('Instagram author produces one Shervin-owned posts channel without a feed URL',()=>{
+ const s={...base,id:'instagram-source',platform:'instagram',url:'https://www.instagram.com/nasa/',feeds:[],adapter:{platform:'instagram',id:'nasa'}};
+ const c=channelsFor(s,{desktopPlatforms:['instagram']});
+ assert.equal(c.length,1);assert.equal(c[0].transport,'desktop');assert.equal(c[0].label,'posts');assert.equal(c[0].author_id,'nasa');assert.equal(c[0].desktop_kind,'posts');assert.equal(c[0].group_key,'credential:instagram');assert.equal(c[0].enabled,true);
+});
+
+test('Instagram authorization blocker disappears only after a real successful channel check',()=>{
+ const s={...base,id:'ig',platform:'instagram',url:'https://www.instagram.com/nasa/',adapter:{platform:'instagram',id:'nasa'}};
+ const [channel]=channelsFor(s,{desktopPlatforms:['instagram']});
+ assert.ok(blockers(s,[{...channel,state:'NEVER_CHECKED'}],{}).some(x=>/Instagram/.test(x)));
+ assert.equal(blockers(s,[{...channel,state:'SUCCEEDED_NO_NEW'}],{}).some(x=>/Instagram/.test(x)),false);
+});
+
+test('V2EX node URL becomes a Community source while topics and member pages are not source identities',()=>{
+ assert.deepEqual(sourceIdentity('https://www.v2ex.com/go/python'),{platform:'v2ex',id:'python',sourceType:'community'});
+ assert.deepEqual(sourceIdentity('https://v2ex.com/go/tech/'),{platform:'v2ex',id:'tech',sourceType:'community'});
+ assert.equal(sourceIdentity('https://www.v2ex.com/t/12345'),null);
+ assert.equal(sourceIdentity('https://www.v2ex.com/member/example'),null);
+ assert.equal(sourceIdentity('https://v2ex.com.evil.example/go/python'),null);
+});
+test('V2EX community produces one public-API backend channel without a feed URL',()=>{
+ const s={...base,id:'v2',name:'V2EX Python',platform:'v2ex',url:'https://www.v2ex.com/go/python',sourceType:'community',adapter:{platform:'v2ex',id:'python'}};
+ const channels=channelsFor(s,{v2exReady:true});
+ assert.equal(channels.length,1);
+ assert.equal(channels[0].transport,'v2ex');
+ assert.equal(channels[0].label,'community.posts');
+ assert.equal(channels[0].v2ex_node,'python');
+ assert.equal(channels[0].source_type,'community');
+ assert.equal(channels[0].enabled,true);
+});
+
+test('V2EX community stays NOT_CONFIGURED until a real network canary enables it',()=>{
+ const s={...base,id:'v2-off',name:'V2EX Python',platform:'v2ex',url:'https://www.v2ex.com/go/python',sourceType:'community',adapter:{platform:'v2ex',id:'python'}};
+ const [channel]=channelsFor(s,{});
+ assert.equal(channel.transport,'v2ex');
+ assert.equal(channel.enabled,false);
+});
+
+test('Reddit subreddit and user-profile URLs become distinct Community/Author sources while post pages are not sources',()=>{
+ assert.deepEqual(sourceIdentity('https://www.reddit.com/r/LocalLLaMA/'),{platform:'reddit',id:'localllama',sourceType:'community'});
+ assert.deepEqual(sourceIdentity('https://old.reddit.com/r/MachineLearning'),{platform:'reddit',id:'machinelearning',sourceType:'community'});
+ assert.deepEqual(sourceIdentity('https://www.reddit.com/user/rm-rf-rm/'),{platform:'reddit',id:'rm-rf-rm',sourceType:'author'});
+ assert.deepEqual(sourceIdentity('https://reddit.com/u/Example_User'),{platform:'reddit',id:'example_user',sourceType:'author'});
+ assert.equal(sourceIdentity('https://www.reddit.com/r/LocalLLaMA/comments/abc123/title/'),null);
+ assert.equal(sourceIdentity('https://www.reddit.com/user/rm-rf-rm/comments/abc123/title/'),null);
+ assert.equal(sourceIdentity('https://reddit.com.evil.example/user/rm-rf-rm'),null);
+});
+test('Reddit community produces one zero-account Shervin RSS channel',()=>{
+ const s={...base,id:'reddit-source',name:'r/LocalLLaMA',platform:'reddit',url:'https://www.reddit.com/r/LocalLLaMA/',sourceType:'community',feeds:[],adapter:{platform:'reddit',id:'localllama'}};
+ const [channel]=channelsFor(s,{desktopPlatforms:['reddit']});
+ assert.equal(channel.transport,'desktop');assert.equal(channel.label,'community.posts');assert.equal(channel.author_id,'localllama');
+ assert.equal(channel.desktop_kind,'community.posts');assert.equal(channel.source_type,'community');assert.equal(channel.credential_group,undefined);
+ assert.match(channel.windowNote,/credentials=omit/);
+});
+
+test('Reddit user source produces one zero-account OpenCLI user-posts channel without credential group',()=>{
+ const s={...base,id:'reddit-user',name:'u/rm-rf-rm',platform:'reddit',url:'https://www.reddit.com/user/rm-rf-rm/',sourceType:'author',feeds:[],adapter:{platform:'reddit',id:'rm-rf-rm'}};
+ const [channel]=channelsFor(s,{desktopPlatforms:['reddit']});
+ assert.equal(channel.transport,'desktop');assert.equal(channel.label,'user.posts');assert.equal(channel.author_id,'rm-rf-rm');
+ assert.equal(channel.desktop_kind,'user.posts');assert.equal(channel.source_type,'author');assert.equal(channel.credential_group,undefined);
+ assert.match(channel.windowNote,/OpenCLI/);assert.match(channel.windowNote,/发布时间未知/);assert.match(channel.windowNote,/评论不进入主 Feed/);
 });

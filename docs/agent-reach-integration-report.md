@@ -1,0 +1,697 @@
+# Agent-Reach integration progress report
+
+This is the append-only engineering report for the Agent-Reach acquisition workstream.
+
+Pinned upstream: Panniantong/Agent-Reach at a19a171fa980a0785849596492e0af4db800c82f, MIT.
+
+## 2026-09-20 — Foundation
+
+### Goal
+
+Adapt Agent-Reach's reliable platform-routing model without replacing Quiet River's subscription/storage/reader layers.
+
+### Completed
+
+- cloned pinned Agent-Reach reference to ECS at /home/qr-dev/work/vendor/Agent-Reach;
+- created isolated Quiet River worktree /home/qr-dev/work/quiet-river-capabilities;
+- created branch chatgpt/capability-router-v1;
+- added MIT attribution under third_party/agent-reach/;
+- ported stable capability / ordered backend / active backend / health-reason model to Node.js;
+- added backend execution registry so ReaderService no longer owns transport-specific branching;
+- exposed capability/backend status in blogger and acquisition-health UI;
+- added explicit authenticated acquisition doctor while keeping passive health zero-network;
+- doctor only probes Shervin heartbeat and loopback runtimes;
+- declared first ordered policy: xiaohongshu.notes -> OpenCLI @ Shervin -> xiaohongshu-mcp @ ECS;
+- unconfigured MCP remains off and cannot become active without its own probe.
+
+### Commits
+
+- b9b7a47 refactor: add acquisition capability router
+- 050b4df feat: declare ordered acquisition fallback
+- 304bc2d feat: add acquisition backend doctor
+
+### Verification
+
+- exact serial evidence for 304bc2d: 309/309, worktree unchanged;
+- branch pushed to GitHub;
+- not deployed to production because the main WeRSS QR canary/release gate is still open.
+
+### Important conclusion
+
+The main value to absorb from Agent-Reach is not only its architecture. It is the maintained platform-acquisition knowledge encoded in per-platform backend ordering, real probes, retired paths and repair instructions.
+
+Current Quiet River gap discovered during comparison:
+- all 28 Twitter sources depend on one third-party host: api.xgo.ing;
+- Agent-Reach maintains Twitter as twitter-cli -> OpenCLI -> bird legacy.
+
+Therefore Twitter is the first platform migration target.
+
+### Next
+
+P0 Twitter/X:
+1. inventory all 28 source identities;
+2. prove canonical handle mapping;
+3. inspect Shervin for twitter-cli and its credential boundary;
+4. define a read-only author timeline contract;
+5. add backend policy while keeping xgo as fallback;
+6. run one dual-backend identity canary.
+
+
+## 2026-09-20 — P0 Twitter inventory and tool contract
+
+### Inventory
+
+- 28/28 Twitter sources use canonical source URLs of the form https://x.com/<handle>.
+- 28/28 currently depend on the same third-party feed host: api.xgo.ing.
+- The current xgo RSS guid is the numeric tweet ID itself.
+- xgo item links are canonical https://x.com/<handle>/status/<tweet-id> URLs.
+
+This means a direct Twitter backend can preserve historical Quiet River identity by using the numeric tweet ID as guid; no historical entry migration is required.
+
+### Shervin runtime
+
+- Agent-Reach preferred twitter-cli was not previously installed.
+- Installed twitter-cli 0.8.5 on Shervin using uv tool install.
+- Help/source inspection confirms user-posts provides structured id, text, author.screenName and createdAtISO fields.
+- twitter-cli authentication code prefers explicit TWITTER_AUTH_TOKEN + TWITTER_CT0 but falls back to browser_cookie3 when they are missing.
+- Quiet River will therefore hard-gate twitter-cli execution: if explicit credentials are absent, the process is not launched at all. Browser-cookie auto-discovery is not an allowed fallback.
+- No browser cookies were read or exported during installation/inspection.
+
+### OpenCLI fallback
+
+- OpenCLI Twitter supports tweets <username> with id, author, text, created_at and canonical url.
+- A Karpathy read-only canary currently fails in the Twitter Browser Bridge path; the failure is not AUTH_REQUIRED, 403, 429 or the known Chromium Navigation rejected case.
+- Shervin collector doctor still confirms the OpenCLI extension and restricted ECS connection are healthy, so the failure is Twitter-adapter-specific rather than a general browser-runtime outage.
+
+### Capability model update in progress
+
+Target ordered policy:
+
+twitter.author.posts
+1. twitter-cli @ Shervin
+2. OpenCLI Twitter @ Shervin
+3. api.xgo.ing Twitter Feed
+
+The existing xgo feed remains the active backend until a direct backend passes a real identity-parity canary.
+
+## 2026-09-20 — P0 Twitter canonical identity milestone
+
+### Completed
+
+- normalized all existing X feeds into one logical capability: `twitter.author.posts`;
+- declared ordered candidates: `twitter-cli @ Shervin -> OpenCLI Twitter @ Shervin -> api.xgo.ing Twitter Feed`;
+- verified a real xgo feed uses numeric tweet ID as RSS guid and canonical x.com status URL;
+- added canonical Twitter original-link validation on Windows/ECS boundaries;
+- added one normalizer supporting both twitter-cli 0.8.5 JSON and OpenCLI Twitter JSON;
+- enforced source-handle equality and numeric tweet ID before upload/import;
+- same tweet from twitter-cli/OpenCLI/xgo now maps to the same logical tweet ID contract;
+- installed twitter-cli 0.8.5 on Shervin via uv without reading/exporting browser cookies;
+- audited twitter-cli auth source: because it can auto-fallback to browser_cookie3, Quiet River will never launch it unless explicit TWITTER_AUTH_TOKEN + TWITTER_CT0 are already present;
+- OpenCLI Twitter author-timeline canary currently fails in a Twitter-specific Browser Bridge path, while the general Shervin collector doctor remains healthy; it is therefore not promoted over xgo.
+
+### Verification
+
+- focused Twitter/capability/collector tests passed;
+- full regression after canonicalizer changes: 314/314 passed;
+- no production routing change; xgo remains active backend until a direct backend passes a real identity-parity canary.
+
+### Next
+
+Implement single scheduler-owner routing for `twitter.author.posts`: one persisted logical channel/job, with ECS/xgo ownership by default and Shervin ownership only when an explicit direct backend is proven usable. No duplicate simultaneous polling.
+
+## 2026-09-20 — P0 Twitter single-owner failover milestone
+
+### Design completed
+
+Quiet River now keeps exactly one persisted Twitter channel/job per subscribed author. The existing xgo channel is not duplicated or migrated.
+
+Routing semantics:
+
+- when no verified direct backend exists, ECS/Miniflux continues to refresh the existing xgo feed;
+- when Shervin reports a direct backend as verified and fresh, the same queued logical job is temporarily worker-owned by Shervin;
+- direct success imports into the same channel/feed identity and leaves the xgo physical health group untouched;
+- direct failure records backend-specific cooldown, requeues the same logical job and lets xgo take over immediately;
+- Shervin backend readiness reports expire after 120 seconds, so stale worker state cannot permanently steal scheduler ownership;
+- direct backend health and xgo feed health are separate failure domains.
+
+### Credential boundary
+
+Installed twitter-cli 0.8.5 is not invoked through its top-level authentication helper. A new read-only `tools/windows/twitter-explicit.py` wrapper imports `TwitterClient` directly and accepts credentials only from `TWITTER_AUTH_TOKEN` and `TWITTER_CT0`. It never imports `twitter_cli.auth`, `get_cookies`, or `browser_cookie3`.
+
+The collector reports `twitter-cli-shervin=off` when explicit credentials are absent. Credentials being present is still insufficient: an explicit read-only author canary must pass, and only a verification timestamp less than 24 hours old may produce backend status `ok`.
+
+OpenCLI Twitter follows the same rule: Browser Bridge connected is only `warn`; a successful explicit Twitter timeline canary is required for `ok`.
+
+### Failure-domain evidence
+
+A bounded diagnostic of the 28 existing xgo sources found only 4 sources returned within the test window; 24 did not complete within the bounded check. This is not treated as a permanent outage claim, but it reinforces that all 28 sources sharing one third-party host is a material reliability risk.
+
+Across 77 items from the four responsive feeds, the item-link handle always matched the subscribed handle (0 mismatches).
+
+### Verification
+
+- direct-backend claim uses the existing public xgo channel, not a second channel;
+- direct success does not mutate the xgo group;
+- direct failure returns `FALLBACK_QUEUED`, requeues the same job and restores xgo as active fallback;
+- ECS pump does not run xgo while Shervin owns the capability;
+- scheduler may give direct ownership even when the xgo physical group itself is unhealthy;
+- the explicit Python wrapper is tested with a fake twitter_cli package to prove explicit credential injection and retweet filtering;
+- full regression: 320/320 passed.
+
+### Remaining Twitter gate
+
+No direct backend is enabled in production yet. twitter-cli requires explicit user-supplied Twitter credentials and OpenCLI Twitter has not passed its author-timeline canary. Until one direct backend passes a real parity canary, xgo remains the active production path.
+
+## 2026-09-20 — P1 Instagram author-source preparation
+
+### Implemented
+
+- added canonical Instagram profile identity for author sources;
+- reserved/system/content routes are rejected as author identities;
+- added one Shervin-owned `instagram.posts` desktop channel;
+- added stable post identity `instagram:<shortcode>` for both /p/ and /reel/ URLs;
+- Windows normalizer requires the returned media author to equal the registered source username;
+- ECS repeats the author/URL identity validation before import;
+- added a bounded read-only wrapper that uses the same Instagram feed-by-username endpoint as OpenCLI, serializes only media ID/shortcode/author/caption/time/type/canonical URL, and performs no write action;
+- UI/platform filters and add-source flow now understand Instagram.
+
+### Verification
+
+- focused collector/original-link/source tests: 90/90 passed;
+- full regression with Instagram preparation: 327/327 passed;
+- read-only NASA canary through the Quiet River wrapper: exit 70, 0 rows, Browser Bridge failure;
+- independent OpenCLI `instagram profile nasa` and `instagram user nasa` probes: both exit 69 (EX_UNAVAILABLE / BROWSER_CONNECT), 0 JSON rows;
+- failure is therefore upstream Browser Bridge/runtime, not Quiet River normalization;
+- no login was automated and no Instagram content was imported.
+
+### Gate
+
+Shervin runs OpenCLI 1.8.7 with Browser Bridge extension 1.0.21. OpenCLI reports newer extension 1.0.24 is available. The current extension installation path could not be identified as a safe unpacked directory, so Quiet River does not mutate the daily Chrome extension installation automatically.
+
+Instagram remains **prepared but not verified**. Do not enable scheduled Instagram acquisition until a supported extension/runtime upgrade succeeds and the same NASA-style read-only canary returns stable author/post identities.
+
+## 2026-09-20 — P2 V2EX Community source preparation
+
+### Implemented
+
+- introduced the first non-Author Quiet River source identity: `sourceType=community`;
+- `https://www.v2ex.com/go/<node>` is a canonical V2EX Community source; topic/member pages are not accepted as source identities;
+- added `v2ex.community.posts -> v2ex-public-api` backend;
+- topic numeric ID is the stable item identity and canonical card URL is `https://www.v2ex.com/t/<id>`;
+- backend accepts only rows whose node exactly equals the subscribed node;
+- topic content is HTML-escaped before import;
+- replies are intentionally not fetched during discovery and remain a future article-detail enrichment;
+- HTTP and invalid-JSON failures throw acquisition errors rather than returning an empty timeline;
+- UI/state expose Community separately while preserving the existing Blogger semantics for Author sources;
+- channel defaults to disabled and requires `V2EX_READY=true` after a real connectivity canary.
+
+### Verification
+
+- focused V2EX/capability/source tests: 48/48 passed;
+- full regression: 334/334 passed;
+- ECS direct Node request: timeout;
+- ECS system curl direct: TCP 443 timeout;
+- ECS existing Mihomo loopback proxy: SSL connection timeout;
+- ECS Jina Reader route: connection timeout;
+- Shervin direct curl: connection timeout.
+
+### Gate
+
+The implementation is prepared but **not connected**. Current runtime networks cannot reach V2EX. No scheduler traffic is enabled and no V2EX source is claimed working. A future network-path change must first pass the same read-only node canary, then explicitly set `V2EX_READY=true`.
+
+## 2026-09-20 — Instagram explicitly skipped by credential policy
+
+The user has no Instagram account and does not want an Instagram integration that requires account creation, cookies or a logged-in browser session. Agent-Reach's pinned Instagram channel explicitly depends on OpenCLI using the user's logged-in Chrome session. Quiet River's no-account NASA canary returned no rows and did not establish a zero-account path.
+
+Decision: mark Instagram **SKIPPED**, not merely blocked. Do not request Instagram credentials, do not automate login, and do not enable the prepared feature-branch code in production. Revisit only if a stable no-account public acquisition path is independently verified.
+
+
+## 2026-09-20 — Instagram fail-closed hardening after skip decision
+
+Instagram remains SKIPPED by product/credential policy; this work does not reopen the integration.
+
+Hardening completed so dormant feature-branch code cannot accidentally become active merely because Shervin is online:
+
+- introduced explicit backend identity opencli-instagram-shervin;
+- capability health now consumes the platform-specific Shervin backend report instead of generic desktop heartbeat;
+- unverified Instagram reports off, not healthy;
+- scheduler ownership requires backend status ok from a recent explicit author canary;
+- added --verify-instagram HANDLE for a bounded read-only canary, but no login is automated;
+- AUTH_REQUIRED recovery uses two successful read-only probes before refreshing Instagram verification state;
+- acquisition doctor reports the platform backend separately;
+- a successful channel check is still required before capability status becomes fully healthy.
+
+Real environment remains unchanged: Shervin has no usable Instagram login state, OpenCLI profile/user canaries return AUTH_OR_LOGIN, and no Instagram content was imported.
+
+Verification after hardening: focused 112/112; full regression 337/337.
+
+
+## 2026-09-20 — P1 GitHub public commit enrichment
+
+### Decision
+
+Do not replace official GitHub Atom feeds. Five active Quiet River GitHub sources are repository commit feeds and already provide stable discovery/text. Agent-Reach's gh CLI is useful, but public GitHub REST is a better first enrichment backend for public commits because it needs no new ECS credential.
+
+### Implemented
+
+- added a generic entry_enrichments cache table for future cross-platform enrichment state;
+- added canonical commit/compare target parser limited to github.com owner/repo commit SHA or SHA-to-SHA compare paths;
+- added public GitHub REST adapter with trusted=false, 10s timeout and 2 MiB response bound;
+- commit responses must match requested repository and SHA prefix before rendering;
+- compare responses must match requested base/head and repository before rendering;
+- commit messages, filenames and statuses are HTML-escaped;
+- explicit article prepare enriches GitHub commit/compare entries with commit message, stats and changed files;
+- success is cached so repeated prepare does not repeat the REST request;
+- Miniflux receives title/content only; read state is not sent;
+- imports/entries provenance is marked github_rest_enrichment;
+- REST/rate-limit/JSON/identity failure keeps the existing Atom body and may fall through to the prior generic full-text path.
+
+### Verification
+
+- focused GitHub enrichment tests: 6/6 passed;
+- full regression: 343/343 passed;
+- real read-only public REST canary:
+  - repository Doragd/Algorithm-Practice-in-Industry;
+  - requested commit prefix 7b734408e365;
+  - generated structured detail length 564 characters;
+  - changed-files section present;
+  - anonymous x-ratelimit-remaining: 58 after canary;
+  - no production database mutation.
+
+### Credential boundary
+
+Shervin already has gh 2.92.0 authenticated through Windows keyring. That credential was not copied to ECS and is not required for public commit enrichment. gh remains a potential second backend for private/richer detail only.
+
+## 2026-09-20 — P1 YouTube transcript enrichment
+
+### Decision
+
+Keep the official YouTube channel feed as the only discovery/scheduler owner. Agent-Reach's yt-dlp path is valuable for enrichment, but a real Quiet River video canary showed that yt-dlp alone is not reliable on the current Shervin network. The production design therefore follows the Agent-Reach retry chain rather than treating one installed tool as sufficient.
+
+Backend order:
+1. yt-dlp @ Shervin
+2. OpenCLI YouTube transcript @ Shervin
+3. audio/Whisper transcription deferred
+
+### Implemented
+
+- added canonical YouTube video identity across watch and youtu.be routes;
+- added an explicit youtube_transcript_v1 per-entry queue and lease; opening an article remains read-only and does not silently start extraction;
+- Windows collector advertises transcript capability separately from restricted-body enrichment;
+- yt-dlp runs with --no-config, JS runtime, --write-sub/--write-auto-sub, --sub-format json3 and --skip-download;
+- yt-dlp writes only into an isolated temporary directory, which is deleted in finally even on failure;
+- JSON3 subtitle events are normalized and bounded before upload;
+- when yt-dlp does not return a usable transcript, the worker falls back to OpenCLI youtube transcript;
+- OpenCLI Caption URL empty-response failures are retried at most three times;
+- ECS accepts only normalized videoId/segment count/transcript text plus the declared backend ID;
+- transcript is appended to the existing Miniflux article body with a stable marker, not imported as a second feed card;
+- URL, publication time, read state and channel health are preserved;
+- entry_enrichments records actual backend provenance;
+- native article UI exposes an explicit YouTube-only queue/status button;
+- transcript GET requires Quiet River authentication and POST additionally requires the mutation action header.
+
+### Real canary
+
+Existing Quiet River entry 8709 / video ID TlR7douxQRM was used without writing production data.
+
+- Shervin yt-dlp version: 2026.08.19
+- yt-dlp subtitle-only canary: exit 1, rate-limit/429 class, 0 subtitle files
+- no video was downloaded
+- OpenCLI transcript fallback on the same public video: exit 0 on first attempt
+- result: 153 structured segments, approximately 48,802 text characters
+- no account/Cookie was requested for YouTube.
+
+This is an important Agent-Reach lesson in practice: doctor/runtime availability does not prove that a concrete content request works, so the fallback chain is part of the acquisition contract.
+
+### Verification
+
+- focused YouTube/collector/original-link/workspace suite: 108/108
+- full regression on final worktree bytes: 351/351
+- successful transcript submit tests preserve entry identity/read metadata/source health and record backend provenance
+- mismatched video IDs and unknown backend IDs are rejected before Miniflux writes.
+
+### Production status
+
+Feature branch only. No production deployment and no production DB transcript mutation was performed during the canary.
+
+## 2026-09-20 — P2 Podcast local transcription
+
+### Decision
+
+Do not use Agent-Reach's Groq Whisper default for Quiet River Podcast transcription. A local Shervin CPU benchmark proved that faster-whisper is fast enough while keeping the complete audio local.
+
+Podcast RSS remains the only discovery/scheduler owner. Transcription is explicit per-entry enrichment.
+
+### Implemented
+
+- extended feed parsing to expose safe audio enclosure metadata from RSS/Atom and JSON Feed;
+- Podcast transcript queue is derived only from the entry's already-registered feed and exact episode URL match;
+- ECS validates the enclosure with its existing SSRF-safe network client before queueing;
+- known feed length over 512 MiB is rejected before the worker receives a task;
+- queue schema was extended additively with transcript kind/media URL/media length; old YouTube rows remain compatible;
+- Podcast and YouTube keep separate transcript capability kinds and identity validation;
+- Podcast tasks receive a 60-minute lease and include only the already-validated audio URL/size, never the source RSS URL;
+- Shervin advertises podcast_transcript_v1 only when ffmpeg, the isolated faster-whisper venv and the fixed wrapper are present;
+- added local-only podcast-local-whisper.py:
+  - validates public HTTP(S) DNS addresses and every redirect;
+  - rejects loopback/private/reserved targets;
+  - uses fixed ffmpeg argv with shell disabled;
+  - caps decoded audio at four hours;
+  - mono 16 kHz temporary WAV;
+  - faster-whisper base, CPU int8, VAD;
+  - max 10k segments and 1 MiB transcript text;
+  - TemporaryDirectory deletes audio after completion;
+  - no Groq/OpenAI/cloud ASR code;
+- worker uploads only normalized transcript metadata/text plus SHA-256 of the audio URL string;
+- ECS verifies that hash against the queued media URL before accepting the result;
+- transcript is appended to the existing article body and records podcast_local_transcript_enrichment provenance;
+- entry_enrichments stores backend/model/language/segment count and only media URL hash;
+- native article UI explicitly states that Podcast transcription happens locally on Shervin and audio is not uploaded to third parties.
+
+### Local runtime
+
+Shervin:
+- no CUDA GPU;
+- torch CPU-only;
+- ffmpeg already installed;
+- isolated runtime installed at D:\QuietRiverTools\faster-whisper\.venv;
+- faster-whisper 1.2.1 / CTranslate2 4.8.2;
+- model cache retained locally for future tasks.
+
+30-second benchmark:
+- model base.en;
+- CPU int8;
+- 3.41 s transcription;
+- RTF 0.114;
+- benchmark WAV deleted.
+
+### Full real canary
+
+Source: existing Quiet River Recsperts Podcast feed.
+Episode:
+- Quiet River entry 4333;
+- audio enclosure about 82.4 MiB;
+- decoded audio duration 5076.15 s (84.6 min).
+
+Canary used the same local wrapper contract but did not write the production Quiet River DB and did not print transcript content.
+
+Result:
+- exit 0;
+- backend faster-whisper-local;
+- multilingual base model;
+- detected language en;
+- 409 segments;
+- 75,605 transcript characters;
+- total elapsed 756.9 s (12.6 min);
+- full-episode RTF about 0.149;
+- memory remained around 500 MiB;
+- media URL hash returned;
+- 0 Quiet River Podcast temp directories after completion;
+- 0 temp WAV files after completion;
+- temporary canary scripts removed;
+- no external ASR provider was contacted.
+
+The retained model cache is approximately 296 MiB total because the earlier base.en feasibility model and multilingual base model are both present. It is local tooling, not repository/runtime data.
+
+### Verification
+
+- focused media/collector/platform/workspace tests: 152/152;
+- final full regression before docs-only changes: 358/358;
+- Podcast success tests preserve entry URL/publication/read/source health;
+- media substitution and cloud backend IDs are rejected before Miniflux writes;
+- unsafe enclosure URLs and oversized known media are rejected before queueing.
+
+### Production status
+
+Feature branch only. No production database transcript was written and no production deployment was performed.
+
+## 2026-09-20 — Reddit Community zero-account acquisition
+
+### Why this differs from Agent-Reach
+
+Agent-Reach correctly records that Reddit anonymous JSON endpoints are blocked and therefore prefers logged-in OpenCLI/rdt-cli. Quiet River has a different primary use case: scheduled community discovery rather than arbitrary Reddit search/API access. A strict anonymous canary found that `/about.json` and `/new.json` return 403 while the official `/r/<community>/.rss` Atom feed returns HTTP 200 when fetched in the Reddit browser origin with `credentials:'omit'`.
+
+### Implemented
+
+- new Community source identity for Reddit `/r/<community>` URLs;
+- dedicated capability/backend `reddit.community.posts -> reddit-rss-shervin`;
+- Windows `reddit-rss.cjs` wrapper uses the OpenCLI Browser Bridge only as browser-like network/TLS transport;
+- the RSS fetch explicitly uses `credentials:'omit'`; no Cookie or Authorization field is created;
+- only up to 20 Atom entries are returned;
+- stable item identity is Reddit's native `t3_<post_id>` and canonical link is `/r/<sub>/comments/<post_id>/`;
+- Windows and ECS both revalidate subreddit membership and t3/link identity;
+- comments are not discovery cards and remain future detail enrichment;
+- Chromium 152+ navigation instability is handled by `Page.startNetworkCapture('/r/')`, which keeps the debugger attached. Quiet River never calls `readNetworkCapture` and exports no trace records.
+
+### Live evidence
+
+- strict anonymous same-origin canary: Reddit `/about.json` = 403, `/new.json` = 403, `/.rss` = 200 valid Atom;
+- final wrapper canary against `r/LocalLLaMA`, limit 5: exit 0, count 5, all identities valid, t3 IDs unique, all timestamps valid, stderr length 0;
+- no Reddit login was performed and no Reddit credential was configured or requested.
+
+### Verification
+
+- focused Reddit/source/collector/capability/backend tests: 129/129 passed;
+- complete Quiet River regression after final navigation stabilization: 343/343 passed.
+
+### Deployment status
+
+Feature branch only. Do not deploy independently of the capability-router integration/WeRSS release gate. Reddit User source remains deferred until it passes a separate zero-account canary.
+
+## 2026-09-20 — P1 Bilibili public video-detail enrichment
+
+### Agent-Reach input and local decision
+
+Agent-Reach's pinned Bilibili channel records a valuable reliability finding: yt-dlp should not be used for Bilibili because live tests hit 412 risk control, while bili-cli/OpenCLI are the maintained Bilibili-specific paths.
+
+Quiet River tested the narrower need actually required by the reader: public video detail for already-discovered BV items. The unauthenticated Bilibili x/web-interface/view endpoint was simpler than installing the full bili-cli dependency graph and passed every current author canary. Therefore the production-oriented order is now:
+
+1. Bilibili Public Detail API @ ECS
+2. bili-cli fallback only if the public detail API later fails real canaries
+3. OpenCLI remains responsible for author discovery and future subtitle enrichment
+
+### Runtime/dependency decision
+
+- audited PyPI bilibili-cli 0.6.2 and its source before attempting installation;
+- confirmed its pure video command calls public get_video_info with credential=None, while optional subtitle/comments/etc paths may load credentials;
+- an isolated pip --target install was started only for evaluation, but dependencies were unnecessarily heavy for the narrow detail use case;
+- after the public API passed all four real source canaries, the unfinished bili-cli install and orphan pip process were terminated and its target directory removed;
+- no new Bilibili credential, browser cookie or system Python package is required.
+
+### Implemented
+
+- canonical https://www.bilibili.com/video/BV... target parser;
+- bounded public detail API request with browser-like User-Agent/Referer but no Cookie/Authorization;
+- response must be HTTP 200, JSON, code=0 and contain data;
+- returned BV must equal the stored item BV;
+- returned owner UID must equal the subscribed channel author_id before any write;
+- escaped structured HTML with title, UP owner, duration, interaction stats and description;
+- explicit article prepare uses prepareKind=bilibili-detail and UI label 获取视频详情;
+- successful enrichment caches bilibili_detail_v1 in entry_enrichments and marks provenance bilibili_public_detail_enrichment;
+- failure caches FAILED but leaves the original META card and read/url/publication metadata unchanged;
+- acquisition doctor exposes the backend observationally without contacting Bilibili.
+
+### Verification
+
+- focused Bilibili/backend tests: 19/19 passed;
+- full regression: 358/358 passed;
+- first raw API canary on AITIME: HTTP 200, code 0, owner UID 503316308 matched;
+- four-source formal module canary: 4/4 current Bilibili subscriptions passed exact BV + owner UID validation;
+- generated structured detail HTML sizes across the four samples: 333, 526, 339, 497 characters;
+- no production database mutation during canaries.
+
+### Remaining
+
+Bilibili subtitle enrichment remains a separate OpenCLI-backed task. Author discovery stays unchanged on Shervin and is not replaced by the public detail API.
+
+
+## 2026-09-20 — P1 Bilibili subtitle enrichment
+
+### Real backend canary
+
+OpenCLI 1.8.7 on Shervin was tested against the already-known AITIME video BV1AaJP6iEch using the read-only bilibili subtitle command.
+
+Result:
+- first navigation hit the known Chromium Navigation rejected condition;
+- the existing one-time retain-on-failure retry succeeded;
+- 2,635 subtitle rows returned;
+- all from/to timestamp fields validated;
+- 38,436 transcript characters;
+- no subtitle text, Cookie or browser payload was printed into the engineering report.
+
+### Architecture
+
+Subtitle completion is intentionally independent from article content_state.
+
+A Bilibili card may already be TEXT after public video-detail enrichment while its subtitle is still absent. The desktop enrichment queue therefore gained a backward-compatible kind column:
+- body -> entry_body_v1 for Zhihu/Xiaohongshu;
+- bilibili_subtitle -> entry_transcript_v1 for Bilibili.
+
+Existing rows migrate with kind=body.
+
+### Safety and failure semantics
+
+- ECS only queues a known stored Bilibili entry after validating its canonical original URL and subscribed UID/channel;
+- Shervin runs only the fixed OpenCLI bilibili subtitle command;
+- Windows normalizer accepts at most 20,000 subtitle rows, validates monotonic from/to timestamps, removes consecutive duplicate text and uploads at most 1 MiB of timestamped plain text;
+- ECS escapes the transcript before appending it under a Bilibili Transcript section;
+- combined article content is capped at 2 MiB;
+- successful transcript is cached as entry_enrichments/bilibili_subtitle_v1 with provenance bilibili_subtitle_enrichment;
+- subtitle AUTH_REQUIRED is isolated to the single transcript task; it does not set desktop:bilibili or the author channel to AUTH_REQUIRED;
+- explicit retry can requeue that subtitle task after the user later logs in;
+- discovery/source health is untouched by transcript success or failure.
+
+### Verification
+
+- focused collector/workspace regression: 85/85 passed;
+- full regression: 362/362 passed;
+- all prior body enrichment tests remain green;
+- no feature-branch code was deployed to production during this canary.
+
+### Integration adaptation — unified media transcript queue
+
+When the independently verified Bilibili subtitle branch was consolidated with the newer YouTube and Podcast work, its original `entry_transcript_v1` / `collector_enrichments` implementation was deliberately not carried forward. The canary evidence above remains valid; the queue contract was migrated to the newer media-transcript architecture:
+
+- capability kind is now `bilibili_subtitle_v1`;
+- persistence/lease state uses `collector_transcripts`, shared structurally with YouTube and Podcast but with separate platform identity rules;
+- YouTube remains `youtube_transcript_v1`; Podcast remains `podcast_transcript_v1`;
+- Bilibili claim exposes only the already-stored canonical BV URL and fixed `videos` kind;
+- Shervin executes only `opencli bilibili subtitle <known BV URL>`;
+- worker output must declare backend `opencli-bilibili-shervin` and the same BV ID before ECS will write;
+- article detail and subtitle remain independent: public detail uses the ECS public detail API, subtitle uses the explicit Shervin media-transcript queue;
+- subtitle authentication/access failure requeues only the subtitle task and does not alter the Bilibili author discovery group/channel;
+- the native article UI exposes `获取视频详情` and `补充 B站字幕` as separate explicit actions.
+
+Focused integration regression after this adaptation: 143/143 passed across collector, native workspace, Bilibili detail, backend registry and capability routing. Full combined regression is run only after the cherry-pick is finalized.
+
+## 2026-09-20 — Acquisition integration branch combined validation
+
+The independently verified Agent-Reach-inspired feature branches have now been consolidated on `chatgpt/acquisition-integration-v1` without reintroducing the obsolete early YouTube enrichment path.
+
+Integrated stack:
+- acquisition capability/router and ordered backend policies;
+- Twitter direct-backend failover framework, still disabled until explicit-credential parity canary succeeds;
+- Instagram code remains fail-closed/skipped by user credential policy;
+- V2EX Community remains prepared but disabled by real network canary failure;
+- GitHub public commit/compare detail enrichment;
+- YouTube explicit transcript enrichment using `yt-dlp @ Shervin -> OpenCLI transcript @ Shervin`;
+- Podcast RSS discovery plus Shervin-local faster-whisper transcription with no cloud ASR;
+- Reddit Community zero-account acquisition with stable native t3 identity;
+- Bilibili author discovery unchanged on Shervin;
+- Bilibili public video-detail enrichment at ECS;
+- Bilibili subtitle enrichment through the unified media transcript queue using `bilibili_subtitle_v1`.
+
+Important merge decisions:
+- early YouTube commit `c5751ff` was deliberately excluded; the validated `e0acdcc` implementation remains authoritative;
+- Bilibili detail was reapplied as Bilibili-only delta so its old YouTube parent behavior did not leak into the integration branch;
+- Bilibili subtitle was migrated from its historical `entry_transcript_v1` implementation into the newer `collector_transcripts` architecture;
+- YouTube, Bilibili and Podcast share lease/state infrastructure only; identity rules, backend IDs, markers and provenance remain platform-specific;
+- Reddit Community and Instagram/Twitter platform gates coexist without weakening Instagram fail-closed behavior.
+
+Combined verification on final functional bytes before this documentation-only summary:
+- focused Bilibili/media/router suite: 143/143;
+- full Quiet River regression: 382/382;
+- 0 failures, 0 skips, 0 todos.
+
+No production release or production database mutation was performed by this integration step. The WeRSS QR-login/single-source release gate remains authoritative before any production merge/deploy.
+
+## 2026-09-20 — Reddit User zero-account acquisition
+
+### Backend decision
+
+Reddit User/Author subscriptions were re-tested after Community support was already integrated. The result differs from the earlier conservative assumption that User discovery would require login.
+
+The selected capability is:
+
+`reddit.user.posts -> opencli-reddit-user-shervin`
+
+Community and User deliberately use different physical backends:
+- Community: official `/r/<community>/.rss` through Shervin Browser Bridge with `credentials:'omit'`;
+- User: OpenCLI `reddit user-posts <registered username>`.
+
+They share Reddit post identity (`t3_<post_id>`) but do not share source identity or acquisition semantics.
+
+### Real no-login evidence
+
+Shervin was not logged into Reddit: the earlier `reddit whoami` probe exited 77.
+
+Using the public username `rm-rf-rm`, selected from a public `r/LocalLLaMA` post:
+- `reddit user rm-rf-rm`: exit 0;
+- `reddit user-posts rm-rf-rm --limit 3`: exit 0, 3 submitted-post rows;
+- `reddit user-comments rm-rf-rm --limit 3`: exit 0, 3 comment rows.
+
+The User source consumes only `user-posts`. Comments are explicitly excluded from Feed discovery.
+
+Observed `user-posts` row contract:
+- title;
+- subreddit;
+- score;
+- comments count;
+- canonical Reddit post URL;
+- no direct post ID;
+- no reliable publication timestamp.
+
+Therefore Quiet River derives stable `t3_<post_id>` from the canonical `/comments/<post_id>/` URL and preserves `published=null` instead of inferring a time.
+
+### Why User RSS was rejected
+
+Two obvious RSS routes were tested with no credentials:
+- `/user/rm-rf-rm/.rss?limit=3`: HTTP 200, but the feed is mixed user activity and the three sampled entries were comment URLs, not a submitted-post-only timeline;
+- `/user/rm-rf-rm/submitted/.rss?limit=3`: HTTP 429 in the same environment.
+
+So User discovery does not pretend those RSS paths are reliable. The already-working zero-account OpenCLI `user-posts` route is used instead.
+
+### Implemented safety/identity contract
+
+- `/user/<username>` and `/u/<username>` become Reddit Author sources;
+- subreddit pages remain Reddit Community sources;
+- post/comment pages are never accepted as source identities;
+- one `user.posts` desktop channel per User source, no credential group;
+- fixed worker command is read-only `opencli reddit user-posts <registered username> --limit N`;
+- worker does not call Reddit login, home, saved, upvoted, subscribed or user-comments;
+- canonical post URL yields stable `t3_<post_id>`;
+- ECS requires normalized item author to equal the registered username;
+- cross-source author substitution is rejected before import;
+- publication time remains unknown when the upstream row does not provide it;
+- source UI now labels Reddit as supporting both Community and Blogger/Author onboarding.
+
+### Verification
+
+Focused Reddit/source/collector/capability/backend suite after User integration: 156/156 passed, 0 failed.
+
+Production remains unchanged. This feature stays on `chatgpt/acquisition-integration-v1` behind the existing WeRSS release gate.
+
+Full combined Quiet River regression after the Reddit User functional/docs changes: **388/388 passed**, 0 failed, 0 skipped, 0 todo. This run still made no production deployment or production database mutation.
+
+## 2026-09-21 — WeRSS skipped; clean acquisition release merge
+
+The user explicitly chose to skip WeRSS. This changes release gating, not historical source identity.
+
+Main release line actions:
+- `36f1f77 feat: wire pinned WeRSS runtime` was explicitly reverted by `ce494d7`;
+- `640eced` records the skip decision;
+- `8d88c14` records the post-revert validation;
+- exact serial main-line regression at `8d88c14`: 285/285, 0 failed/skipped/todo, worktree unchanged;
+- standalone `quiet-river-werss` container was stopped and removed;
+- nothing listens on 127.0.0.1:8001;
+- WeRSS data and recovery backup remain preserved but inactive;
+- no further QR/login work should be requested.
+
+Source semantics:
+- 49 current WeChat relay/public feeds continue as before;
+- the 16 verified `MP_WXS_*` identities stay in source metadata for provenance and future non-WeRSS recovery;
+- their legacy WeRSS channels remain disabled by default;
+- the clean release server no longer reads any `WERSS_*` environment variables.
+
+Clean acquisition release merge:
+- branch: `chatgpt/acquisition-release-v1`;
+- base: cleaned main `8d88c14`, not the old WeRSS-gated feature base;
+- acquisition integration is merged on top while keeping WeRSS removal authoritative;
+- old WeRSS runtime/feed/update contract tests were removed from the release candidate;
+- compatibility tests now assert only that verified WeChat MP identities remain bound while their WeRSS channel is disabled.
+
+Focused post-merge regression across acquisition/router/media/source/UI: 255/255 passed, 0 failed.
+
+Historical report sections that mention a WeRSS gate are retained as append-only history; this section supersedes them for current release decisions.
+
+Full clean-release regression after removing the WeRSS gate and merging acquisition features: **386/386 passed**, 0 failed, 0 skipped, 0 todo. The release candidate contains no WeRSS runtime deployment files, loads no `WERSS_*` environment variables, and keeps the 16 legacy WeChat adapter channels disabled while preserving their MP identity metadata.

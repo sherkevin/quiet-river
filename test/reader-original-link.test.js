@@ -111,3 +111,39 @@ test('Bilibili-only launcher is bounded and does not start another platform or w
  assert.match(script,/--platform bilibili --max-jobs 20/);
  assert.ok(!script.includes('--watch'));assert.ok(!script.includes('--platform zhihu'));assert.ok(!script.includes('--platform xiaohongshu'));
 });
+test('Instagram original links use stable shortcode identity and reject non-post routes',()=>{
+ const job={platform:'instagram',kind:'posts',authorId:'nasa'};
+ assert.deepEqual(originalLink(job,'https://www.instagram.com/p/ABC_def-12/'),{link:'https://www.instagram.com/p/ABC_def-12/',guid:'instagram:ABC_def-12',instagramCode:'ABC_def-12',noteId:null});
+ assert.equal(originalLink(job,'https://www.instagram.com/reel/ABC_def-12/').guid,'instagram:ABC_def-12');
+ assert.throws(()=>originalLink(job,'https://www.instagram.com/explore/'),/mismatch/);
+ assert.throws(()=>originalLink({...job,kind:'stories'},'https://www.instagram.com/p/ABC_def-12/'),/mismatch/);
+});
+test('Instagram wrapper keeps stable media identity from the read-only feed API',()=>{
+ const fs=require('node:fs'),path=require('node:path'),script=fs.readFileSync(path.join(__dirname,'../tools/windows/instagram-user.cjs'),'utf8');
+ assert.match(script,/api\/v1\/feed\/user\//);assert.match(script,/credentials:'include'/);assert.match(script,/media\?\.pk/);assert.match(script,/media\?\.code/);assert.match(script,/taken_at/);
+ assert.match(script,/method|fetch/);
+ for(const forbidden of ['\\.click\\(','like\\(','follow\\(','unfollow\\(','comment\\(','POST'])assert.doesNotMatch(script,new RegExp(forbidden,'i'));
+});
+
+test('Reddit community post links use t3 post identity and cannot cross communities',()=>{
+ const job={platform:'reddit',kind:'community.posts',authorId:'localllama'};
+ const canonical=originalLink(job,'https://www.reddit.com/r/LocalLLaMA/comments/1wkxx8e/some_slug/');
+ assert.equal(canonical.guid,'t3_1wkxx8e');assert.equal(canonical.redditId,'t3_1wkxx8e');
+ assert.equal(canonical.link,'https://www.reddit.com/r/LocalLLaMA/comments/1wkxx8e/');
+ assert.throws(()=>originalLink(job,'https://www.reddit.com/r/MachineLearning/comments/1wkxx8e/x/'),/community mismatch/);
+ assert.throws(()=>originalLink(job,'https://www.reddit.com/user/example/comments/1wkxx8e/x/'),/mismatch/);
+});
+test('Reddit RSS wrapper uses official Atom endpoint with credentials omitted and no write verbs',()=>{
+ const fs=require('node:fs'),path=require('node:path'),script=fs.readFileSync(path.join(__dirname,'../tools/windows/reddit-rss.cjs'),'utf8');
+ assert.match(script,/\.rss\?limit=/);assert.match(script,/credentials:'omit'/);assert.match(script,/DOMParser/);assert.match(script,/startNetworkCapture/);
+ assert.match(script,/const match=\/\^t3_/);assert.doesNotMatch(script,/readNetworkCapture|reddit_session|Authorization|Cookie|credentials:'include'/);
+ for(const forbidden of ['POST','PUT','PATCH','DELETE','upvote','comment\\('])assert.doesNotMatch(script,new RegExp(forbidden,'i'));
+});
+
+test('Reddit user-post links derive stable t3 identity without pretending the post URL proves authorship',()=>{
+ const job={platform:'reddit',kind:'user.posts',authorId:'rm-rf-rm'};
+ const canonical=originalLink(job,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/biweekly_megathread_project_showcase/');
+ assert.equal(canonical.guid,'t3_1wgcpww');assert.equal(canonical.redditId,'t3_1wgcpww');
+ assert.equal(canonical.link,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/');
+ assert.throws(()=>originalLink(job,'https://www.reddit.com/r/LocalLLaMA/comments/1wgcpww/title/patzewg/'),/mismatch/);
+});

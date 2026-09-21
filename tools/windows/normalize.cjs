@@ -2,6 +2,9 @@
 const {originalLink}=require('./original-link.cjs');
 function normalize(job,rows){
   if(!Array.isArray(rows)||rows.length>50)throw new Error('Invalid OpenCLI list');
+  if(job.platform==='twitter')return rows.filter(row=>!row?.isRetweet&&!row?.is_retweet).map(row=>normalizeTwitterRow(job,row));
+  if(job.platform==='instagram')return rows.map(row=>normalizeInstagramRow(job,row));
+  if(job.platform==='reddit')return rows.map(row=>normalizeRedditRow(job,row));
   return rows.map(row=>{
     const original=originalLink(job,row.url);
     if(job.platform==='xiaohongshu'&&row.id&&String(row.id).toLowerCase()!==original.noteId)throw new Error('Original link identity mismatch');
@@ -16,6 +19,86 @@ function normalize(job,rows){
     }
     return {title:title.slice(0,1000),link:original.link,published,summary:''};
   });
+}
+function normalizeInstagramRow(job,row){
+  if(!row||typeof row!=='object')throw new Error('Invalid Instagram row');
+  const id=String(row.id||''),code=String(row.code||''),author=String(row.author||'');
+  if(!/^\d{1,30}$/.test(id)||!/^[A-Za-z0-9_-]{5,32}$/.test(code)||!author)throw new Error('Invalid Instagram identity');
+  if(author.toLowerCase()!==String(job.authorId||'').toLowerCase())throw new Error('Instagram author mismatch');
+  const original=originalLink({...job,kind:'posts'},String(row.url||''));
+  if(original.instagramCode!==code)throw new Error('Instagram shortcode mismatch');
+  const caption=String(row.caption||'').trim(),taken=Number(row.taken_at),published=Number.isFinite(taken)&&taken>0?Math.floor(taken*1000):null;
+  const fallback=(job.name||('@'+author))+' 的 Instagram 帖子';
+  return {title:(caption||fallback).slice(0,1000),link:original.link,published,summary:caption.slice(0,1500),author};
+}
+function normalizeRedditRow(job,row){
+  if(!row||typeof row!=='object')throw new Error('Invalid Reddit row');
+  const kind=String(job.kind||''),subreddit=String(row.subreddit||''),title=String(row.title||'').trim();
+  if(!['community.posts','user.posts'].includes(kind)||!subreddit||!title)throw new Error('Invalid Reddit identity');
+  if(kind==='community.posts'){
+    const id=String(row.id||'');if(!/^t3_[a-z0-9]+$/i.test(id))throw new Error('Invalid Reddit identity');
+    if(subreddit.toLowerCase()!==String(job.authorId||'').toLowerCase())throw new Error('Reddit community mismatch');
+    const original=originalLink({...job,kind},String(row.url||''));if(original.redditId.toLowerCase()!==id.toLowerCase())throw new Error('Reddit post identity mismatch');
+    let published=null;if(row.updated){const n=Date.parse(String(row.updated));if(Number.isFinite(n))published=n;}
+    return {title:title.slice(0,1000),link:original.link,published,summary:String(row.summary||'').trim().slice(0,1500),author:String(row.author||'').slice(0,100)};
+  }
+  const original=originalLink({...job,kind},String(row.url||'')),id=String(row.id||'');
+  if(id&&(!/^t3_[a-z0-9]+$/i.test(id)||id.toLowerCase()!==original.redditId.toLowerCase()))throw new Error('Reddit post identity mismatch');
+  const author=String(job.authorId||'').toLowerCase();if(!/^[a-z0-9_-]{3,20}$/.test(author))throw new Error('Invalid Reddit user identity');
+  return {title:title.slice(0,1000),link:original.link,published:null,summary:'',author};
+}
+function normalizeTwitterRow(job,row){
+  if(!row||typeof row!=='object')throw new Error('Invalid Twitter row');
+  const id=String(row.id||'');if(!/^\d{1,25}$/.test(id))throw new Error('Invalid Twitter tweet id');
+  const screen=String(typeof row.author==='object'?(row.author?.screenName||''):row.author||'').replace(/^@/,'');
+  if(!screen)throw new Error('Missing Twitter author');
+  const link=typeof row.url==='string'&&row.url?row.url:`https://x.com/${screen}/status/${id}`;
+  const original=originalLink({...job,kind:job.kind||'tweets'},link);
+  if(original.tweetId!==id)throw new Error('Twitter identity mismatch');
+  const text=String(row.text||'').trim(),rawDate=row.createdAtISO||row.created_at||row.createdAt||null;
+  let published=null;if(rawDate){const n=Date.parse(String(rawDate));if(Number.isFinite(n))published=n;}
+  const fallback=(job.name||('@'+screen))+' 的 X 帖子';
+  return {title:(text||fallback).slice(0,1000),link:original.link,published,summary:text.slice(0,1500)};
+}
+function normalizeYtDlpJson3(job,payload){
+  if(!payload||typeof payload!=='object'||!Array.isArray(payload.events))throw new Error('Invalid yt-dlp JSON3 subtitle');
+  const rows=[];let last='';
+  for(const event of payload.events){
+    if(!event||!Array.isArray(event.segs))continue;
+    const text=event.segs.map(s=>String(s?.utf8||'')).join('').replace(/\s+/g,' ').trim();
+    if(!text||text===last)continue;last=text;
+    const ms=Number(event.tStartMs)||0,total=Math.max(0,Math.floor(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;
+    const timestamp=(h?String(h)+':':'')+String(m).padStart(h?2:1,'0')+':'+String(s).padStart(2,'0');
+    rows.push({timestamp,text});
+    if(rows.length>5000)throw new Error('YouTube transcript has too many segments');
+  }
+  if(!rows.length)throw new Error('yt-dlp subtitle contains no transcript text');
+  return normalizeYoutubeTranscript(job,rows);
+}
+function normalizeYoutubeTranscript(job,rows){
+  if(!job||job.taskType!=='youtube_transcript_v1'||job.platform!=='youtube'||!Array.isArray(rows)||rows.length<1||rows.length>5000)throw new Error('Invalid YouTube transcript');
+  const original=originalLink({platform:'youtube',kind:'transcript'},String(job.url||''));
+  const lines=[];let chars=0;
+  for(const row of rows){
+    if(!row||typeof row!=='object')throw new Error('Invalid YouTube transcript row');
+    const timestamp=String(row.timestamp||'').trim(),speaker=String(row.speaker||'').trim(),text=String(row.text||'').replace(/\s+/g,' ').trim();
+    if(!text||text.length>10000||timestamp.length>64||speaker.length>120)throw new Error('Invalid YouTube transcript row');
+    const prefix=[timestamp,speaker].filter(Boolean).join(' · '),line=(prefix?'['+prefix+'] ':'')+text;chars+=line.length+1;if(chars>1024*1024)throw new Error('YouTube transcript too large');lines.push(line);
+  }
+  return {entryId:Number(job.entryId),videoId:original.youtubeId,segmentCount:lines.length,content:lines.join('\n')};
+}
+function normalizeBilibiliSubtitle(job,rows){
+  if(!job||job.taskType!=='bilibili_subtitle_v1'||job.platform!=='bilibili'||job.kind!=='videos'||!Number.isSafeInteger(Number(job.entryId))||!Array.isArray(rows)||rows.length<1||rows.length>20000)throw new Error('Invalid Bilibili subtitle');
+  const original=originalLink({platform:'bilibili',kind:'videos'},String(job.url||'')),lines=[];let last='',chars=0;
+  for(const row of rows){
+    if(!row||typeof row!=='object')throw new Error('Invalid Bilibili subtitle row');
+    const from=String(row.from||''),to=String(row.to||''),fm=/^(\d+(?:\.\d+)?)s$/.exec(from),tm=/^(\d+(?:\.\d+)?)s$/.exec(to);
+    if(!fm||!tm||Number(tm[1])<Number(fm[1]))throw new Error('Invalid Bilibili subtitle timestamp');
+    const text=String(row.content??'').replace(/\s+/g,' ').trim();if(!text||text===last)continue;last=text;
+    const line='['+from+' - '+to+'] '+text;chars+=line.length+1;if(chars>1024*1024)throw new Error('Bilibili subtitle too large');lines.push(line);
+  }
+  if(!lines.length||chars<40)throw new Error('Bilibili subtitle missing or too small');
+  return {entryId:Number(job.entryId),bilibiliId:original.bilibiliId,segmentCount:lines.length,content:lines.join('\n')};
 }
 function selectFreshXhsNoteUrl(job,rows){
   if(job?.platform!=='xiaohongshu'||job?.kind!=='notes'||!Array.isArray(rows)||rows.length>100)throw new Error('Invalid Xiaohongshu refresh list');
@@ -48,4 +131,4 @@ function statusFor(code,text){
   if(code===75||/timeout|timed out/i.test(text))return 'TIMEOUT';
   return 'UPSTREAM_ERROR';
 }
-module.exports={normalize,normalizeEnrichment,selectFreshXhsNoteUrl,statusFor};
+module.exports={normalize,normalizeEnrichment,normalizeYtDlpJson3,normalizeYoutubeTranscript,normalizeBilibiliSubtitle,selectFreshXhsNoteUrl,statusFor};
