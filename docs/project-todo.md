@@ -1,6 +1,6 @@
 # quiet-river project handoff
 
-Updated: 2026-09-19
+Updated: 2026-09-21
 
 ## Current repository
 
@@ -33,6 +33,15 @@ Updated: 2026-09-19
 - Production source payload contains `推广搜老油条`; the obsolete `丁丁丁写字的地方` and `搜广推学习笔记` source names are absent.
 - DataFunTalk, Semantic Scholar, and Ed H. Chi are absent from the current manifest/source catalog.
 
+## Verification 2026-09-21
+
+- Production correction: the actual running release had remained `36f1f770fb9d40a63344cbe02bcc3ca1307e1aa5` after the WeRSS container was removed; the repository revert alone had not changed the production symlink. This stale runtime was corrected through the normal immutable-release path.
+- Current production release: `640eced314cfdf7af849757b48040c3d14a5288a` (`docs: skip WeRSS integration`). Exact commit-bound Node 22.23.2 serial evidence is 285/285 passed, 0 failed/skipped/todo, `worktree_unchanged=true`, log SHA-256 `d21c2e3bd7768632edfe31371afe51d4c7384878e53d8b2cb351512aa1641208`.
+- Pre-correction recovery point: `/var/backups/quiet-river/platform-20260921T083705Z`. The first two install attempts exited before any release switch because prior root tool calls had changed repository/evidence ownership; `/home/qr-dev/work/quiet-river*` and the exact `640eced` evidence directory were restored to `qr-dev:qr-dev`, hashes were unchanged, and the guarded release then succeeded. Future Git/test operations should run as `qr-dev`; do not reintroduce root-owned repository state.
+- Post-release platform smoke passed: private API, public login shell, complete source catalog and native notes API all passed; observed 9247 stored entries and 250 queued work items. Bridge health is `ok`, the unauthorized state gate returns HTTP 401, and the systemd service is active.
+- Source acceptance evidence: `/var/backups/quiet-river/evidence/source-acceptance-20260921T084148Z-640eced.json`. Manifest/database parity is exact at 268/268. Overall `without_channel=0`, `channel_ready=252`, `never_checked=16`; WeChat is 65 total = 49 channel-ready + 16 metadata-only/never-checked.
+- WeRSS remains inactive by policy: no `quiet-river-werss` container and no listener on port 8001. Preserved data/backups are rollback/history only.
+
 ## Active task
 
 - done — `93cf7c8` makes `/desk/article/<entryId>` the default Card destination, reads current bodies from Miniflux, rebuilds upstream HTML through an explicit DOM/tag/URL allowlist, keeps original links secondary, and preserves Karakeep as the highlight bridge. Public full-text preparation is explicit; restricted META sources cannot use ECS extraction. Production smoke and real public/restricted article checks passed; pre-release recovery point: `/var/backups/quiet-river/platform-20260919T044929Z`.
@@ -48,6 +57,8 @@ Updated: 2026-09-19
 
 - verification — After removing WeRSS from the main release line, code commit `640eced314cfdf7af849757b48040c3d14a5288a` passed exact serial regression 285/285 with 0 failed/skipped/todo and `worktree_unchanged=true`; log SHA-256 `d21c2e3bd7768632edfe31371afe51d4c7384878e53d8b2cb351512aa1641208`. Runtime check: no `quiet-river-werss` container, no listener on 127.0.0.1:8001; WeRSS data and recovery backup remain preserved but inactive.
 
-- release candidate — Clean Agent-Reach acquisition release is pushed on `chatgpt/acquisition-release-v1` at `a881b9d9f3d2ca17252727c4c89d749794239813` (`merge: consolidate acquisition release without WeRSS`). It is based on cleaned main `8d88c14`, so WeRSS runtime deployment/env wiring is excluded; the 16 legacy WeChat MP identities remain metadata-only with disabled WeRSS channels. Candidate contains capability/router, Twitter fallback framework, Instagram fail-closed skip, V2EX prepared/network-blocked, GitHub detail enrichment, YouTube transcript fallback chain, Shervin-local Podcast transcription, zero-account Reddit Community + User, Bilibili public detail, and Bilibili subtitle on the unified media-transcript queue. Exact serial evidence: 386/386 passed, 0 failed/skipped/todo, `worktree_unchanged=true`, log SHA-256 `46e51f70ed584707daa19ad6f1393862d8d68c5741ce9cd9fe5f896cab4e0d20`. Branch is pushed and not deployed yet.
+- release candidate — `chatgpt/acquisition-release-v1` is pushed through `2ce32fb2ad965594776cd3649e6b82e8a6e5623` (`docs: define private Wechat2RSS activation gate`). Its functional merge commit remains `a881b9d9f3d2ca17252727c4c89d749794239813`, based on cleaned main without WeRSS runtime wiring. The candidate includes capability/router, Twitter fallback framework, Instagram fail-closed skip, V2EX prepared/network-blocked, GitHub detail enrichment, YouTube transcript fallback chain, Shervin-local Podcast transcription, zero-account Reddit Community + User, Bilibili public detail, and Bilibili subtitle on the unified media-transcript queue. Exact serial evidence on the functional candidate is 386/386 passed, 0 failed/skipped/todo, `worktree_unchanged=true`, log SHA-256 `46e51f70ed584707daa19ad6f1393862d8d68c5741ce9cd9fe5f896cab4e0d20`. The docs-only commits after `a881b9d` have not yet been given new exact-HEAD test evidence. Nothing from this acquisition branch is deployed yet.
 
 - decision — WeChat acquisition policy has been finalized on `chatgpt/acquisition-release-v1` commit `d2be807` (`docs: define WeChat acquisition policy`). Current state: 65 WeChat sources = 49 working public/relay feeds (40 BestBlogs Wechat2RSS + 9 xlab) + 16 metadata-only unresolved sources. Public-provider audit found 0/16 exact coverage in BestBlogs' 375-source OPML and xlab's current full list; fuzzy BestBlogs matching found no credible aliases. Do not reintroduce WeRSS; do not deploy private Wechat2RSS yet solely for these 16. Private Wechat2RSS is the next candidate only if these missing sources are must-have and the user accepts one maintained WeRead-authorized account plus license cost. Detailed report: `docs/wechat-acquisition-options.md` on the acquisition-release branch.
+
+- doing — WeChat public-provider recovery is the current low-cost follow-up. Branch commit `cd73a36` added `docs/wechat-provider-requests.md` with the 16 unresolved accounts, xlab/BestBlogs inclusion channels, required submission data and acceptance gates. Branch commit `2ce32fb` records that private Wechat2RSS (CNY 15/month or 150/year, >=512 MiB recommended, requires maintained WeRead authorization) stays behind a gate because this ECS is memory-tight; prefer public inclusion first, and if private deployment becomes necessary prefer an ECS memory upgrade or separate small instance.
