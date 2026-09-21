@@ -110,3 +110,11 @@ If that gate is crossed, private Wechat2RSS should run as a separate acquisition
 ## Next low-cost action
 
 Monitor/request public-provider inclusion for the unresolved 16 before paying the operational cost of a private provider. Keep all 16 disabled rather than fabricating coverage or mapping them to fuzzy-name feeds.
+
+## Public-provider inclusion path
+
+The 16 unresolved WeChat sources were audited against the current BestBlogs 375-source WeChat OPML and xlab public complete list. Coverage remains 0/16; fuzzy BestBlogs-name matching produced no credible aliases.
+
+Low-cost next action is public-provider inclusion rather than private Wechat2RSS deployment. xlab explicitly accepts WeChat public-account recommendations for inclusion. BestBlogs publicly welcomes RSS-source recommendations, but current GitHub issue creation is restricted, so contact/discussion/email is the practical path there.
+
+A provider result is accepted only after feed/account identity parity and duplicate-safety checks. One valid recent mp.weixin.qq.com article URL per source is the preferred external onboarding identity; internal Quiet River source IDs and MP_WXS metadata remain private unless explicitly required by the provider.
