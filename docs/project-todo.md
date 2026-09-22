@@ -70,3 +70,7 @@ Updated: 2026-09-21
 - finding — Local ECS inspection: no active `quiet-river-werss` or WeChat-related Docker container exists. Repository remains clean except git safe.directory warning when invoked from the remote shell; ownership is `qr-dev:qr-dev`, and future operations should continue under the project owner.
 
 - next — Complete cost/value decision for private Wechat2RSS: estimate source value of the unresolved 16 accounts, required account maintenance burden, and whether deployment should be isolated from the main Quiet River ECS.
+
+- finding — WeChat missing-source audit continued 2026-09-22. Queried `data/subscriptions.json` and confirmed all 16 unresolved entries are still metadata-only WeChat adapters (`feeds=[]`) and have no alternate Quiet River source entry. Names and adapter IDs were verified against the local source catalog.
+
+- next — Continue external provider discovery and build a final 16-source value matrix. Priority is not code: determine which unresolved accounts are worth private acquisition and which can remain metadata-only.
