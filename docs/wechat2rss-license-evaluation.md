@@ -162,3 +162,35 @@ docker compose \
 该提交已经 push，并用 `git ls-remote` 验证远端 SHA 一致。随后仅补充本报告及唯一 TODO 的交接记录；最终文档 checkpoint 的独立精确测试证据位于同一证据目录 `final-head-regression/tests.json`，读取时需核对其中 commit，不能把旧提交的证据移用到新 HEAD。
 
 生产仍为 `640eced...`；`implemented / committed / pushed / tested` 不代表 `deployed / RSS verified / user accepted`。免费时长目前只有可申请的官方路径，没有发放到本项目的激活码。
+
+## 10. 后续实做：把免费时长申请准备到可审核状态
+
+2026-09-22 12:40 起重新从唯一 TODO 恢复状态，发现实际 HEAD 已为 `c7114fe20cf5e8505dd6b3a0c51109ad0b12c910`，不是聊天中较旧的拉镜像阶段。已核对远端 SHA、285/285 精确提交报告及日志 SHA-256；因此没有重复拉镜像或再次用无效授权启动。
+
+继续完成既有文档贡献补丁的验证，并补充 `docs/upstream/wechat2rss-startup-troubleshooting-pr.md`，用于申请官方活动中可能提供的免费时长。**没有公开提交、没有发放激活码，仍不能称为免费永久方案。**[S1]
+
+本次证据目录：
+
+```text
+/home/qr-dev/work/quiet-river-evidence/wechat2rss-followup-20260922T0448Z/
+```
+
+用之前核实的官方文档 revision `0416ecf...` 做隔离验证。尝试以 `qr-dev` 从旧 root-owned 仓库直接 clone 时被 Git ownership 检查拒绝，没有添加 `safe.directory`；独立 HTTPS clone 在 60 秒上限退出 124。随后以源仓库实际 owner 导出指定 revision 的 `git archive`，由 `qr-dev` 解包到新的隔离目录，不修改原仓库和主工程权限。来源记录见 `source-provenance.txt`。
+
+| 后续验证 | 结果与边界 | 证据 |
+| --- | --- | --- |
+| lockfile 依赖安装 | 139 packages；exit 0；`--ignore-scripts --no-audit --no-fund` | `npm-ci.log`、`npm-ci.exit` |
+| 补丁后的完整 VitePress 构建 | exit 134，V8 heap 耗尽；未通过 | `docs-build.log`、`docs-build.exit` |
+| 原始上游的同预算对照构建 | 同样 exit 134、V8 heap 耗尽；不能把本地预算不足直接当作补丁缺陷 | `docs-baseline-build.log`、`docs-baseline-build.exit` |
+| 定向 VitePress 渲染与 Vue 模板编译 | 通过，不等同于完整构建 | `targeted-doc-validation.json`、`.log` |
+| 新增文档引用 | 6 个目标页面、其中 3 个精确锚点通过；4 个关键文本检查通过 | 同上 |
+| 线上只读公开检查 | `/desk/` 200、未授权 `/desk/api/state` 401、bridge active、release 未变化 | `production-public-smoke.json` |
+| 认证态 smoke | 本轮没有重跑：工具安全检查拒绝读取受保护凭证；未换其他方式读取 | 同上；之前完整 smoke 仅为历史证据 |
+
+文档构建使用独立临时 systemd 服务，以 `qr-dev` 运行、只可写本次证据目录，设置 256 MiB cgroup / 160 MiB V8 heap、0.5 CPU、禁 swap 与有限超时。不通过扩大内存预算影响线上服务。两个完整构建失败均已保留原始日志；正常资源环境中的完整站点构建仍待完成。官方软件的 Go 服务内存需求不能从文档构建失败推断。
+
+网络 gate 也从实际容器配置确认：Miniflux 使用自己的 bridge network，`FETCHER_ALLOW_PRIVATE_NETWORKS=false`。因此 `127.0.0.1:18080` 仍仅适合宿主机本地验证，不能假装它已是 Miniflux 或用户浏览器可用的 RSS 地址。保留私网保护；没有修改 Docker daemon、网络、代理或 Reader 配置。官方配置依据：<https://miniflux.app/docs/configuration.html#fetcher-allow-private-networks>，现场证据见 `host-network-gates.json`。
+
+12:50 的快照约有 489.7 MiB available，模板上限为 512 MiB。该快照不是长期峰值测试，也不代表已获准启动常驻 provider。下一步真实功能验证仍需有效官方授权、用户微信读书授权、资源 canary 和私有 RSS 连通验收。此前 16 个订阅均保留，不做主观减项。
+
+本次没有重复无效授权实验，没有使用示例/他人激活码，也没有重新推进 WeRSS。阻塞状态已经明确；继续修改或反复启动同一无授权镜像不会解决它。
