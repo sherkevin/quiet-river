@@ -7,6 +7,12 @@ Updated: 2026-09-22
 - Path: `/home/qr-dev/work/quiet-river`
 - Branch: `chatgpt/reader-platform-v1`
 
+- Production (directly checked 2026-09-22): `640eced314cfdf7af849757b48040c3d14a5288a`; not changed by the provider evaluation.
+- Latest evaluated provider/config work: `2c80aec0e0fd568a56bbdf0966c0c541ab0153ed`, committed, pushed and exact-commit tested (285/285). Documentation checkpoints may follow; do not call them deployed.
+- Current task: official Wechat2RSS v1.4.9 image acquisition and missing/invalid-license startup tests completed; functional activation blocked on a genuine license and user-authorized WeRead login. Official contribution rewards are a possible no-cash license path, not an already granted entitlement.
+- Primary result: `docs/wechat2rss-license-evaluation.md`; isolated manual template: `deploy/providers/wechat2rss.compose.yml`; upstream documentation contribution draft: `docs/upstream/wechat2rss-startup-troubleshooting.patch` (not publicly submitted).
+- Exact-HEAD evidence for the final documentation checkpoint is written outside the repository to `/home/qr-dev/work/quiet-river-evidence/wechat2rss-20260922T0427Z/final-head-regression/tests.json`. Accept it only if its recorded commit equals the checked HEAD, exit code is zero and worktree_unchanged is true; the embedded historical evidence below belongs to `2c80aec` only.
+
 ## Completed
 
 - `0a85b54`: removed Semantic Scholar and Ed H. Chi; tests passed and this revision was deployed previously.
@@ -81,7 +87,7 @@ Updated: 2026-09-22
 
 ## 2026-09-22 private Wechat2RSS deployment verification (runtime checked; activation blocked)
 
-- doing — User selected self-host Wechat2RSS and requested actual ECS testing. Inspect the official image unchanged; test missing-authorization behavior in a bounded disposable container, not production. Do not buy a license or perform account authorization automatically.
+- scope — User selected self-host Wechat2RSS and requested actual ECS testing. Inspect the official image unchanged; test missing-authorization behavior in a bounded disposable container, not production. Do not buy a license or perform account authorization automatically.
 - recovered — At session start `chatgpt/reader-platform-v1` is `518c4bd`, clean and 3 commits ahead of its cached origin tracking ref. Earlier rounds did not push these three documentation commits. The acquisition worktree is actually `d1b2c92`, not the older `2ce32fb` in the handoff; no changes to that worktree are planned here.
 - runtime — Directly verified `/opt/quiet-river-platform/current` points to `640eced314cfdf7af849757b48040c3d14a5288a`; bridge is active. No Wechat2RSS/WeRSS container is running. ECS memory snapshot: 1740 MiB total, 494 MiB available, 2048 MiB swap unused. This is not evidence of enough headroom for persistent acquisition.
 - correction — Official documentation already publishes an alternate image registry (`docker.xlab.app/ttttmr/wechat2rss:latest`), prices (CNY 15/30 days or 150/365 days), and contribution rewards (valid bug issue/documentation PR may receive one month, subject to maintainer assessment). Earlier statements that these were unknown or only speculative were incomplete. Check and record primary-source evidence before concluding there is no free authorization path.
@@ -94,4 +100,8 @@ Updated: 2026-09-22
 - verified — Post-probe production smoke at 12:33 UTC+8 passed on running `640eced314cfdf7af849757b48040c3d14a5288a`; bridge active, 268 sources, native notes API available, no 8001/18080 listener and no probe containers. Evidence: `production-post-smoke.log` and `production-post-state.json` in the same evidence directory. Existing source updates continued normally; no refresh was initiated by this test.
 - correction — Earlier source-name/tag scans did not establish cross-platform identity, activity, quality or replaceability. All 16 user-selected sources remain in scope. Candidate-only `d1b2c92` already fixes 高德技术's migrated identity; do not reuse the old mainline ID for future provider onboarding. That separate worktree is ahead 1 and was not modified/pushed here.
 - blocked — A valid official activation is required before functional WeRead login/RSS tests can proceed. A contribution reward is an eligible route, not an entitlement or confirmed free perpetual license. Account authorization must be performed by the user on Shervin; no real credentials should be pasted into chat or committed. Full-runtime memory headroom and Miniflux/browser reachability are separate activation gates.
-- release status — Evaluation/templates implemented and locally validated; current source work awaits its exact commit-bound regression and push below. No production deployment, RSS additions, acquisition-candidate release, or user acceptance occurred in this round.
+- release status — Evaluation/templates implemented, committed and pushed as `2c80aec`; 285/285 exact-commit regression passed. No production deployment, RSS additions, acquisition-candidate release, or user acceptance occurred in this round.
+
+- done — `2c80aec0e0fd568a56bbdf0966c0c541ab0153ed` (`chore: verify Wechat2RSS license and prepare isolated provider`). Exact serial regression at 2026-09-22 12:35:39–12:35:48 UTC+8: `/usr/local/bin/qr-node --test --test-concurrency=1`, Node v22.23.2, 285 passed, 0 failed/cancelled/skipped/todo, `worktree_unchanged=true`. Log SHA-256 `84df669b7f1aae301df3a9d9f2080bfa0dbd666907a37ca8f0a42ce6b4dad067`; report: `regression-2c80aec0e0fd568a56bbdf0966c0c541ab0153ed/tests.json` under the evaluation evidence directory.
+- pushed / verified — `git push origin HEAD:refs/heads/chatgpt/reader-platform-v1` succeeded through `2c80aec`; a real `git ls-remote` matched the same SHA. This also published earlier documentation commits `966b7d6`, `f918c08`, `518c4bd` that prior rounds had left local. Separate acquisition-release worktree/branch is untouched.
+- next external gate — Obtain an official activation (paid or maintainer-approved contribution reward); the prepared docs PR requires an explicit public-submission decision and maintainer review. No further repeated missing-license starts are useful. After activation, verify account authorization, private RSS reachability, actual memory headroom and account/source identity before any production deployment. All 16 requested subscriptions remain in scope.

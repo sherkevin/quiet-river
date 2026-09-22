@@ -154,3 +154,11 @@ docker compose \
 文档候选补丁 SHA-256：`a5af406b1d3a5fa3379be546470681878f443e3331fa8d47392441c80fb48c01`。补丁尚未公开提交，不表示已拿到免费时长。
 
 本轮 Node 全量回归的精确 commit、计数、日志摘要与发布状态以 `docs/project-todo.md` 末尾验证记录及仓库外的 `tests.json` 为准；不得沿用历史 285/386 测试数字假称本轮通过。
+
+### 提交、回归与远端状态
+
+实测与模板提交为 `2c80aec0e0fd568a56bbdf0966c0c541ab0153ed`。2026-09-22 12:35:39–12:35:48（UTC+8），以 Node v22.23.2 执行精确提交串行回归，285/285 通过，无失败/跳过/取消，工作树未改变。测试日志 SHA-256 为 `84df669b7f1aae301df3a9d9f2080bfa0dbd666907a37ca8f0a42ce6b4dad067`。
+
+该提交已经 push，并用 `git ls-remote` 验证远端 SHA 一致。随后仅补充本报告及唯一 TODO 的交接记录；最终文档 checkpoint 的独立精确测试证据位于同一证据目录 `final-head-regression/tests.json`，读取时需核对其中 commit，不能把旧提交的证据移用到新 HEAD。
+
+生产仍为 `640eced...`；`implemented / committed / pushed / tested` 不代表 `deployed / RSS verified / user accepted`。免费时长目前只有可申请的官方路径，没有发放到本项目的激活码。
