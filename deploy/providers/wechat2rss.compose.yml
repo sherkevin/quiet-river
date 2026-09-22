@@ -1,0 +1,38 @@
+# Manual, isolated provider template. NOT included in Quiet River releases.
+# Validate with --env-file outside this repository and config --quiet.
+# Licensed startup, account authorization and memory headroom are separate gates.
+name: quiet-river-wechat2rss
+services:
+  wechat2rss:
+    profiles: [manual-provider]
+    image: docker.xlab.app/ttttmr/wechat2rss@sha256:000c3243ebdc5d7edc30cb00e52981b600f02d11f85fefcec27e2226c208082f
+    restart: "no"
+    environment:
+      LIC_EMAIL: "${LIC_EMAIL:?Set the authorized lowercase email}"
+      LIC_CODE: "${LIC_CODE:?Set the valid official activation code}"
+      RSS_TOKEN: "${RSS_TOKEN:?Set a new private management password}"
+      RSS_HOST: "${RSS_HOST:?Set the verified private reader-reachable host and port}"
+      RSS_HTTPS: "${RSS_HTTPS:-0}"
+      RSS_ENC_FEED_ID: "1"
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - type: bind
+        source: "${WECHAT2RSS_DATA_DIR:?Set an existing provider-only absolute data directory outside the repository}"
+        target: /wechat2rss
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16777216
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"

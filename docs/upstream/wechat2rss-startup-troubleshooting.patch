@@ -1,0 +1,64 @@
+--- a/deploy/qa.md
++++ b/deploy/qa.md
+@@ -74,6 +74,61 @@
+
+ 在新的目录执行`docker compose up -d`即可
+
++### 区分镜像下载失败与容器启动失败
++
++镜像下载和软件授权是两个不同阶段。先查看容器状态：
++
++```shell
++docker compose ps -a
++```
++
++如果在 `docker compose pull` 阶段出现访问 `registry-1.docker.io` 的网络超时，程序尚未启动，不能据此判断激活码是否有效。可以按[部署指南](./deploy#docker-compose-部署)把 Compose 文件中的 `image` 改为官方备用地址：
++
++```yaml
++image: docker.xlab.app/ttttmr/wechat2rss:latest
++```
++
++再在同一部署目录执行：
++
++```shell
++docker compose pull
++docker compose up -d
++```
++
++只执行一次备用地址的 `docker pull`，但不修改 Compose 中原来的 `image`，后续 `docker compose up` 仍可能尝试从原地址拉取。
++
++### 容器启动后立即退出：先检查授权配置
++
++> [!WARNING] 先保护日志中的敏感信息
++> 启动日志包含管理密码 `Token`，也可能包含授权邮箱等信息。以下命令仅供自己在终端排查；向公开 Issue 粘贴日志或截图前，请删除管理密码、授权码、邮箱和账号会话信息。
++> `docker compose config` 会展开配置中的环境变量；仅检查配置格式时使用 `docker compose config --quiet`，不要公开完整配置输出。
++
++```shell
++docker compose logs --tail=100
++```
++
++v1.4.9 在干净数据目录下可观察到以下授权错误：
++
++| 最后的错误 | 首先检查 |
++| --- | --- |
++| `need license` | 首次启动是否配置了授权邮箱和激活码。 |
++| `许可证验证失败，请检查授权信息` | 是否使用服务方签发的有效授权；邮箱与授权码是否匹配；不要把文档示例当作自己的激活码。 |
++
++这些错误发生在软件启动阶段，不等同于微信扫码登录失败。先核对[授权邮箱](./config#lic-email)、[授权码](./config#lic-code)与[激活说明](./active)，授权通过后再按[使用指南](./guide)登录微信账号。
++
++`all bot init failed` 表示没有成功初始化通知渠道，不应仅根据这一行判断容器退出原因。没有配置通知渠道时，应继续查看后续的最终错误。
++
++修改 Compose 中的环境变量后，需要重新创建容器才能让新配置生效：
++
++```shell
++docker compose up -d
++```
++
++仅执行 `docker compose restart` 不会把已修改的 Compose 环境变量重新应用到现有容器。
++
++> [!TIP] “第一次启动后可以删除变量”不等于免授权
++> 软件会把启动时的环境变量保存到数据目录的数据库中，后续启动可以读取这些配置。因此，在保留原数据目录时省略部分环境变量，不代表软件不再需要有效授权。详见[配置优先级](./config)和[激活数据说明](./active)。
++
+ ## 订阅和使用
+
+ ### 为什么公众号没有更新？

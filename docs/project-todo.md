@@ -1,6 +1,6 @@
 # quiet-river project handoff
 
-Updated: 2026-09-21
+Updated: 2026-09-22
 
 ## Current repository
 
@@ -77,3 +77,21 @@ Updated: 2026-09-21
 - finding — WeChat missing-source audit continued 2026-09-22. Queried `data/subscriptions.json` and confirmed all 16 unresolved entries are still metadata-only WeChat adapters (`feeds=[]`) and have no alternate Quiet River source entry. Names and adapter IDs were verified against the local source catalog.
 
 - next — Continue external provider discovery and build a final 16-source value matrix. Priority is not code: determine which unresolved accounts are worth private acquisition and which can remain metadata-only.
+
+
+## 2026-09-22 private Wechat2RSS deployment verification (runtime checked; activation blocked)
+
+- doing — User selected self-host Wechat2RSS and requested actual ECS testing. Inspect the official image unchanged; test missing-authorization behavior in a bounded disposable container, not production. Do not buy a license or perform account authorization automatically.
+- recovered — At session start `chatgpt/reader-platform-v1` is `518c4bd`, clean and 3 commits ahead of its cached origin tracking ref. Earlier rounds did not push these three documentation commits. The acquisition worktree is actually `d1b2c92`, not the older `2ce32fb` in the handoff; no changes to that worktree are planned here.
+- runtime — Directly verified `/opt/quiet-river-platform/current` points to `640eced314cfdf7af849757b48040c3d14a5288a`; bridge is active. No Wechat2RSS/WeRSS container is running. ECS memory snapshot: 1740 MiB total, 494 MiB available, 2048 MiB swap unused. This is not evidence of enough headroom for persistent acquisition.
+- correction — Official documentation already publishes an alternate image registry (`docker.xlab.app/ttttmr/wechat2rss:latest`), prices (CNY 15/30 days or 150/365 days), and contribution rewards (valid bug issue/documentation PR may receive one month, subject to maintainer assessment). Earlier statements that these were unknown or only speculative were incomplete. Check and record primary-source evidence before concluding there is no free authorization path.
+- release — No Reader code, feed catalog, production service, credentials, or release symlink changed. This work is an isolated provider evaluation, not a production deployment.
+
+- done / implemented — Official mirror pull succeeded. Unmodified v1.4.9 image is pinned at `docker.xlab.app/ttttmr/wechat2rss@sha256:000c3243ebdc5d7edc30cb00e52981b600f02d11f85fefcec27e2226c208082f`. At 12:27 UTC+8, two clean disposable container starts returned exit 1: missing credentials → `need license`; explicit invalid placeholders → authorization rejected. Both `OOMKilled=false`; no real account/license used; containers and ephemeral secrets removed. Evidence: `/home/qr-dev/work/quiet-river-evidence/wechat2rss-20260922T0427Z/probe-summary.json`.
+- done / implemented — Added `docs/wechat2rss-license-evaluation.md`, a manual-profile digest-pinned independent provider Compose template and a blank env example under `deploy/providers/`. Reader code/catalog and production configuration remain unchanged. The template is not a deployed service; a licensed end-to-end run is still required.
+- verified — Compose checks at 12:32 UTC+8: 5 required-field rejection cases, valid-shape dummy config, missing bind-directory rejection, and cleanup all passed (8/8). Two initial validator assumptions about Compose JSON were corrected; actual template unchanged. `compose-validation.json` records details.
+- done / prepared only — Official contribution-reward route confirmed (valid Bug Issue or documentation PR may earn about one month, maintainer discretion). Prepared `docs/upstream/wechat2rss-startup-troubleshooting.patch`; `git apply --check --whitespace=error` passed against upstream `0416ecfb73e42e98b88b70e530609c406d3e5e42`. No public Issue/PR submitted, no reward granted, no purchase made. This replaces the earlier unsupported speculation about whether contribution rewards exist.
+- verified — Post-probe production smoke at 12:33 UTC+8 passed on running `640eced314cfdf7af849757b48040c3d14a5288a`; bridge active, 268 sources, native notes API available, no 8001/18080 listener and no probe containers. Evidence: `production-post-smoke.log` and `production-post-state.json` in the same evidence directory. Existing source updates continued normally; no refresh was initiated by this test.
+- correction — Earlier source-name/tag scans did not establish cross-platform identity, activity, quality or replaceability. All 16 user-selected sources remain in scope. Candidate-only `d1b2c92` already fixes 高德技术's migrated identity; do not reuse the old mainline ID for future provider onboarding. That separate worktree is ahead 1 and was not modified/pushed here.
+- blocked — A valid official activation is required before functional WeRead login/RSS tests can proceed. A contribution reward is an eligible route, not an entitlement or confirmed free perpetual license. Account authorization must be performed by the user on Shervin; no real credentials should be pasted into chat or committed. Full-runtime memory headroom and Miniflux/browser reachability are separate activation gates.
+- release status — Evaluation/templates implemented and locally validated; current source work awaits its exact commit-bound regression and push below. No production deployment, RSS additions, acquisition-candidate release, or user acceptance occurred in this round.
