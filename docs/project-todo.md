@@ -71,6 +71,9 @@ Updated: 2026-09-21
 
 - next — Complete cost/value decision for private Wechat2RSS: estimate source value of the unresolved 16 accounts, required account maintenance burden, and whether deployment should be isolated from the main Quiet River ECS.
 
+- update — 2026-09-22 unresolved WeChat source value scan completed from local subscription metadata. All 16 unresolved sources are classified only as WeChat entries with no feed URL. Existing tags show strong concentration in target knowledge areas: recommendation systems, generative recommendation, and search/ads recommendation. High-priority candidates for any future private provider evaluation are enterprise/technical and research-oriented accounts (`淘天集团智能算法产品`, `高德技术`, `机器学习与推荐算法`, `RecRead`, `王喆的AI笔记`, `智荐阁`). This does not justify deployment yet; next step is external content-frequency/value verification before any cost decision.
+
+
 - finding — WeChat missing-source audit continued 2026-09-22. Queried `data/subscriptions.json` and confirmed all 16 unresolved entries are still metadata-only WeChat adapters (`feeds=[]`) and have no alternate Quiet River source entry. Names and adapter IDs were verified against the local source catalog.
 
 - next — Continue external provider discovery and build a final 16-source value matrix. Priority is not code: determine which unresolved accounts are worth private acquisition and which can remain metadata-only.
