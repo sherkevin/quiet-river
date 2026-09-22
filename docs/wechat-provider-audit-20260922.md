@@ -42,3 +42,9 @@ Preferred order:
 1. exhaust public Wechat2RSS provider coverage;
 2. evaluate official/self-host Wechat2RSS if private acquisition is justified;
 3. keep Quiet River consuming only RSS.
+
+## Further verification
+
+- xlab public list page was reachable and contains the public feed catalogue. The six high-value unresolved sources (`王喆的AI笔记`, `机器学习与推荐算法`, `RecRead`, `淘天集团智能算法产品`, `智荐阁`, `高德技术`) were not found by direct name matching in the public catalogue HTML checked during this audit.
+- xlab's public list is a generated catalogue rather than an open OPML file at `/opml`; the deployment/API documentation remains the source for add/feed behavior.
+- The current evidence still supports the same decision: do not modify Quiet River to understand WeChat. The remaining work is provider acquisition.
